@@ -1,8 +1,9 @@
-use chrono::{DateTime, Utc};
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
 use std::time::Duration;
 use tokio::sync::mpsc::{self, UnboundedSender};
+
+use crate::flow::{InterceptedRequest, InterceptedResponse};
 
 /// The frequency at which tick events are emitted.
 const TICK_FPS: f64 = 30.0;
@@ -31,27 +32,9 @@ pub enum Event {
 /// You can extend this enum with your own custom events.
 #[derive(Clone, Debug)]
 pub enum AppEvent {
-    Request(RequestData),
-    Response(ResponseData),
+    Request(InterceptedRequest),
+    Response(InterceptedResponse),
     Quit,
-}
-
-#[derive(Clone, Debug)]
-pub struct RequestData {
-    pub id: i64,
-    pub timestamp: DateTime<Utc>,
-    pub request_line: String,
-    pub headers: Vec<String>,
-    pub body: Option<String>,
-}
-
-#[derive(Clone, Debug)]
-pub struct ResponseData {
-    pub id: i64,
-    pub timestamp: DateTime<Utc>,
-    pub request_line: String,
-    pub headers: String,
-    pub body: Option<String>,
 }
 
 /// Terminal event handler.
@@ -61,6 +44,12 @@ pub struct EventHandler {
     sender: mpsc::UnboundedSender<Event>,
     /// Event receiver channel.
     receiver: mpsc::UnboundedReceiver<Event>,
+}
+
+impl Default for EventHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EventHandler {
@@ -99,7 +88,7 @@ impl EventHandler {
     }
 
     pub fn sender(&mut self) -> UnboundedSender<Event> {
-        return self.sender.clone();
+        self.sender.clone()
     }
 }
 
