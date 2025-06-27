@@ -6,7 +6,11 @@ This is currently a hack fest, but it works and is fun to use. It is a work in p
 
 ## Demo
 
-![Demo](https://user-images.githubusercontent.com/.../demo.mp4)
+
+https://github.com/user-attachments/assets/a98a5a57-775d-424c-ab91-97d7a17793ea
+
+
+
 
 ## Features
 
