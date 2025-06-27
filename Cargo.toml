@@ -1,0 +1,29 @@
+[package]
+name = "roxy"
+version = "0.1.0"
+description = "CLI proxy tool written in rust aka roxy (rust proxy)."
+authors = ["Fergus Hewson <fergus_hewson@bnz.co.nz>"]
+license = "MIT"
+edition = "2024"
+
+[dependencies]
+itertools = { version = "0.14", default-features = false, features = [
+  "use_alloc",
+] }
+directories = "6.0.0"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
+clap = { version = "4.5.40", features = ["derive"] }
+futures = "0.3.31"
+ratatui = "0.30.0-alpha.4"
+tokio = { version = "1.40.0", features = ["full"] }
+color-eyre = "0.6.3"
+tracing = "0.1.41"
+lazy_static = "1.5.0"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-error = "0.2.1"
+rs-snowflake = "0.6.0"
+chrono = "0.4.41"
+unicode-segmentation = "1"
+unicode-truncate = { version = "2", default-features = false }
+# See <https://github.com/ratatui/ratatui/issues/1271> for information about why we pin unicode-width
+unicode-width = "=0.2.0"
