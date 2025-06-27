@@ -6,7 +6,7 @@ This is currently a hack fest, but it works and is fun to use. It is a work in p
 
 ## Demo
 
-![Demo](https://user-images.githubusercontent.com/.../output.mp4)
+![Demo](https://user-images.githubusercontent.com/.../demo.mp4)
 
 ## Features
 
