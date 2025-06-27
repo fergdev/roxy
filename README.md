@@ -2,6 +2,12 @@
 
 CLI MITM proxy written in Rust.
 
+This is currently a hack fest, but it works and is fun to use. It is a work in progress, so expect changes and improvements over time.
+
+## Demo
+
+![Demo](https://user-images.githubusercontent.com/.../output.mp4)
+
 ## Features
 
 - [x] HTTP
@@ -35,6 +41,14 @@ curl -v --proxy http://localhost:6969 http://example.com
 export CURL_CA_BUNDLE=~/.roxy/roxy-ca-cert.pem
 curl -v --proxy http://localhost:6969 https://example.com --insecure
 ```
+
+## Goals
+
+This is a learning project to explore building a fast, flexible proxy with scriptable interception and inspection capabilities. The goal is to create a tool that can be used for debugging, testing, and learning about network protocols.
+
+Ideal goals is feature parity with existing tools like mitmproxy, but with a focus on performance, flexibility and style.
+
+I love MITM proxy, but do not enjoy the CLI. I am aiming to improve on the CLI experience while maintaining the powerful features that make it great.
 
 ## Contributing
 
