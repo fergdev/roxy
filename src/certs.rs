@@ -1,6 +1,5 @@
-use directories::UserDirs;
 use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair};
-use std::fs;
+use std::{fs, path::PathBuf};
 use tracing::debug;
 
 pub struct RoxyCA {
@@ -9,7 +8,13 @@ pub struct RoxyCA {
 }
 
 pub fn generate_roxy_root_ca() -> anyhow::Result<RoxyCA> {
-    let home = UserDirs::new().unwrap().home_dir().join(".roxy");
+    generate_roxy_root_ca_with_path(None)
+}
+
+pub fn generate_roxy_root_ca_with_path(path: Option<PathBuf>) -> anyhow::Result<RoxyCA> {
+    let root_dir: PathBuf = path.unwrap_or(dirs::home_dir().unwrap());
+
+    let home = root_dir.join(".roxy");
     fs::create_dir_all(&home)?;
 
     let bundle_path = home.join("roxy-ca.pem");

@@ -6,7 +6,9 @@ use std::path::Path;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::{debug, error};
+
+use crate::flow::{InterceptedRequest, InterceptedResponse};
 
 #[derive(Debug, Clone)]
 pub struct ScriptEngine {
@@ -17,6 +19,14 @@ pub struct ScriptEngine {
 impl ScriptEngine {
     pub fn new(script_path: impl Into<String>) -> anyhow::Result<Self> {
         let script_path = script_path.into();
+        println!(
+            "Initializing Lua script engine with script: {}",
+            script_path
+        );
+        debug!(
+            "Initializing Lua script engine with script: {}",
+            script_path
+        );
         let lua = Arc::new(RwLock::new(Lua::new()));
         let engine = Self {
             lua,
@@ -33,7 +43,7 @@ impl ScriptEngine {
         lua.load(&script_code)
             .exec()
             .map_err(|e| anyhow!("Failed to execute Lua script: {}", e.to_string()))?;
-        info!("Reloaded script: {}", self.script_path);
+        debug!("Load script: {}", self.script_path);
         Ok(())
     }
 
@@ -59,7 +69,8 @@ impl ScriptEngine {
         Ok(())
     }
 
-    pub fn intercept_request(&self, req: &mut Intercepted) -> Result<()> {
+    pub fn intercept_request(&self, req: &mut InterceptedRequest) -> Result<()> {
+        debug!("Intercepting request: {}", req.request_line());
         let lua = self
             .lua
             .read()
@@ -77,7 +88,7 @@ impl ScriptEngine {
             .map_err(|e| anyhow!("Failed to create Lua table: {}", e.to_string()))?;
 
         req_table
-            .set("url", req.url.clone())
+            .set("uri", req.uri.clone())
             .map_err(|e| anyhow!("Failed to set 'url': {}", e.to_string()))?;
 
         req_table
@@ -102,8 +113,8 @@ impl ScriptEngine {
             .call(req_table)
             .map_err(|e| anyhow!("Lua call to 'intercept_request' failed: {}", e.to_string()))?;
 
-        req.url = new_req
-            .get("url")
+        req.uri = new_req
+            .get("uri")
             .map_err(|e| anyhow!("Missing or invalid 'url' in Lua result: {}", e.to_string()))?;
 
         req.body =
@@ -128,7 +139,8 @@ impl ScriptEngine {
         Ok(())
     }
 
-    pub fn intercept_response(&self, res: &mut Intercepted) -> Result<()> {
+    pub fn intercept_response(&self, res: &mut InterceptedResponse) -> Result<()> {
+        println!("Intercepting response: {}", res.request_line());
         let lua = self
             .lua
             .read()
@@ -190,11 +202,4 @@ impl ScriptEngine {
 
         Ok(())
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct Intercepted {
-    pub url: String,
-    pub headers: std::collections::HashMap<String, String>,
-    pub body: Option<String>,
 }

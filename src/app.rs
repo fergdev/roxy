@@ -215,7 +215,11 @@ impl App {
                     Some(_) => "+",
                     None => "-",
                 };
-                format!("{} {}", c, r.request_line().as_str())
+                let resp = match response {
+                    Some(resp) => resp.status.to_string(),
+                    None => "-".to_string(),
+                };
+                format!("{} {} -> {}", c, r.request_line().as_str(), resp)
             })
             .map(|c| Row::new(vec![c]));
 
