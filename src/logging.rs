@@ -6,6 +6,8 @@ use lazy_static::lazy_static;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{self, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::ui::log::UiLogLayer;
+
 lazy_static! {
     pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
     pub static ref DATA_FOLDER: Option<PathBuf> =
@@ -33,6 +35,9 @@ fn get_data_dir() -> PathBuf {
 
 static INIT_TRACING: Once = Once::new();
 pub fn initialize_logging() -> Result<()> {
+    initialize_logging_with_layer(None)
+}
+pub fn initialize_logging_with_layer(layer: Option<UiLogLayer>) -> Result<()> {
     INIT_TRACING.call_once(|| {
         println!("Initializing logging for {}", env!("CARGO_PKG_NAME"));
         let directory = get_data_dir();
@@ -55,10 +60,15 @@ pub fn initialize_logging() -> Result<()> {
             .with_ansi(false)
             .without_time()
             .with_filter(tracing_subscriber::filter::EnvFilter::from_default_env());
-        tracing_subscriber::registry()
+        let builder = tracing_subscriber::registry()
             .with(file_subscriber)
-            .with(ErrorLayer::default())
-            .init();
+            .with(ErrorLayer::default());
+
+        if let Some(layer) = layer {
+            builder.with(layer).init();
+        } else {
+            builder.init();
+        }
     });
     Ok(())
 }

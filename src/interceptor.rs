@@ -1,12 +1,12 @@
 use anyhow::{Result, anyhow};
-use mlua::{Function, Lua, Table};
+use mlua::{Function, Lua, Table, Value, Variadic};
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use crate::flow::Flow;
 
@@ -19,17 +19,21 @@ pub struct ScriptEngine {
 impl ScriptEngine {
     pub fn new(script_path: impl Into<String>) -> anyhow::Result<Self> {
         let script_path = script_path.into();
-        println!(
-            "Initializing Lua script engine with script: {}",
-            script_path
-        );
         debug!(
             "Initializing Lua script engine with script: {}",
             script_path
         );
-        let lua = Arc::new(RwLock::new(Lua::new()));
+        let lua = Lua::new();
+
+        let print_fn = lua.create_function(|_, args: Variadic<Value>| {
+            let output: Vec<String> = args.iter().map(|v| format!("{:?}", v)).collect();
+            info!("[lua] {}", output.join("\t"));
+            Ok(())
+        })?;
+
+        lua.globals().set("print", print_fn)?;
         let engine = Self {
-            lua,
+            lua: Arc::new(RwLock::new(lua)),
             script_path: script_path.clone(),
         };
         engine.load_script()?;
@@ -71,7 +75,7 @@ impl ScriptEngine {
 
     pub fn intercept_request(&self, flow: &mut Flow) -> Result<()> {
         let req = match &mut flow.request {
-            Some(resp) => resp,
+            Some(req) => req,
             None => panic!("No response to intercept"),
         };
         debug!("Intercepting request: {}", req.request_line());
@@ -125,6 +129,8 @@ impl ScriptEngine {
             .get("host")
             .map_err(|e| anyhow!("Missing or invalid 'host' in Lua result: {}", e.to_string()))?;
 
+        debug!("DEBUGPRINT[39]: interceptor.rs:124: host={:#?}", req.host);
+
         req.port = new_req
             .get("port")
             .map_err(|e| anyhow!("Missing or invalid 'port' in Lua result: {}", e.to_string()))?;
@@ -157,7 +163,6 @@ impl ScriptEngine {
             None => panic!("No response to intercept"),
         };
 
-        println!("Intercepting response: {}", res.request_line());
         let lua = self
             .lua
             .read()

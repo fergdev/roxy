@@ -17,6 +17,7 @@ pub struct FlowStore {
     pub ordered_ids: Arc<RwLock<Vec<i64>>>,
     pub notifier: watch::Sender<()>,
 }
+
 impl FlowStore {
     pub fn new() -> Self {
         let (notifier, _) = watch::channel(());
@@ -139,23 +140,47 @@ impl InterceptedRequest {
         }
     }
 
-    pub fn request_line(&self) -> String {
-        let version_str = match self.version {
+    pub fn version_str(&self) -> &str {
+        match self.version {
             0 => "1.0",
             1 => "1.1",
             _ => "1.1", // fallback
+        }
+    }
+
+    pub fn line_pretty(&self) -> String {
+        let scheme_str = match self.scheme {
+            Scheme::Http => "http",
+            Scheme::Https => "https",
         };
 
+        format!(
+            "{} {}://{}:{}{} HTTP/{}",
+            self.method,
+            scheme_str,
+            self.host,
+            self.port,
+            self.path,
+            self.version_str()
+        )
+    }
+
+    pub fn request_line(&self) -> String {
         match self.scheme {
             Scheme::Http => {
                 format!(
                     "{} {}://{}:{}{} HTTP/{}",
-                    self.method, "http", self.host, self.port, self.path, version_str
+                    self.method,
+                    "http",
+                    self.host,
+                    self.port,
+                    self.path,
+                    self.version_str()
                 )
             }
             Scheme::Https => {
                 // After CONNECT/TLS, use origin-form
-                format!("{} {} HTTP/{}", self.method, self.path, version_str)
+                format!("{} {} HTTP/{}", self.method, self.path, self.version_str())
             }
         }
     }
@@ -170,6 +195,11 @@ impl InterceptedRequest {
 
         headers.remove("Content-Length");
         headers.remove("content-length");
+
+        headers.remove("Host");
+        headers.remove("host");
+
+        headers.insert("Host".to_string(), self.host.to_string());
 
         // Set or update the Content-Length if body is present
         if let Some(body) = &self.body {
@@ -187,6 +217,10 @@ impl InterceptedRequest {
         }
 
         out
+    }
+
+    pub fn target_host(&self) -> String {
+        format!("{}:{}", self.host, self.port)
     }
 }
 

@@ -232,7 +232,7 @@ fn full<T: Into<Bytes>>(chunk: T) -> BoxBody<Bytes, hyper::Error> {
 async fn tunnel(
     flow: Arc<RwLock<Flow>>,
     upgraded: Upgraded,
-    target_addr: String,
+    requested_addr: String,
     ca: Arc<RoxyCA>,
     script_engine: Option<ScriptEngine>,
 ) -> std::io::Result<()> {
@@ -240,8 +240,8 @@ async fn tunnel(
     let client_stream = TokioIo::new(upgraded);
 
     // Ensure the default CryptoProvider is installed before using rustls builders
-    debug!("Established tunnel with {}", target_addr);
-    let host = target_addr.split(':').next().unwrap();
+    debug!("Established tunnel with {}", requested_addr);
+    let host = requested_addr.split(':').next().unwrap();
 
     let mut params = CertificateParams::new(vec![host.to_string()]).unwrap();
     params.distinguished_name.push(DnType::CommonName, host);
@@ -254,7 +254,10 @@ async fn tunnel(
         KeyUsagePurpose::KeyEncipherment,
     ];
 
-    let leaf = params.self_signed(&ca.key_pair).unwrap();
+    let leaf = params
+        .signed_by(&ca.key_pair, &ca.certificate, &ca.key_pair)
+        .unwrap();
+
     let tls_config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(
@@ -279,7 +282,7 @@ async fn tunnel(
 
     script_engine
         .as_ref()
-        .map(|engine| engine.intercept_request(&mut g_flow));
+        .map(|engine| engine.intercept_request(&mut g_flow).unwrap());
 
     let req_bytes = g_flow
         .request
@@ -290,18 +293,16 @@ async fn tunnel(
             Vec::new()
         });
 
+    let target_addr = g_flow.request.as_ref().unwrap().target_host();
     drop(g_flow);
 
-    // let target_host = req_uri.clone();
-    let target_host = target_addr.clone();
     info!(
         "DEBUGPRINT[37]: proxy.rs:297: target_host={:#?}",
-        target_host
+        target_addr
     );
-    let uri = target_host.parse::<Uri>().unwrap();
+    let uri = target_addr.parse::<Uri>().unwrap();
 
     let target_host = uri.host().unwrap();
-    let target_port = uri.port_u16().unwrap_or(443);
 
     // Connect to upstream server with TLS
     let mut root_store = RootCertStore::empty();
@@ -316,10 +317,7 @@ async fn tunnel(
 
     let connector = TlsConnector::from(Arc::new(client_config));
     let server_name = ServerName::try_from(target_host.to_string()).unwrap();
-    debug!(
-        "Connecting to upstream server: {}:{}",
-        target_host, target_port
-    );
+    debug!("Connecting to upstream server: {}", target_addr);
 
     let server_stream = tokio::net::TcpStream::connect(target_addr).await.unwrap();
     let upstream_tls = connector.connect(server_name, server_stream).await.unwrap();

@@ -1,10 +1,17 @@
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
+
 use clap::Parser;
-use roxy::{app, certs, flow::FlowStore, interceptor::ScriptEngine, logging, proxy};
+use roxy::{
+    app, certs, flow::FlowStore, interceptor::ScriptEngine, logging, proxy, ui::log::UiLogLayer,
+};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
 struct Args {
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t = 6969)]
     port: u16,
 
     #[arg(short, long)]
@@ -13,7 +20,10 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
-    logging::initialize_logging().unwrap();
+    let log_buffer = Arc::new(Mutex::new(VecDeque::new()));
+    let log_layer = UiLogLayer::new(log_buffer.clone());
+
+    logging::initialize_logging_with_layer(Some(log_layer)).unwrap();
 
     let args = Args::parse();
     let roxy_certs = certs::generate_roxy_root_ca().unwrap();
@@ -26,7 +36,7 @@ async fn main() -> color_eyre::Result<()> {
     color_eyre::install().unwrap();
     let mut terminal = ratatui::init();
 
-    let app = app::App::new(flow_store.clone());
+    let app = app::App::new(flow_store.clone(), log_buffer);
     let result = app.run(&mut terminal).await;
     ratatui::restore();
     result

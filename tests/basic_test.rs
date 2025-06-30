@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use rcgen::{CertifiedKey, generate_simple_self_signed};
 use roxy::event::Event;
+use roxy::flow::FlowStore;
 use roxy::logging::initialize_logging;
 use roxy::{interceptor, proxy};
 use tokio::fs::File;
@@ -65,11 +66,11 @@ async fn test_http_proxy_request() {
     let port = listener.local_addr().unwrap().port();
     drop(listener);
 
-    let (tx, mut _rx) = unbounded_channel::<Event>();
+    let flow_store = FlowStore::new();
 
-    let ca2 = roxy::certs::generate_roxy_root_ca_with_path(Some(temp_dir_path)).unwrap();
+    let ca = roxy::certs::generate_roxy_root_ca_with_path(Some(temp_dir_path)).unwrap();
     let handle = tokio::spawn(async move {
-        proxy::start_proxy(port, tx, ca2, None).unwrap();
+        proxy::start_proxy(port, ca, None, flow_store).unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -104,11 +105,10 @@ async fn test_https_proxy_request() {
     let port = listener.local_addr().unwrap().port();
     drop(listener);
 
-    let (tx, mut _rx) = unbounded_channel::<Event>();
-
+    let flow_store = FlowStore::new();
     let ca = roxy::certs::generate_roxy_root_ca_with_path(Some(temp_dir_path)).unwrap();
     let handle = tokio::spawn(async move {
-        proxy::start_proxy(port, tx, ca, None).unwrap();
+        proxy::start_proxy(port, ca, None, flow_store).unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -160,10 +160,13 @@ end
     let file_path = temp_dir.path().join("test.lua");
     let mut file = File::create(file_path.clone()).await.unwrap();
     file.write_all(script.as_bytes()).await.unwrap();
+
+    let flow_store = FlowStore::new();
+
     let se = interceptor::ScriptEngine::new(file_path.to_str().unwrap().to_string()).unwrap();
     let ca = roxy::certs::generate_roxy_root_ca_with_path(Some(temp_dir_path)).unwrap();
     let handle = tokio::spawn(async move {
-        proxy::start_proxy(port, tx, ca, Some(se)).unwrap();
+        proxy::start_proxy(port, ca, Some(se), flow_store).unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -202,8 +205,6 @@ async fn test_redirect_https_proxy_request() {
     let port = listener.local_addr().unwrap().port();
     drop(listener);
 
-    let (tx, mut _rx) = unbounded_channel::<Event>();
-
     let script = format!(
         r#"
 function intercept_request(req)
@@ -221,10 +222,12 @@ end
     let file_path = temp_dir.path().join("test.lua");
     let mut file = File::create(file_path.clone()).await.unwrap();
     file.write_all(script.as_bytes()).await.unwrap();
+
+    let flow_store = FlowStore::new();
     let se = interceptor::ScriptEngine::new(file_path.to_str().unwrap().to_string()).unwrap();
     let ca = roxy::certs::generate_roxy_root_ca_with_path(Some(temp_dir_path)).unwrap();
     let handle = tokio::spawn(async move {
-        proxy::start_proxy(port, tx, ca, Some(se)).unwrap();
+        proxy::start_proxy(port, ca, Some(se), flow_store).unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -236,7 +239,7 @@ end
         .build()
         .unwrap();
 
-    let rewrite_target = "https://asdfasdfasdfasdf";
+    let rewrite_target = "https://asdfasdfasdfasdf.com";
     println!("target_url URL: {}", target_url);
     println!("proxy URL: {}", proxy_url);
     let res = client.get(rewrite_target).send().await.unwrap();

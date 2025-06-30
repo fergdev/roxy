@@ -1,27 +1,30 @@
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
 use color_eyre::Result;
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Flex, Layout, Margin, Rect};
-use ratatui::style::{self, Color, Modifier, Style, Stylize};
+use ratatui::prelude::{Frame, Style, Stylize};
+use ratatui::style::{Color, Modifier};
 use ratatui::text::{Line, Text};
 use ratatui::widgets::{
-    Block, BorderType, Clear, HighlightSpacing, Paragraph, Row, Scrollbar, ScrollbarOrientation,
-    ScrollbarState, Table, TableState,
+    Block, Borders, Clear, HighlightSpacing, Paragraph, Row, Scrollbar, ScrollbarOrientation,
+    ScrollbarState, Table, TableState, Tabs,
 };
-use ratatui::{DefaultTerminal, Frame};
+use ratatui::{DefaultTerminal, style};
 use style::palette::tailwind;
 
 use crate::event::{AppEvent, Event, EventHandler};
 use crate::flow::FlowStore;
+use crate::ui::key_popup::KeyHelpPopup;
+use crate::ui::log::render_log_popup;
+use crate::ui::splash;
 
 const PALETTES: [tailwind::Palette; 4] = [
     tailwind::BLUE,
     tailwind::EMERALD,
     tailwind::INDIGO,
     tailwind::RED,
-];
-const INFO_TEXT: [&str; 2] = [
-    "(q) quit | (k) move up | (j) move down ",
-    "(L) next color | (H) previous color",
 ];
 
 const ITEM_HEIGHT: usize = 4;
@@ -41,11 +44,17 @@ struct TableColors {
 
 struct UiState {
     pub flows: Vec<UiFlow>,
-    pub popup: Option<Vec<String>>,
+    pub popup: Option<FlowPopup>,
 }
 
 struct UiFlow {
     pub line: String,
+}
+
+struct FlowPopup {
+    request: Option<Vec<String>>,
+    response: Option<Vec<String>>,
+    certs: Option<Vec<String>>,
 }
 
 impl TableColors {
@@ -75,10 +84,16 @@ pub struct App {
     events: EventHandler,
     show_popup: bool,
     popup_scroll_state: ScrollbarState,
+    popup_tab_index: usize,
+    key_help: KeyHelpPopup,
+    key_popup: bool,
+    log_buffer: Arc<Mutex<VecDeque<String>>>,
+    log_popup: bool,
+    log_scroll: usize,
 }
 
 impl App {
-    pub fn new(flow_store: FlowStore) -> Self {
+    pub fn new(flow_store: FlowStore, log_buffer: Arc<Mutex<VecDeque<String>>>) -> Self {
         Self {
             running: true,
             state: TableState::default().with_selected(0),
@@ -89,6 +104,12 @@ impl App {
             events: EventHandler::new(),
             show_popup: false,
             popup_scroll_state: ScrollbarState::new(0),
+            popup_tab_index: 0,
+            key_help: KeyHelpPopup::default(),
+            key_popup: false,
+            log_buffer,
+            log_popup: false,
+            log_scroll: 0,
         }
     }
 
@@ -136,7 +157,7 @@ impl App {
 
             let mut rows = Vec::new();
             for id in ids.iter() {
-                if let Some(entry) = self.flow_store.flows.get(&id) {
+                if let Some(entry) = self.flow_store.flows.get(id) {
                     let flow = entry.value().read().await;
                     let c = if flow.response.is_some() { "+" } else { "-" };
                     let resp = flow
@@ -147,7 +168,7 @@ impl App {
                     let req = flow
                         .request
                         .as_ref()
-                        .map(|r| r.request_line())
+                        .map(|r| r.line_pretty())
                         .unwrap_or_else(|| "empty".into());
 
                     rows.push(UiFlow {
@@ -163,36 +184,42 @@ impl App {
                             self.show_popup = false;
                             continue;
                         }
+
                         let id = ids[i];
                         let entry = self.flow_store.flows.get(&id).unwrap();
                         let flow = entry.value().read().await;
-                        let mut text = vec![];
+                        let mut req = vec![];
                         if let Some(request) = &flow.request {
-                            text.push(request.request_line());
+                            req.push(request.line_pretty());
                             for (k, v) in request.headers.iter() {
-                                text.push(format!("{}: {}", k, v));
+                                req.push(format!("{}: {}", k, v));
                             }
                             if let Some(body) = &request.body {
-                                text.push(body.clone());
+                                req.push(body.clone());
                             }
                         }
+                        let mut resp = vec![];
                         if let Some(response) = &flow.response {
-                            text.push(response.request_line());
+                            resp.push(response.request_line());
                             for (k, v) in response.headers.iter() {
-                                text.push(format!("{}: {}", k, v));
+                                resp.push(format!("{}: {}", k, v));
                             }
                             if let Some(body) = &response.body {
-                                text.push(body.clone());
+                                resp.push(body.clone());
                             }
                         }
 
+                        let mut c = vec![];
                         if let Some(certs) = &flow.cert_info {
-                            text.push("Certificates:".into());
                             for cert in certs.iter() {
-                                text.push(format!("  - {}", cert.issuer));
+                                c.push(format!("  - {}", cert.issuer));
                             }
                         }
-                        Some(text)
+                        Some(FlowPopup {
+                            request: Some(req),
+                            response: Some(resp),
+                            certs: Some(c),
+                        })
                     }
 
                     None => None,
@@ -209,12 +236,15 @@ impl App {
                 Event::Tick => self.tick(),
                 Event::Crossterm(event) => {
                     if let Some(key) = event.as_key_press_event() {
-                        let shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
                         match key.code {
                             KeyCode::Char('q') | KeyCode::Esc => {
                                 if self.show_popup {
                                     self.popup_scroll_state.first();
                                     self.show_popup = false
+                                } else if self.key_popup {
+                                    self.key_popup = false
+                                } else if self.log_popup {
+                                    self.log_popup = false;
                                 } else {
                                     self.quit()
                                 }
@@ -222,6 +252,8 @@ impl App {
                             KeyCode::Char('j') | KeyCode::Down => {
                                 if self.show_popup {
                                     self.popup_scroll_state.next();
+                                } else if self.log_popup {
+                                    self.log_scroll += 1;
                                 } else {
                                     self.next_row()
                                 }
@@ -229,16 +261,33 @@ impl App {
                             KeyCode::Char('k') | KeyCode::Up => {
                                 if self.show_popup {
                                     self.popup_scroll_state.prev();
+                                } else if self.log_popup {
+                                    if self.log_scroll > 0 {
+                                        self.log_scroll -= 1;
+                                    }
                                 } else {
                                     self.previous_row()
                                 }
                             }
-                            KeyCode::Char('L') | KeyCode::Right if shift_pressed => {
-                                self.next_color()
+                            KeyCode::Char('l') | KeyCode::Right => {
+                                if self.show_popup {
+                                    self.popup_tab_index = (self.popup_tab_index + 1) % 3;
+                                    self.popup_scroll_state.first();
+                                } else {
+                                    self.next_color();
+                                }
                             }
-                            KeyCode::Char('H') | KeyCode::Left if shift_pressed => {
-                                self.previous_color();
+                            KeyCode::Char('h') | KeyCode::Left => {
+                                if self.show_popup {
+                                    self.popup_tab_index = (self.popup_tab_index + 2) % 3; // HACK:
+                                    // ugh yeah this works
+                                    self.popup_scroll_state.first();
+                                } else {
+                                    self.previous_color();
+                                }
                             }
+                            KeyCode::Char('?') => self.key_popup = true,
+                            KeyCode::Char('i') => self.log_popup = true,
                             KeyCode::Enter => self.view_req(),
                             _ => {}
                         }
@@ -253,14 +302,22 @@ impl App {
     }
 
     fn render(&mut self, frame: &mut Frame, ui_state: UiState) {
-        let vertical = &Layout::vertical([Constraint::Min(5), Constraint::Length(4)]);
-        let rects = vertical.split(frame.area());
-
         self.set_colors();
 
-        self.render_table(frame, rects[0], &ui_state);
-        self.render_scrollbar(frame, rects[0]);
-        self.render_footer(frame, rects[1]);
+        if ui_state.flows.is_empty() {
+            splash::render_splash(frame);
+        } else {
+            self.render_table(frame, frame.area(), &ui_state);
+        }
+
+        self.render_scrollbar(frame, frame.area());
+        if self.key_popup {
+            self.key_help.render(frame, frame.area());
+        }
+
+        if self.log_popup {
+            render_log_popup(frame, frame.area(), &self.log_buffer, self.log_scroll);
+        }
         self.render_popup(frame, &ui_state.popup);
     }
 
@@ -309,23 +366,7 @@ impl App {
         );
     }
 
-    fn render_footer(&self, frame: &mut Frame, area: Rect) {
-        let info_footer = Paragraph::new(Text::from_iter(INFO_TEXT))
-            .style(
-                Style::new()
-                    .fg(self.colors.row_fg)
-                    .bg(self.colors.buffer_bg),
-            )
-            .centered()
-            .block(
-                Block::bordered()
-                    .border_type(BorderType::Double)
-                    .border_style(Style::new().fg(self.colors.footer_border_color)),
-            );
-        frame.render_widget(info_footer, area);
-    }
-
-    fn render_popup(&mut self, frame: &mut Frame, popup: &Option<Vec<String>>) {
+    fn render_popup(&mut self, frame: &mut Frame, popup: &Option<FlowPopup>) {
         let popup = match popup {
             Some(p) => p,
             None => {
@@ -334,28 +375,60 @@ impl App {
             }
         };
 
-        let area = frame.area();
+        let tab_titles = ["Request", "Response", "Certs"];
+        let tabs = Tabs::new(
+            tab_titles
+                .iter()
+                .cloned()
+                .map(Line::from)
+                .collect::<Vec<Line>>(),
+        )
+        .highlight_style(Style::default().bold())
+        .bg(self.colors.buffer_bg)
+        .fg(self.colors.row_fg)
+        .select(self.popup_tab_index);
 
-        let mut text = vec![];
-        popup.iter().for_each(|line| {
-            text.push(Line::from(line.clone()));
-        });
+        // Select the correct content based on active tab
+        let lines = match self.popup_tab_index {
+            0 => popup.request.as_ref(),
+            1 => popup.response.as_ref(),
+            2 => popup.certs.as_ref(),
+            _ => None,
+        }
+        .cloned()
+        .unwrap_or_else(|| vec!["(empty)".to_string()])
+        .into_iter()
+        .map(Line::from)
+        .collect::<Vec<_>>();
 
-        self.popup_scroll_state = self.popup_scroll_state.content_length(text.len());
+        self.popup_scroll_state = self.popup_scroll_state.content_length(lines.len());
 
-        let popup = Block::bordered().title("Info");
-        let paragraph = Paragraph::new(text.clone())
-            .gray()
-            .block(popup)
+        let paragraph = Paragraph::new(lines)
+            .bg(self.colors.buffer_bg)
+            .fg(self.colors.row_fg)
             .scroll((self.popup_scroll_state.get_position() as u16, 0));
 
+        let area = frame.area();
         let popup_area = self.centered_area(area, 60, 60);
-        // clears out any background in the area before rendering the popup
+        let inner_area = Block::default()
+            .borders(Borders::ALL)
+            .title("Flow Info")
+            .bg(self.colors.buffer_bg)
+            .fg(self.colors.row_fg)
+            .border_style(Style::default().fg(self.colors.footer_border_color))
+            .inner(popup_area);
+
+        let layout =
+            Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(inner_area);
         frame.render_widget(Clear, popup_area);
-        frame.render_widget(paragraph, popup_area);
+        frame.render_widget(
+            Block::default().borders(Borders::ALL).title("Flow Info"),
+            popup_area,
+        );
+        frame.render_widget(tabs, layout[0]);
+        frame.render_widget(paragraph, layout[1]);
     }
 
-    /// Create a centered rect using up certain percentage of the available rect
     fn centered_area(&self, area: Rect, percent_x: u16, percent_y: u16) -> Rect {
         let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
         let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
@@ -368,10 +441,6 @@ impl App {
         self.running = false;
     }
 
-    /// Handles the tick event of the terminal.
-    ///
-    /// The tick event is where you can update the state of your application with any logic that
-    /// needs to be updated at a fixed frame rate. E.g. polling a server, updating an animation.
     pub fn tick(&self) {}
 
     fn view_req(&mut self) {
