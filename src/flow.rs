@@ -1,24 +1,114 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use dashmap::DashMap;
 use httparse::{EMPTY_HEADER, Request, Response};
 
-use tokio::io::{AsyncRead, AsyncReadExt};
+use rustls::pki_types::CertificateDer;
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    sync::{RwLock, watch},
+};
+
+#[derive(Clone)]
+pub struct FlowStore {
+    pub flows: Arc<DashMap<i64, Arc<RwLock<Flow>>>>,
+    pub ordered_ids: Arc<RwLock<Vec<i64>>>,
+    pub notifier: watch::Sender<()>,
+}
+impl FlowStore {
+    pub fn new() -> Self {
+        let (notifier, _) = watch::channel(());
+        Self {
+            flows: Arc::new(DashMap::new()),
+            ordered_ids: Arc::new(RwLock::new(Vec::new())),
+            notifier,
+        }
+    }
+    pub async fn new_flow(&self, id: i64) -> Arc<RwLock<Flow>> {
+        let flow = Arc::new(RwLock::new(Flow::new(id)));
+        self.flows.insert(id, flow.clone());
+        self.ordered_ids.write().await.push(id);
+        flow
+    }
+    pub async fn add_flow(&self, flow: Flow) {
+        self.flows.insert(flow.id, Arc::new(RwLock::new(flow)));
+        let _ = self.notifier.send(());
+    }
+
+    pub async fn get_flow_by_id(&self, id: i64) -> Option<Arc<RwLock<Flow>>> {
+        self.flows.get(&id).map(|f| f.value().clone())
+    }
+
+    pub fn subscribe(&self) -> watch::Receiver<()> {
+        self.notifier.subscribe()
+    }
+}
+
+impl Default for FlowStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Flow {
-    pub request: InterceptedRequest,
+    pub id: i64,
+    pub request: Option<InterceptedRequest>,
     pub response: Option<InterceptedResponse>,
     pub error: Option<String>,
+    pub cert_info: Option<Vec<CertInfo>>,
+}
+
+impl Flow {
+    pub fn new(id: i64) -> Self {
+        Self {
+            id,
+            request: None,
+            response: None,
+            error: None,
+            cert_info: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CertInfo {
+    pub subject: String,
+    pub issuer: String,
+    pub not_before: String,
+    pub not_after: String,
+}
+
+impl CertInfo {
+    pub fn from_der(cert: &CertificateDer<'_>) -> Option<Self> {
+        use x509_parser::parse_x509_certificate;
+
+        let (_, parsed) = parse_x509_certificate(cert.as_ref()).ok()?;
+        Some(CertInfo {
+            subject: parsed.subject().to_string(),
+            issuer: parsed.issuer().to_string(),
+            not_before: parsed.validity().not_before.to_string(),
+            not_after: parsed.validity().not_after.to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Scheme {
+    Http,
+    Https,
 }
 
 #[derive(Debug, Clone)]
 pub struct InterceptedRequest {
-    pub id: i64,
     pub timestamp: DateTime<Utc>,
+    pub scheme: Scheme,
+    pub host: String,
+    pub port: u16,
+    pub path: String,
     pub method: String,
-    pub uri: String,
     pub version: u8,
     pub headers: HashMap<String, String>,
     pub body: Option<String>,
@@ -26,19 +116,23 @@ pub struct InterceptedRequest {
 
 impl InterceptedRequest {
     pub fn new(
-        id: i64,
         timestamp: DateTime<Utc>,
+        scheme: Scheme,
+        host: String,
+        port: u16,
+        path: String,
         method: String,
-        uri: String,
         version: u8,
         headers: HashMap<String, String>,
         body: Option<String>,
     ) -> Self {
         Self {
-            id,
             timestamp,
+            scheme,
+            host,
+            port,
+            path,
             method,
-            uri,
             version,
             headers,
             body,
@@ -49,9 +143,21 @@ impl InterceptedRequest {
         let version_str = match self.version {
             0 => "1.0",
             1 => "1.1",
-            _ => "1.1", // default fallback
+            _ => "1.1", // fallback
         };
-        format!("{} {} HTTP/{}", self.method, self.uri, version_str)
+
+        match self.scheme {
+            Scheme::Http => {
+                format!(
+                    "{} {}://{}:{}{} HTTP/{}",
+                    self.method, "http", self.host, self.port, self.path, version_str
+                )
+            }
+            Scheme::Https => {
+                // After CONNECT/TLS, use origin-form
+                format!("{} {} HTTP/{}", self.method, self.path, version_str)
+            }
+        }
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -64,6 +170,7 @@ impl InterceptedRequest {
 
         headers.remove("Content-Length");
         headers.remove("content-length");
+
         // Set or update the Content-Length if body is present
         if let Some(body) = &self.body {
             headers.insert("Content-Length".to_string(), body.len().to_string());
@@ -85,7 +192,6 @@ impl InterceptedRequest {
 
 #[derive(Debug, Clone)]
 pub struct InterceptedResponse {
-    pub id: i64,
     pub timestamp: DateTime<Utc>,
     pub status: u16,
     pub reason: String,
@@ -132,55 +238,11 @@ impl InterceptedResponse {
     }
 }
 
-pub async fn read_http_request2<R: AsyncRead + Unpin>(
-    reader: &mut R,
-    id: i64,
-) -> Result<InterceptedRequest> {
-    let mut buf = vec![0; 65536];
-    let n = reader.read(&mut buf).await?;
-    let data = &buf[..n];
-
-    let mut headers = [EMPTY_HEADER; 64];
-    let mut req = Request::new(&mut headers);
-
-    let method = req.method.unwrap_or("GET").to_string();
-    let path = req.path.unwrap_or("/").to_string();
-    let version = req.version.unwrap_or(1);
-
-    let status = req.parse(data)?;
-    let body = match status {
-        httparse::Status::Complete(header_len) => {
-            let body = &data[header_len..];
-            Some(String::from_utf8_lossy(body).to_string())
-        }
-        _ => None,
-    };
-
-    let headers_map = headers
-        .iter()
-        .filter(|h| !h.name.is_empty())
-        .map(|h| {
-            (
-                h.name.to_string(),
-                String::from_utf8_lossy(h.value).to_string(),
-            )
-        })
-        .collect();
-
-    Ok(InterceptedRequest::new(
-        id,
-        Utc::now(),
-        method,
-        path,
-        version,
-        headers_map,
-        body,
-    ))
-}
-
 pub async fn read_http_request<R: AsyncRead + Unpin>(
     reader: &mut R,
-    id: i64,
+    host: String,
+    port: u16,
+    scheme: Scheme,
 ) -> Result<InterceptedRequest> {
     let mut buf = vec![0; 65536];
     let n = reader.read(&mut buf).await?;
@@ -215,64 +277,20 @@ pub async fn read_http_request<R: AsyncRead + Unpin>(
         .collect();
 
     Ok(InterceptedRequest::new(
-        id,
         Utc::now(),
-        method,
+        scheme,
+        host,
+        port,
         path,
+        method,
         version,
         headers_map,
         body,
     ))
 }
 
-pub async fn read_http_response2<R: AsyncRead + Unpin>(
-    reader: &mut R,
-    id: i64,
-) -> Result<InterceptedResponse> {
-    let mut buf = vec![0; 65536];
-    let n = reader.read(&mut buf).await?;
-    let data = &buf[..n];
-
-    let mut headers = [EMPTY_HEADER; 64];
-    let mut resp = Response::new(&mut headers);
-
-    let version = resp.version.unwrap_or(1);
-    let code = resp.code.unwrap_or(200);
-    let reason = resp.reason.unwrap_or("").to_string();
-
-    let status = resp.parse(data)?;
-    let body = match status {
-        httparse::Status::Complete(header_len) => {
-            let body = &data[header_len..];
-            Some(String::from_utf8_lossy(body).to_string())
-        }
-        _ => None,
-    };
-
-    let headers_map = headers
-        .iter()
-        .filter(|h| !h.name.is_empty())
-        .map(|h| {
-            (
-                h.name.to_string(),
-                String::from_utf8_lossy(h.value).to_string(),
-            )
-        })
-        .collect();
-
-    Ok(InterceptedResponse {
-        id,
-        timestamp: Utc::now(),
-        version,
-        status: code,
-        reason,
-        headers: headers_map,
-        body,
-    })
-}
 pub async fn read_http_response<R: AsyncRead + Unpin>(
     reader: &mut R,
-    id: i64,
 ) -> anyhow::Result<InterceptedResponse> {
     let mut buf = vec![0; 65536];
     let n = reader.read(&mut buf).await?;
@@ -303,7 +321,6 @@ pub async fn read_http_response<R: AsyncRead + Unpin>(
 
             let body = &data[header_len..];
             Ok(InterceptedResponse {
-                id,
                 timestamp: Utc::now(),
                 version,
                 status: code,

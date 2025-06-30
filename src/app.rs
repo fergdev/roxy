@@ -1,5 +1,3 @@
-use std::collections::{HashMap, hash_map};
-
 use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Flex, Layout, Margin, Rect};
@@ -13,7 +11,7 @@ use ratatui::{DefaultTerminal, Frame};
 use style::palette::tailwind;
 
 use crate::event::{AppEvent, Event, EventHandler};
-use crate::flow::{InterceptedRequest, InterceptedResponse};
+use crate::flow::FlowStore;
 
 const PALETTES: [tailwind::Palette; 4] = [
     tailwind::BLUE,
@@ -41,6 +39,15 @@ struct TableColors {
     footer_border_color: Color,
 }
 
+struct UiState {
+    pub flows: Vec<UiFlow>,
+    pub popup: Option<Vec<String>>,
+}
+
+struct UiFlow {
+    pub line: String,
+}
+
 impl TableColors {
     const fn new(color: &tailwind::Palette) -> Self {
         Self {
@@ -64,23 +71,21 @@ pub struct App {
     scroll_state: ScrollbarState,
     colors: TableColors,
     color_index: usize,
-    requests: Vec<InterceptedRequest>,
-    responses: HashMap<i64, InterceptedResponse>,
-    pub events: EventHandler,
+    flow_store: FlowStore,
+    events: EventHandler,
     show_popup: bool,
     popup_scroll_state: ScrollbarState,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(flow_store: FlowStore) -> Self {
         Self {
             running: true,
             state: TableState::default().with_selected(0),
             scroll_state: ScrollbarState::new(0),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 0,
-            requests: vec![],
-            responses: hash_map::HashMap::new(),
+            flow_store,
             events: EventHandler::new(),
             show_popup: false,
             popup_scroll_state: ScrollbarState::new(0),
@@ -90,11 +95,8 @@ impl App {
     pub fn next_row(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if i >= self.requests.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
+                let len = self.flow_store.flows.len();
+                if i >= len - 1 { 0 } else { i + 1 }
             }
             None => 0,
         };
@@ -105,11 +107,8 @@ impl App {
     pub fn previous_row(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if i == 0 {
-                    self.requests.len() - 1
-                } else {
-                    i - 1
-                }
+                let len = self.flow_store.flows.len();
+                if i == 0 { len - 1 } else { i - 1 }
             }
             None => 0,
         };
@@ -132,16 +131,89 @@ impl App {
 
     pub async fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while self.running {
-            terminal.draw(|frame| self.render(frame))?;
+            let fs = self.flow_store.clone();
+            let ids = fs.ordered_ids.read().await;
+
+            let mut rows = Vec::new();
+            for id in ids.iter() {
+                if let Some(entry) = self.flow_store.flows.get(&id) {
+                    let flow = entry.value().read().await;
+                    let c = if flow.response.is_some() { "+" } else { "-" };
+                    let resp = flow
+                        .response
+                        .as_ref()
+                        .map(|r| r.status.to_string())
+                        .unwrap_or_else(|| "-".into());
+                    let req = flow
+                        .request
+                        .as_ref()
+                        .map(|r| r.request_line())
+                        .unwrap_or_else(|| "empty".into());
+
+                    rows.push(UiFlow {
+                        line: format!("{} {} -> {}", c, req, resp),
+                    });
+                }
+            }
+
+            let popup = if self.show_popup {
+                match self.state.selected() {
+                    Some(i) => {
+                        if i > ids.len() {
+                            self.show_popup = false;
+                            continue;
+                        }
+                        let id = ids[i];
+                        let entry = self.flow_store.flows.get(&id).unwrap();
+                        let flow = entry.value().read().await;
+                        let mut text = vec![];
+                        if let Some(request) = &flow.request {
+                            text.push(request.request_line());
+                            for (k, v) in request.headers.iter() {
+                                text.push(format!("{}: {}", k, v));
+                            }
+                            if let Some(body) = &request.body {
+                                text.push(body.clone());
+                            }
+                        }
+                        if let Some(response) = &flow.response {
+                            text.push(response.request_line());
+                            for (k, v) in response.headers.iter() {
+                                text.push(format!("{}: {}", k, v));
+                            }
+                            if let Some(body) = &response.body {
+                                text.push(body.clone());
+                            }
+                        }
+
+                        if let Some(certs) = &flow.cert_info {
+                            text.push("Certificates:".into());
+                            for cert in certs.iter() {
+                                text.push(format!("  - {}", cert.issuer));
+                            }
+                        }
+                        Some(text)
+                    }
+
+                    None => None,
+                }
+            } else {
+                None
+            };
+
+            let ui_state = UiState { flows: rows, popup };
+
+            terminal.draw(|frame| self.render(frame, ui_state))?;
+
             match self.events.next().await? {
                 Event::Tick => self.tick(),
                 Event::Crossterm(event) => {
                     if let Some(key) = event.as_key_press_event() {
                         let shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
                         match key.code {
-                            // KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                             KeyCode::Char('q') | KeyCode::Esc => {
                                 if self.show_popup {
+                                    self.popup_scroll_state.first();
                                     self.show_popup = false
                                 } else {
                                     self.quit()
@@ -173,10 +245,6 @@ impl App {
                     }
                 }
                 Event::App(app_event) => match app_event {
-                    AppEvent::Request(data) => self.requests.push(data),
-                    AppEvent::Response(data) => {
-                        let _ = self.responses.insert(data.id, data);
-                    }
                     AppEvent::Quit => self.quit(),
                 },
             }
@@ -184,19 +252,19 @@ impl App {
         Ok(())
     }
 
-    fn render(&mut self, frame: &mut Frame) {
+    fn render(&mut self, frame: &mut Frame, ui_state: UiState) {
         let vertical = &Layout::vertical([Constraint::Min(5), Constraint::Length(4)]);
         let rects = vertical.split(frame.area());
 
         self.set_colors();
 
-        self.render_table(frame, rects[0]);
+        self.render_table(frame, rects[0], &ui_state);
         self.render_scrollbar(frame, rects[0]);
         self.render_footer(frame, rects[1]);
-        self.render_popup(frame);
+        self.render_popup(frame, &ui_state.popup);
     }
 
-    fn render_table(&mut self, frame: &mut Frame, area: Rect) {
+    fn render_table(&mut self, frame: &mut Frame, area: Rect, ui_state: &UiState) {
         let selected_row_style = Style::default()
             .add_modifier(Modifier::REVERSED)
             .fg(self.colors.selected_row_style_fg);
@@ -206,26 +274,13 @@ impl App {
             .add_modifier(Modifier::REVERSED)
             .fg(self.colors.selected_cell_style_fg);
 
-        let rows = self
-            .requests
+        let rows = ui_state
+            .flows
             .iter()
-            .map(|r| {
-                let response = self.responses.get(&r.id);
-                let c = match response {
-                    Some(_) => "+",
-                    None => "-",
-                };
-                let resp = match response {
-                    Some(resp) => resp.status.to_string(),
-                    None => "-".to_string(),
-                };
-                format!("{} {} -> {}", c, r.request_line().as_str(), resp)
-            })
-            .map(|c| Row::new(vec![c]));
-
+            .map(|f| Row::new(vec![f.line.clone()]));
         let bar = " █ ";
+
         let t = Table::new(rows, [Constraint::Fill(1)])
-            // .header(header)
             .row_highlight_style(selected_row_style)
             .column_highlight_style(selected_col_style)
             .cell_highlight_style(selected_cell_style)
@@ -270,62 +325,34 @@ impl App {
         frame.render_widget(info_footer, area);
     }
 
-    fn render_popup(&mut self, frame: &mut Frame) {
+    fn render_popup(&mut self, frame: &mut Frame, popup: &Option<Vec<String>>) {
+        let popup = match popup {
+            Some(p) => p,
+            None => {
+                self.show_popup = false;
+                return;
+            }
+        };
+
         let area = frame.area();
 
-        if self.show_popup {
-            let idx = match self.state.selected() {
-                Some(idx) => idx,
-                None => {
-                    self.show_popup = false;
-                    return;
-                }
-            };
+        let mut text = vec![];
+        popup.iter().for_each(|line| {
+            text.push(Line::from(line.clone()));
+        });
 
-            let request = &self.requests[idx];
-            let response = &self.responses.get(&request.id);
+        self.popup_scroll_state = self.popup_scroll_state.content_length(text.len());
 
-            let mut text = vec![Line::from("REQUEST"), Line::from(request.request_line())];
-            for (k, v) in request.headers.iter() {
-                text.push(Line::from(format!("{}: {}", k, v)));
-            }
+        let popup = Block::bordered().title("Info");
+        let paragraph = Paragraph::new(text.clone())
+            .gray()
+            .block(popup)
+            .scroll((self.popup_scroll_state.get_position() as u16, 0));
 
-            if let Some(body) = &request.body {
-                for line in body.lines() {
-                    text.push(Line::from(line));
-                }
-            }
-
-            if let Some(resp_data) = response {
-                text.push(Line::from("".to_string()));
-                text.push(Line::from("".to_string()));
-
-                text.push(Line::from("RESPONSE".to_string()));
-                text.push(Line::from(resp_data.request_line()));
-                for (k, v) in resp_data.headers.iter() {
-                    text.push(Line::from(format!("{}: {}", k, v)));
-                }
-
-                if let Some(body) = &resp_data.body {
-                    for line in body.lines() {
-                        text.push(Line::from(line));
-                    }
-                }
-            };
-
-            self.popup_scroll_state = self.popup_scroll_state.content_length(text.len());
-
-            let popup = Block::bordered().title("Info");
-            let paragraph = Paragraph::new(text.clone())
-                .gray()
-                .block(popup)
-                .scroll((self.popup_scroll_state.get_position() as u16, 0));
-
-            let popup_area = self.centered_area(area, 60, 60);
-            // clears out any background in the area before rendering the popup
-            frame.render_widget(Clear, popup_area);
-            frame.render_widget(paragraph, popup_area);
-        }
+        let popup_area = self.centered_area(area, 60, 60);
+        // clears out any background in the area before rendering the popup
+        frame.render_widget(Clear, popup_area);
+        frame.render_widget(paragraph, popup_area);
     }
 
     /// Create a centered rect using up certain percentage of the available rect
@@ -349,11 +376,5 @@ impl App {
 
     fn view_req(&mut self) {
         self.show_popup = true;
-    }
-}
-
-impl Default for App {
-    fn default() -> Self {
-        Self::new()
     }
 }

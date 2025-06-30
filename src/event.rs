@@ -3,8 +3,6 @@ use futures::{FutureExt, StreamExt};
 use std::time::Duration;
 use tokio::sync::mpsc::{self, UnboundedSender};
 
-use crate::flow::{InterceptedRequest, InterceptedResponse};
-
 /// The frequency at which tick events are emitted.
 const TICK_FPS: f64 = 30.0;
 
@@ -32,8 +30,6 @@ pub enum Event {
 /// You can extend this enum with your own custom events.
 #[derive(Clone, Debug)]
 pub enum AppEvent {
-    Request(InterceptedRequest),
-    Response(InterceptedResponse),
     Quit,
 }
 

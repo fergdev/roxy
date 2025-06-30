@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tracing::{debug, error};
 
-use crate::flow::{InterceptedRequest, InterceptedResponse};
+use crate::flow::Flow;
 
 #[derive(Debug, Clone)]
 pub struct ScriptEngine {
@@ -69,7 +69,11 @@ impl ScriptEngine {
         Ok(())
     }
 
-    pub fn intercept_request(&self, req: &mut InterceptedRequest) -> Result<()> {
+    pub fn intercept_request(&self, flow: &mut Flow) -> Result<()> {
+        let req = match &mut flow.request {
+            Some(resp) => resp,
+            None => panic!("No response to intercept"),
+        };
         debug!("Intercepting request: {}", req.request_line());
         let lua = self
             .lua
@@ -88,8 +92,12 @@ impl ScriptEngine {
             .map_err(|e| anyhow!("Failed to create Lua table: {}", e.to_string()))?;
 
         req_table
-            .set("uri", req.uri.clone())
-            .map_err(|e| anyhow!("Failed to set 'url': {}", e.to_string()))?;
+            .set("host", req.host.clone())
+            .map_err(|e| anyhow!("Failed to set 'host': {}", e.to_string()))?;
+
+        req_table
+            .set("port", req.port)
+            .map_err(|e| anyhow!("Failed to set 'host': {}", e.to_string()))?;
 
         req_table
             .set("body", req.body.clone().unwrap_or_default())
@@ -113,9 +121,13 @@ impl ScriptEngine {
             .call(req_table)
             .map_err(|e| anyhow!("Lua call to 'intercept_request' failed: {}", e.to_string()))?;
 
-        req.uri = new_req
-            .get("uri")
-            .map_err(|e| anyhow!("Missing or invalid 'url' in Lua result: {}", e.to_string()))?;
+        req.host = new_req
+            .get("host")
+            .map_err(|e| anyhow!("Missing or invalid 'host' in Lua result: {}", e.to_string()))?;
+
+        req.port = new_req
+            .get("port")
+            .map_err(|e| anyhow!("Missing or invalid 'port' in Lua result: {}", e.to_string()))?;
 
         req.body =
             Some(new_req.get("body").map_err(|e| {
@@ -139,7 +151,12 @@ impl ScriptEngine {
         Ok(())
     }
 
-    pub fn intercept_response(&self, res: &mut InterceptedResponse) -> Result<()> {
+    pub fn intercept_response(&self, flow: &mut Flow) -> Result<()> {
+        let res = match &mut flow.response {
+            Some(resp) => resp,
+            None => panic!("No response to intercept"),
+        };
+
         println!("Intercepting response: {}", res.request_line());
         let lua = self
             .lua

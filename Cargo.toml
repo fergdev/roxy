@@ -49,6 +49,7 @@ bytes = "1.10.1"
 http = "1"
 http-body = "1"
 x509-parser = "0.17"
+dashmap = "6.1.0"
 
 [dev-dependencies]
 tempfile = "3.11.0"
