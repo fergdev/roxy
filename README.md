@@ -64,6 +64,13 @@ The goal is to build a fast, flexible proxy with scriptable interception and ins
 
 I would genuinely enjoy collaborating on this with others — whether you’re experimenting, learning, or building something serious. Almost any improvement is helpful right now. If you’re not sure where to begin, reach out.
 
+## TODO
+
+- [ ] web-ui
+- [ ] http2
+- [ ] http3
+- [ ] websocket
+
 ## License
 
 This project is licensed under the MIT license ([LICENSE] or <http://opensource.org/licenses/MIT>)
