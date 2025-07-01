@@ -185,7 +185,7 @@ impl Component for FlowList {
         let table = Table::new(rows, [Constraint::Fill(1)])
             .highlight_symbol(">> ")
             .bg(self.colors.buffer_bg)
-            .highlight_style(selected_row_style);
+            .row_highlight_style(selected_row_style);
 
         f.render_stateful_widget(table, area, &mut self.state);
         f.render_stateful_widget(

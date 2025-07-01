@@ -20,24 +20,14 @@ use crate::{
 
 use super::{component::Component, util::centered_rect};
 
+#[derive(Default)]
 struct State {
     request_lines: Vec<String>,
     response_lines: Vec<String>,
     cert_lines: Vec<String>,
 }
 
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            request_lines: vec![],
-            response_lines: vec![],
-            cert_lines: vec![],
-        }
-    }
-}
-
 pub struct FlowDetails {
-    flow_store: FlowStore,
     selected_flow: Option<i64>,
     state: Arc<Mutex<State>>,
     scroll: usize,
@@ -55,7 +45,7 @@ impl FlowDetails {
         let task_state = state.clone();
         let handle = tokio::spawn(async move {
             loop {
-                let id_opt = (*rx.borrow_and_update()).clone();
+                let id_opt = *rx.borrow_and_update();
                 if let Some(flow_id) = id_opt {
                     let maybe_entry = task_flow_store.get_flow_by_id(flow_id).await;
 
@@ -88,7 +78,6 @@ impl FlowDetails {
         });
 
         Self {
-            flow_store,
             selected_flow: None,
             state,
             scroll: 0,
@@ -245,6 +234,6 @@ impl Component for FlowDetails {
 
 impl Drop for FlowDetails {
     fn drop(&mut self) {
-        self.listener_handle.abort(); // cancel background task
+        self.listener_handle.abort();
     }
 }

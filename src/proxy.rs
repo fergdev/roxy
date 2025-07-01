@@ -283,9 +283,9 @@ async fn tunnel(
 
     debug!("Invoking script_engine");
 
-    script_engine
-        .as_ref()
-        .map(|engine| engine.intercept_request(&mut g_flow).unwrap());
+    if let Some(engine) = script_engine.as_ref() {
+        engine.intercept_request(&mut g_flow).unwrap()
+    }
 
     let req_bytes = g_flow
         .request

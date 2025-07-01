@@ -17,13 +17,6 @@ use crate::tui::{Event, Tui};
 use crate::ui::component::Component;
 use crate::ui::home::HomeComponent;
 
-const PALETTES: [tailwind::Palette; 4] = [
-    tailwind::BLUE,
-    tailwind::EMERALD,
-    tailwind::INDIGO,
-    tailwind::RED,
-];
-
 pub const ITEM_HEIGHT: usize = 4;
 
 pub struct TableColors {
@@ -58,9 +51,6 @@ impl TableColors {
 
 pub struct App {
     config: Config,
-    running: bool,
-    flow_store: FlowStore,
-    log_buffer: Arc<Mutex<VecDeque<String>>>,
     components: Vec<Box<dyn Component>>,
     should_quit: bool,
     should_suspend: bool,
@@ -80,9 +70,6 @@ impl App {
         let home = HomeComponent::new(config.clone(), flow_store.clone(), log_buffer.clone());
         Self {
             config,
-            flow_store,
-            log_buffer,
-            running: true,
             components: vec![Box::new(home)],
             should_quit: false,
             should_suspend: false,

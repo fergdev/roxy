@@ -10,7 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem},
 };
 
-use crate::config::Config;
+use crate::{config::Config, event::Action};
 
 use super::{component::Component, util::centered_rect};
 
@@ -87,40 +87,45 @@ impl ConfigEditor {
         }
     }
 
+    fn on_up(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+    }
+
+    fn on_down(&mut self) {
+        if self.selected + 1 < self.fields.len() {
+            self.selected += 1;
+        }
+    }
+
+    fn on_select(&mut self) {
+        let field = &mut self.fields[self.selected];
+        field.editing = !field.editing;
+        if field.editing {
+            self.input_buffer = match &field.value {
+                ConfigValue::String(s) => s.clone(),
+                ConfigValue::U16(n) => n.to_string(),
+                ConfigValue::Bool(b) => b.to_string(),
+                ConfigValue::Path(p) => p.display().to_string(),
+                ConfigValue::None => String::new(),
+            };
+        } else {
+            // Apply edit
+            let new_val = self.input_buffer.trim();
+            field.value = match &field.value {
+                ConfigValue::String(_) => ConfigValue::String(new_val.into()),
+                ConfigValue::U16(_) => new_val
+                    .parse()
+                    .map(ConfigValue::U16)
+                    .unwrap_or(ConfigValue::U16(0)),
+                ConfigValue::Bool(_) => ConfigValue::Bool(new_val.parse().unwrap_or(false)),
+                ConfigValue::Path(_) => ConfigValue::Path(PathBuf::from(new_val)),
+                ConfigValue::None => ConfigValue::String(new_val.into()),
+            };
+        }
+    }
+
     pub fn on_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Up => self.selected = self.selected.saturating_sub(1),
-            KeyCode::Down => {
-                if self.selected + 1 < self.fields.len() {
-                    self.selected += 1;
-                }
-            }
-            KeyCode::Enter => {
-                let field = &mut self.fields[self.selected];
-                field.editing = !field.editing;
-                if field.editing {
-                    self.input_buffer = match &field.value {
-                        ConfigValue::String(s) => s.clone(),
-                        ConfigValue::U16(n) => n.to_string(),
-                        ConfigValue::Bool(b) => b.to_string(),
-                        ConfigValue::Path(p) => p.display().to_string(),
-                        ConfigValue::None => String::new(),
-                    };
-                } else {
-                    // Apply edit
-                    let new_val = self.input_buffer.trim();
-                    field.value = match &field.value {
-                        ConfigValue::String(_) => ConfigValue::String(new_val.into()),
-                        ConfigValue::U16(_) => new_val
-                            .parse()
-                            .map(ConfigValue::U16)
-                            .unwrap_or(ConfigValue::U16(0)),
-                        ConfigValue::Bool(_) => ConfigValue::Bool(new_val.parse().unwrap_or(false)),
-                        ConfigValue::Path(_) => ConfigValue::Path(PathBuf::from(new_val)),
-                        ConfigValue::None => ConfigValue::String(new_val.into()),
-                    };
-                }
-            }
             KeyCode::Char(c) if self.fields[self.selected].editing => {
                 self.input_buffer.push(c);
             }
@@ -129,6 +134,12 @@ impl ConfigEditor {
             }
             _ => {}
         }
+    }
+}
+
+impl Default for ConfigEditor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -191,6 +202,23 @@ impl From<&Config> for Vec<EditableConfigField> {
 }
 
 impl Component for ConfigEditor {
+    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+        match action {
+            Action::Up => {
+                self.on_up();
+                Ok(None)
+            }
+            Action::Down => {
+                self.on_down();
+                Ok(None)
+            }
+            Action::Select => {
+                self.on_select();
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
+    }
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         let popup_area = centered_rect(80, 60, area);
         let items: Vec<ListItem> = self
