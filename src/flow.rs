@@ -10,6 +10,7 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt},
     sync::{RwLock, watch},
 };
+use tracing::error;
 
 #[derive(Clone)]
 pub struct FlowStore {
@@ -40,6 +41,12 @@ impl FlowStore {
 
     pub async fn get_flow_by_id(&self, id: i64) -> Option<Arc<RwLock<Flow>>> {
         self.flows.get(&id).map(|f| f.value().clone())
+    }
+
+    pub fn notify(&self) {
+        self.notifier.send(()).unwrap_or_else(|_| {
+            error!("Failed to notify subscribers, channel closed");
+        });
     }
 
     pub fn subscribe(&self) -> watch::Receiver<()> {

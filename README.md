@@ -70,6 +70,10 @@ I would genuinely enjoy collaborating on this with others — whether you’re e
 - [ ] http2
 - [ ] http3
 - [ ] websocket
+- [ ] github pages
+- [ ] body size
+- [ ] timing info
+- [ ] use http_proxy and https_proxy env vars, add UI to turn them on/off
 
 ## License
 

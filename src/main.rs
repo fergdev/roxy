@@ -5,7 +5,8 @@ use std::{
 
 use clap::Parser;
 use roxy::{
-    app, certs, flow::FlowStore, interceptor::ScriptEngine, logging, proxy, ui::log::UiLogLayer,
+    app, certs, config::Config, flow::FlowStore, interceptor::ScriptEngine, logging, proxy,
+    ui::log::UiLogLayer,
 };
 
 #[derive(Parser, Debug)]
@@ -23,6 +24,7 @@ async fn main() -> color_eyre::Result<()> {
     let log_buffer = Arc::new(Mutex::new(VecDeque::new()));
     let log_layer = UiLogLayer::new(log_buffer.clone());
 
+    let config = Config::new().unwrap();
     logging::initialize_logging_with_layer(Some(log_layer)).unwrap();
 
     let args = Args::parse();
@@ -34,10 +36,10 @@ async fn main() -> color_eyre::Result<()> {
     let _ = proxy::start_proxy(args.port, roxy_certs, script_engine, flow_store.clone());
 
     color_eyre::install().unwrap();
-    let mut terminal = ratatui::init();
+    // let mut terminal = ratatui::init();
 
-    let app = app::App::new(flow_store.clone(), log_buffer);
-    let result = app.run(&mut terminal).await;
+    let mut app = app::App::new(config, flow_store.clone(), log_buffer);
+    let result = app.run().await;
     ratatui::restore();
     result
 }

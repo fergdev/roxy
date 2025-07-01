@@ -15,6 +15,7 @@
 
 local roxy = {}
 
+-- TODO: this is out of date, the whole flow is passed here
 --- Example: Intercept a request
 ---@param req InterceptedRequest
 ---@return InterceptedRequest

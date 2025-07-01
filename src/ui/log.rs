@@ -1,8 +1,12 @@
+use color_eyre::Result;
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
 };
 
+use crate::event::Action;
+
+use super::{component::Component, util::centered_rect};
 use tracing::{Event, Subscriber, field::Visit};
 use tracing_subscriber::{Layer, layer::Context, registry::LookupSpan};
 
@@ -54,46 +58,72 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-pub fn render_log_popup(
-    frame: &mut Frame,
-    area: Rect,
-    logs: &Arc<Mutex<VecDeque<String>>>,
-    scroll_offset: usize,
-) {
-    let popup_area = centered_rect(80, 60, area);
-    let paragraph = Paragraph::new(Text::from(
-        logs.lock()
-            .unwrap()
-            .iter()
-            .cloned()
-            .map(Line::raw)
-            .collect::<Vec<_>>(),
-    ))
-    .scroll((scroll_offset as u16, 0)) // <-- here
-    .alignment(Alignment::Left)
-    .block(Block::default().title("Log Output").borders(Borders::ALL));
-
-    frame.render_widget(Clear, popup_area); // clears under the popup
-    frame.render_widget(paragraph, popup_area);
+pub struct LogViewer {
+    logs: Arc<Mutex<VecDeque<String>>>,
+    v_scroll_offset: usize,
+    h_scroll_offset: usize,
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let popup_layout = ratatui::layout::Layout::default()
-        .direction(ratatui::layout::Direction::Vertical)
-        .constraints([
-            ratatui::layout::Constraint::Percentage((100 - percent_y) / 2),
-            ratatui::layout::Constraint::Percentage(percent_y),
-            ratatui::layout::Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(area);
+impl LogViewer {
+    pub fn new(logs: Arc<Mutex<VecDeque<String>>>) -> Self {
+        Self {
+            logs,
+            v_scroll_offset: 0,
+            h_scroll_offset: 0,
+        }
+    }
+}
 
-    let center = popup_layout[1];
-    ratatui::layout::Layout::default()
-        .direction(ratatui::layout::Direction::Horizontal)
-        .constraints([
-            ratatui::layout::Constraint::Percentage((100 - percent_x) / 2),
-            ratatui::layout::Constraint::Percentage(percent_x),
-            ratatui::layout::Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(center)[1]
+impl Component for LogViewer {
+    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+        match action {
+            Action::Top => {
+                self.v_scroll_offset = 0;
+            }
+            Action::Bottom => {
+                self.v_scroll_offset = self.logs.lock().unwrap().len();
+            }
+            Action::Up => {
+                if self.v_scroll_offset > 0 {
+                    self.v_scroll_offset -= 1;
+                }
+            }
+            Action::Down => {
+                let logs_len = self.logs.lock().unwrap().len();
+                if self.v_scroll_offset < logs_len.saturating_sub(1) {
+                    self.v_scroll_offset += 1;
+                }
+            }
+            Action::Right => {
+                self.h_scroll_offset += 1;
+            }
+            Action::Left => {
+                if self.h_scroll_offset > 0 {
+                    self.h_scroll_offset -= 1;
+                }
+            }
+            _ => {}
+        }
+        Ok(None)
+    }
+
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        let popup_area = centered_rect(80, 60, area);
+        let paragraph = Paragraph::new(Text::from(
+            self.logs
+                .lock()
+                .unwrap()
+                .iter()
+                .cloned()
+                .map(Line::raw)
+                .collect::<Vec<_>>(),
+        ))
+        .scroll((self.v_scroll_offset as u16, self.h_scroll_offset as u16))
+        .alignment(Alignment::Left)
+        .block(Block::default().title("Log Output").borders(Borders::ALL));
+
+        frame.render_widget(Clear, popup_area); // clears under the popup
+        frame.render_widget(paragraph, popup_area);
+        Ok(())
+    }
 }

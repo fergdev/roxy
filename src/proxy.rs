@@ -132,7 +132,7 @@ async fn proxy(
             tokio::task::spawn(async move {
                 match hyper::upgrade::on(req).await {
                     Ok(upgraded) => {
-                        if let Err(e) = tunnel(flow, upgraded, addr, ca, script_engine).await {
+                        if let Err(e) = tunnel(flow, upgraded, addr, ca, script_engine, fs).await {
                             error!("server io error: {}", e);
                         };
                     }
@@ -160,6 +160,7 @@ async fn proxy(
         let port = guard.request.as_ref().unwrap().port;
 
         drop(guard);
+        fs.notify();
 
         let stream = TcpStream::connect((host, port)).await.unwrap();
         let io = TokioIo::new(stream);
@@ -207,6 +208,7 @@ async fn proxy(
             .map(|engine| engine.intercept_response(&mut guard));
 
         drop(guard);
+        fs.notify();
 
         let resp = Response::from_parts(parts, full(body_bytes.clone()));
         Ok(resp.map(|b| b.boxed()))
@@ -235,6 +237,7 @@ async fn tunnel(
     requested_addr: String,
     ca: Arc<RoxyCA>,
     script_engine: Option<ScriptEngine>,
+    flow_store: FlowStore,
 ) -> std::io::Result<()> {
     // Connect to remote server
     let client_stream = TokioIo::new(upgraded);
@@ -295,13 +298,9 @@ async fn tunnel(
 
     let target_addr = g_flow.request.as_ref().unwrap().target_host();
     drop(g_flow);
+    flow_store.notify();
 
-    info!(
-        "DEBUGPRINT[37]: proxy.rs:297: target_host={:#?}",
-        target_addr
-    );
     let uri = target_addr.parse::<Uri>().unwrap();
-
     let target_host = uri.host().unwrap();
 
     // Connect to upstream server with TLS
@@ -350,6 +349,7 @@ async fn tunnel(
     cw.write_all(&bytes).await?;
 
     drop(g_flow);
+    flow_store.notify();
 
     cw.flush().await?;
     Ok(())
