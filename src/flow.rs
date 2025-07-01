@@ -256,7 +256,6 @@ impl InterceptedResponse {
         out.extend_from_slice(self.request_line().as_bytes());
         out.extend_from_slice(b"\r\n");
 
-        // Create a local header map so we can insert/update Content-Length
         let mut headers = self.headers.clone();
 
         headers.remove("Content-Length");
@@ -281,7 +280,7 @@ impl InterceptedResponse {
 
 pub async fn read_http_request<R: AsyncRead + Unpin>(
     reader: &mut R,
-    host: String,
+    host: &str,
     port: u16,
     scheme: Scheme,
 ) -> Result<InterceptedRequest> {
@@ -320,7 +319,7 @@ pub async fn read_http_request<R: AsyncRead + Unpin>(
     Ok(InterceptedRequest::new(
         Utc::now(),
         scheme,
-        host,
+        host.to_string(),
         port,
         path,
         method,
@@ -332,46 +331,58 @@ pub async fn read_http_request<R: AsyncRead + Unpin>(
 
 pub async fn read_http_response<R: AsyncRead + Unpin>(
     reader: &mut R,
-) -> anyhow::Result<InterceptedResponse> {
+) -> Result<InterceptedResponse> {
     let mut buf = vec![0; 65536];
-    let n = reader.read(&mut buf).await?;
-    let data = &buf[..n];
-
     let mut headers = [EMPTY_HEADER; 64];
     let mut resp = Response::new(&mut headers);
 
-    // Parse first!
-    let status = resp.parse(data)?;
+    // Read into buffer until we can parse headers
+    let mut n = reader.read(&mut buf).await?;
+    let status = resp.parse(&buf[..n])?;
 
-    let response = match status {
-        httparse::Status::Complete(header_len) => {
-            let version = resp.version.unwrap_or(1);
-            let code = resp.code.unwrap_or(200);
-            let reason = resp.reason.unwrap_or("").to_string();
+    let header_len = match status {
+        httparse::Status::Complete(len) => len,
+        httparse::Status::Partial => return Err(anyhow::anyhow!("incomplete HTTP response")),
+    };
 
-            let header_map = headers
-                .iter()
-                .filter(|h| !h.name.is_empty())
-                .map(|h| {
-                    (
-                        h.name.to_string(),
-                        String::from_utf8_lossy(h.value).to_string(),
-                    )
-                })
-                .collect::<HashMap<_, _>>();
+    // Extract headers
+    let version = resp.version.unwrap_or(1);
+    let code = resp.code.unwrap_or(200);
+    let reason = resp.reason.unwrap_or("").to_string();
 
-            let body = &data[header_len..];
-            Ok(InterceptedResponse {
-                timestamp: Utc::now(),
-                version,
-                status: code,
-                reason,
-                headers: header_map,
-                body: Some(String::from_utf8_lossy(body).to_string()),
-            })
+    let header_map: HashMap<String, String> = headers
+        .iter()
+        .filter(|h| !h.name.is_empty())
+        .map(|h| {
+            (
+                h.name.to_string(),
+                String::from_utf8_lossy(h.value).to_string(),
+            )
+        })
+        .collect();
+
+    // Determine content length
+    let content_length = header_map
+        .get("Content-Length")
+        .and_then(|val| val.parse::<usize>().ok())
+        .unwrap_or(0);
+
+    let mut body = buf[header_len..n].to_vec(); // already-read body chunk
+    while body.len() < content_length {
+        let mut chunk = vec![0; content_length - body.len()];
+        let read = reader.read(&mut chunk).await?;
+        if read == 0 {
+            break;
         }
-        httparse::Status::Partial => Err(anyhow::anyhow!("incomplete HTTP response")),
-    }?; // <- unwrap Result
+        body.extend_from_slice(&chunk[..read]);
+    }
 
-    Ok(response)
+    Ok(InterceptedResponse {
+        timestamp: Utc::now(),
+        version,
+        status: code,
+        reason,
+        headers: header_map,
+        body: Some(String::from_utf8_lossy(&body).to_string()),
+    })
 }

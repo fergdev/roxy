@@ -1,9 +1,7 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::sync::{Arc, Mutex};
 
 use color_eyre::Result;
+use kuchiki::{parse_html, traits::TendrilSink};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::Style,
@@ -69,10 +67,6 @@ impl FlowDetails {
                         guard.response_lines = resp;
                         guard.cert_lines = certs;
                     }
-                } else {
-                    // TODO: suspicious
-                    // Wait until rx changes before looping again
-                    tokio::time::sleep(Duration::from_millis(50)).await;
                 }
             }
         });
@@ -144,9 +138,22 @@ fn render_response(resp: &Option<InterceptedResponse>) -> Vec<String> {
         for (k, v) in &resp.headers {
             lines.push(format!("{}: {}", k, v));
         }
+        let content_type = resp
+            .headers
+            .get("Content-Type")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
         if let Some(body) = &resp.body {
-            lines.push("".to_string());
-            lines.push(body.clone());
+            if content_type.contains("xml") {
+                lines.extend(pretty_print_xml(body));
+            } else if content_type.contains("html") {
+                lines.extend(pretty_print_html(body));
+            } else if content_type.contains("json") {
+                lines.extend(pretty_print_json(body));
+            } else {
+                lines.push(body.clone());
+            }
         }
     } else {
         lines.push("(no response)".to_string());
@@ -235,5 +242,61 @@ impl Component for FlowDetails {
 impl Drop for FlowDetails {
     fn drop(&mut self) {
         self.listener_handle.abort();
+    }
+}
+
+fn pretty_print_xml(raw: &str) -> Vec<String> {
+    match xmltree::Element::parse(raw.as_bytes()) {
+        Ok(elem) => {
+            let mut out = Vec::new();
+            let mut buffer = Vec::new();
+            if elem
+                .write_with_config(
+                    &mut buffer,
+                    xmltree::EmitterConfig::new().perform_indent(true),
+                )
+                .is_ok()
+            {
+                if let Ok(s) = String::from_utf8(buffer) {
+                    out.extend(s.lines().map(|line| line.to_string()));
+                }
+            }
+            out
+        }
+        Err(_) => vec!["<invalid xml>".into()],
+    }
+}
+
+pub fn pretty_print_html(raw: &str) -> Vec<String> {
+    let parser = parse_html().from_utf8();
+    let document = parser.read_from(&mut raw.as_bytes());
+
+    match document {
+        Ok(doc) => {
+            let mut out = Vec::new();
+            let mut buffer = Vec::new();
+            if doc.serialize(&mut buffer).is_ok() {
+                if let Ok(s) = String::from_utf8(buffer) {
+                    out.extend(s.lines().map(|line| line.to_string()));
+                }
+            }
+            out
+        }
+        Err(_) => vec!["<invalid html>".into()],
+    }
+}
+
+fn pretty_print_json(raw: &str) -> Vec<String> {
+    match serde_json::from_str::<serde_json::Value>(raw) {
+        Ok(value) => {
+            let pretty = serde_json::to_string_pretty(&value).unwrap_or_else(|_| raw.to_string());
+            pretty.lines().map(|line| line.to_string()).collect()
+        }
+        Err(e) => {
+            error!("Failed to parse JSON: {}", e);
+            error!("{}", raw);
+
+            vec!["<invalid json>".into()]
+        }
     }
 }

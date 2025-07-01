@@ -132,7 +132,7 @@ async fn proxy(
             tokio::task::spawn(async move {
                 match hyper::upgrade::on(req).await {
                     Ok(upgraded) => {
-                        if let Err(e) = tunnel(flow, upgraded, addr, ca, script_engine, fs).await {
+                        if let Err(e) = tunnel(flow, upgraded, &addr, ca, script_engine, fs).await {
                             error!("server io error: {}", e);
                         };
                     }
@@ -234,7 +234,7 @@ fn full<T: Into<Bytes>>(chunk: T) -> BoxBody<Bytes, hyper::Error> {
 async fn tunnel(
     flow: Arc<RwLock<Flow>>,
     upgraded: Upgraded,
-    requested_addr: String,
+    requested_addr: &str,
     ca: Arc<RoxyCA>,
     script_engine: Option<ScriptEngine>,
     flow_store: FlowStore,
@@ -244,7 +244,9 @@ async fn tunnel(
 
     // Ensure the default CryptoProvider is installed before using rustls builders
     debug!("Established tunnel with {}", requested_addr);
-    let host = requested_addr.split(':').next().unwrap();
+    let uri = requested_addr.parse::<Uri>().unwrap();
+    let host = uri.host().unwrap_or("localhost");
+    let port = uri.port_u16().unwrap_or(443);
 
     let mut params = CertificateParams::new(vec![host.to_string()]).unwrap();
     params.distinguished_name.push(DnType::CommonName, host);
@@ -274,7 +276,7 @@ async fn tunnel(
 
     let (mut cr, mut cw) = tokio::io::split(BufReader::new(client_tls));
 
-    let req = read_http_request(&mut cr, host.to_string(), 443, Scheme::Https)
+    let req = read_http_request(&mut cr, host, port, Scheme::Https)
         .await
         .unwrap();
 
@@ -297,11 +299,13 @@ async fn tunnel(
         });
 
     let target_addr = g_flow.request.as_ref().unwrap().target_host();
+
     drop(g_flow);
     flow_store.notify();
 
     let uri = target_addr.parse::<Uri>().unwrap();
     let target_host = uri.host().unwrap();
+    let port = uri.port_u16().unwrap_or(443);
 
     // Connect to upstream server with TLS
     let mut root_store = RootCertStore::empty();
@@ -318,8 +322,8 @@ async fn tunnel(
     let server_name = ServerName::try_from(target_host.to_string()).unwrap();
     debug!("Connecting to upstream server: {}", target_addr);
 
-    let server_stream = tokio::net::TcpStream::connect(target_addr).await.unwrap();
-    let upstream_tls = connector.connect(server_name, server_stream).await.unwrap();
+    let server_stream = tokio::net::TcpStream::connect(target_addr).await?;
+    let upstream_tls = connector.connect(server_name, server_stream).await?;
 
     let (mut sr, mut sw) = tokio::io::split(BufReader::new(upstream_tls));
 

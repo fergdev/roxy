@@ -27,7 +27,7 @@ pub struct HomeComponent {
 
 impl HomeComponent {
     pub fn new(
-        config: Config,
+        _config: Config,
         flow_store: FlowStore,
         log_buffer: Arc<Mutex<VecDeque<String>>>,
     ) -> Self {

@@ -1,14 +1,12 @@
 use std::time::Duration;
 
 use rcgen::{CertifiedKey, generate_simple_self_signed};
-use roxy::event::Event;
 use roxy::flow::FlowStore;
 use roxy::logging::initialize_logging;
 use roxy::{interceptor, proxy};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
-use tokio::sync::mpsc::unbounded_channel;
 use warp::Filter;
 
 pub fn start_warp_test_server() -> std::net::SocketAddr {
@@ -144,8 +142,6 @@ async fn test_rewrite_https_proxy_request() {
     let port = listener.local_addr().unwrap().port();
     drop(listener);
 
-    let (tx, mut _rx) = unbounded_channel::<Event>();
-
     let script = r#"
 function intercept_request(req)
     return req
@@ -208,7 +204,8 @@ async fn test_redirect_https_proxy_request() {
     let script = format!(
         r#"
 function intercept_request(req)
-    req.uri = "{}"
+    req.host = "localhost"
+    req.port = {}
     return req
 end
 
@@ -217,7 +214,7 @@ function intercept_response(res)
     return res
 end
 "#,
-        target_url
+        server_addr.port()
     );
     let file_path = temp_dir.path().join("test.lua");
     let mut file = File::create(file_path.clone()).await.unwrap();

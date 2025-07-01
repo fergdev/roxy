@@ -327,20 +327,6 @@ pub fn key_event_to_string(key_event: &KeyEvent) -> String {
     key
 }
 
-// fn parse_color(name: &str) -> Color {
-//     match name.to_lowercase().as_str() {
-//         "black" => Color::Black,
-//         "red" => Color::Red,
-//         "green" => Color::Green,
-//         "yellow" => Color::Yellow,
-//         "blue" => Color::Blue,
-//         "magenta" => Color::Magenta,
-//         "cyan" => Color::Cyan,
-//         "white" => Color::White,
-//         _ => Color::Reset,
-//     }
-// }
-
 pub fn parse_style(line: &str) -> Style {
     let (foreground, background) =
         line.split_at(line.to_lowercase().find("on ").unwrap_or(line.len()));
