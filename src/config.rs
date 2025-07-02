@@ -1,18 +1,21 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use serde::ser::SerializeMap;
 use std::env;
 use std::{collections::HashMap, path::PathBuf};
-use tracing::error;
+use tokio::sync::watch;
+use tracing::{debug, error, info};
 
 use color_eyre::Result;
 use derive_deref::{Deref, DerefMut};
 use directories::ProjectDirs;
-use ratatui::style::{Color, Modifier, Style};
-use serde::{Deserialize, Deserializer};
+use ratatui::style::Color;
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 use crate::event::{Action, Mode};
 
-const CONFIG: &str = include_str!("../.config/config.json5");
+const CONFIG: &str = include_str!("../.config/config.json");
 
 lazy_static! {
     pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
@@ -26,78 +29,199 @@ lazy_static! {
             .map(PathBuf::from);
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(default)]
     pub data_dir: PathBuf,
     #[serde(default)]
     pub config_dir: PathBuf,
     #[serde(default)]
-    pub proxy: Option<ProxyConfig>,
-    #[serde(default)]
-    pub theme: Option<String>,
+    pub proxy: ProxyConfig,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProxyConfig {
     pub enabled: bool,
     pub port: u16,
     pub ca_cert_path: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct Config {
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RoxyConfig {
     #[serde(default)]
     pub app: AppConfig,
     #[serde(default)]
-    pub styles: Styles,
+    pub theme: Theme,
     #[serde(default)]
     pub keybindings: KeyBindings,
 }
 
-#[derive(Clone, Debug, Default, Deref, DerefMut)]
-pub struct Styles(pub HashMap<Mode, HashMap<String, Style>>);
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Theme {
+    pub colors: RoxyColors,
+    pub typography: Typography,
+}
 
-impl<'de> Deserialize<'de> for Styles {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let parsed_map = HashMap::<Mode, HashMap<String, String>>::deserialize(deserializer)?;
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Typography {
+    pub font_size: u16,
+}
 
-        let styles = parsed_map
-            .into_iter()
-            .map(|(mode, inner_map)| {
-                let converted_inner_map = inner_map
-                    .into_iter()
-                    .map(|(str, style)| (str, parse_style(&style)))
-                    .collect();
-                (mode, converted_inner_map)
-            })
-            .collect();
-
-        Ok(Styles(styles))
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RoxyColors {
+    #[serde(deserialize_with = "deserialize_color")]
+    pub primary: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub on_primary: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub secondary: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub on_secondary: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub surface: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub on_surface: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub background: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub on_background: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub outline: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub error: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub on_error: Color,
 }
 
 #[derive(Clone, Debug, Default, Deref, DerefMut)]
 pub struct KeyBindings(pub HashMap<Mode, HashMap<Vec<KeyEvent>, Action>>);
 
-impl Config {
-    pub fn new() -> Result<Self, config::ConfigError> {
-        let default_config: Config = json5::from_str(CONFIG).unwrap();
+#[derive(Clone, Debug)]
+pub struct ConfigManager {
+    pub tx: watch::Sender<RoxyConfig>,
+    pub rx: watch::Receiver<RoxyConfig>,
+}
+
+impl ConfigManager {
+    pub fn new() -> anyhow::Result<Self> {
+        info!("Initializing ConfigManager with default config");
+        info!("Initializing ConfigManager {}", CONFIG);
+        let config = Self::read_from_disk()?;
+        let (tx, rx) = watch::channel(config);
+
+        let manager = Self { tx, rx };
+
+        // Start watching
+        manager.spawn_watcher();
+
+        Ok(manager)
+    }
+
+    fn read_from_disk() -> anyhow::Result<RoxyConfig> {
+        let rc = RoxyConfig::new()?;
+        Ok(rc)
+    }
+
+    fn spawn_watcher(&self) {
+        let tx = self.tx.clone();
+        let path = get_config_file_path().0;
+
+        std::thread::spawn(move || {
+            let (tx_watcher, rx_watcher) = std::sync::mpsc::channel();
+            let mut watcher: RecommendedWatcher = notify::recommended_watcher(tx_watcher).unwrap();
+            watcher.watch(&path, RecursiveMode::NonRecursive).unwrap();
+
+            rx_watcher.into_iter().for_each(|res| {
+                if res.is_ok() {
+                    if let Ok(updated) = Self::read_from_disk() {
+                        let _ = tx.send(updated);
+                    }
+                }
+            });
+        });
+    }
+
+    pub fn persist(&self, updated: &RoxyConfig) -> anyhow::Result<()> {
+        debug!("Persisting updated config: {:?}", updated);
+        write_config(&updated).map_err(|e| {
+            error!("Failed to write config: {}", e);
+            anyhow::anyhow!("Failed to write config: {}", e)
+        })?;
+
+        Ok(())
+    }
+
+    pub fn update(&self, new_config: RoxyConfig) -> anyhow::Result<()> {
+        self.tx.send_replace(new_config.clone());
+        self.persist(&new_config)?;
+        Ok(())
+    }
+}
+
+fn get_config_file_path() -> (PathBuf, config::FileFormat) {
+    let config_dir = get_config_dir();
+
+    let config_files = [
+        ("config.toml", config::FileFormat::Toml),
+        ("config.json", config::FileFormat::Json),
+    ];
+
+    // Reuse existing file if found
+    let target = config_files
+        .iter()
+        .map(|(name, format)| (config_dir.join(name), format))
+        .find(|(path, _)| path.exists());
+
+    match target {
+        Some((p, f)) => (p.clone(), *f),
+        None => {
+            // fallback: use TOML
+            let fallback_path = config_dir.join("config.json");
+            (fallback_path, config::FileFormat::Json)
+        }
+    }
+}
+
+fn write_config<T: serde::Serialize>(config: &T) -> std::io::Result<()> {
+    let (path, format) = get_config_file_path();
+
+    debug!("Writing config to: {:?}", path);
+    debug!("Using format: {:?}", format);
+    // Create parent directories
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let serialized = match format {
+        config::FileFormat::Toml => toml::to_string_pretty(config).unwrap(),
+        config::FileFormat::Json => serde_json::to_string_pretty(config).unwrap(),
+        _ => panic!("Unsupported config format"),
+    };
+
+    std::fs::write(&path, serialized)?;
+    Ok(())
+}
+
+impl RoxyConfig {
+    fn new() -> Result<Self, config::ConfigError> {
         let data_dir = get_data_dir();
         let config_dir = get_config_dir();
+        debug!("Using data directory: {:?}", data_dir.as_path());
+        debug!("Using config directory: {:?}", config_dir.as_path());
         let mut builder = config::Config::builder()
+            .add_source(config::File::from_str(CONFIG, config::FileFormat::Json5))
+            .add_source(
+                config::Environment::with_prefix("ROXY")
+                    .try_parsing(true)
+                    .separator("_")
+                    .list_separator(" "),
+            )
             .set_default("data_dir", data_dir.to_str().unwrap())?
             .set_default("config_dir", config_dir.to_str().unwrap())?;
 
         let config_files = [
-            ("config.json5", config::FileFormat::Json5),
-            ("config.json", config::FileFormat::Json),
-            ("config.yaml", config::FileFormat::Yaml),
             ("config.toml", config::FileFormat::Toml),
-            ("config.ini", config::FileFormat::Ini),
+            ("config.json", config::FileFormat::Json),
         ];
         let mut found_config = false;
         for (file, format) in &config_files {
@@ -109,26 +233,15 @@ impl Config {
                 found_config = true
             }
         }
+
         if !found_config {
             error!("No configuration file found. Application may not behave as expected");
         }
 
-        let mut cfg: Self = builder.build()?.try_deserialize()?;
-
-        for (mode, default_bindings) in default_config.keybindings.iter() {
-            let user_bindings = cfg.keybindings.entry(*mode).or_default();
-            for (key, cmd) in default_bindings.iter() {
-                user_bindings
-                    .entry(key.clone())
-                    .or_insert_with(|| cmd.clone());
-            }
-        }
-        for (mode, default_styles) in default_config.styles.iter() {
-            let user_styles = cfg.styles.entry(*mode).or_default();
-            for (style_key, style) in default_styles.iter() {
-                user_styles.entry(style_key.clone()).or_insert(*style);
-            }
-        }
+        let cfg: Self = builder.build()?.try_deserialize().map_err(|e| {
+            error!("Failed to deserialize config: {}", e);
+            config::ConfigError::Message(format!("Failed to deserialize config: {}", e))
+        })?;
 
         Ok(cfg)
     }
@@ -154,6 +267,35 @@ impl<'de> Deserialize<'de> for KeyBindings {
 
         Ok(KeyBindings(keybindings))
     }
+}
+impl Serialize for KeyBindings {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Create a map serializer
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+
+        for (mode, bindings) in &self.0 {
+            let mode_key = format!("{:?}", mode); // convert Mode to string key
+            let mut inner = HashMap::new();
+
+            for (key_seq, action) in bindings {
+                inner.insert(format_key_sequence(key_seq), action);
+            }
+
+            map.serialize_entry(&mode_key, &inner)?;
+        }
+
+        map.end()
+    }
+}
+
+fn format_key_sequence(seq: &[KeyEvent]) -> String {
+    seq.iter()
+        .map(key_event_to_string) // your existing function
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 pub fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
@@ -183,7 +325,7 @@ pub fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
     sequences.into_iter().map(parse_key_event).collect()
 }
 
-fn parse_key_event(raw: &str) -> Result<KeyEvent, String> {
+pub fn parse_key_event(raw: &str) -> Result<KeyEvent, String> {
     let raw_lower = raw.to_ascii_lowercase();
     let (remaining, modifiers) = extract_modifiers(&raw_lower);
     parse_key_code_with_modifiers(remaining, modifiers)
@@ -327,118 +469,88 @@ pub fn key_event_to_string(key_event: &KeyEvent) -> String {
     key
 }
 
-pub fn parse_style(line: &str) -> Style {
-    let (foreground, background) =
-        line.split_at(line.to_lowercase().find("on ").unwrap_or(line.len()));
-    let foreground = process_color_string(foreground);
-    let background = process_color_string(&background.replace("on ", ""));
-
-    let mut style = Style::default();
-    if let Some(fg) = parse_color(&foreground.0) {
-        style = style.fg(fg);
-    }
-    if let Some(bg) = parse_color(&background.0) {
-        style = style.bg(bg);
-    }
-    style = style.add_modifier(foreground.1 | background.1);
-    style
-}
-
-fn process_color_string(color_str: &str) -> (String, Modifier) {
-    let color = color_str
-        .replace("grey", "gray")
-        .replace("bright ", "")
-        .replace("bold ", "")
-        .replace("underline ", "")
-        .replace("inverse ", "");
-
-    let mut modifiers = Modifier::empty();
-    if color_str.contains("underline") {
-        modifiers |= Modifier::UNDERLINED;
-    }
-    if color_str.contains("bold") {
-        modifiers |= Modifier::BOLD;
-    }
-    if color_str.contains("inverse") {
-        modifiers |= Modifier::REVERSED;
+pub fn get_config_dir() -> PathBuf {
+    if let Some(home) = env::var_os("HOME") {
+        return PathBuf::from(home).join(".config").join("roxy");
     }
 
-    (color, modifiers)
-}
-
-fn parse_color(s: &str) -> Option<Color> {
-    let s = s.trim_start();
-    let s = s.trim_end();
-    if s.contains("bright color") {
-        let s = s.trim_start_matches("bright ");
-        let c = s
-            .trim_start_matches("color")
-            .parse::<u8>()
-            .unwrap_or_default();
-        Some(Color::Indexed(c.wrapping_shl(8)))
-    } else if s.contains("color") {
-        let c = s
-            .trim_start_matches("color")
-            .parse::<u8>()
-            .unwrap_or_default();
-        Some(Color::Indexed(c))
-    } else if s.contains("gray") {
-        let c = 232
-            + s.trim_start_matches("gray")
-                .parse::<u8>()
-                .unwrap_or_default();
-        Some(Color::Indexed(c))
-    } else if s.contains("rgb") {
-        let red = (s.as_bytes()[3] as char).to_digit(10).unwrap_or_default() as u8;
-        let green = (s.as_bytes()[4] as char).to_digit(10).unwrap_or_default() as u8;
-        let blue = (s.as_bytes()[5] as char).to_digit(10).unwrap_or_default() as u8;
-        let c = 16 + red * 36 + green * 6 + blue;
-        Some(Color::Indexed(c))
-    } else if s == "bold black" {
-        Some(Color::Indexed(8))
-    } else if s == "bold red" {
-        Some(Color::Indexed(9))
-    } else if s == "bold green" {
-        Some(Color::Indexed(10))
-    } else if s == "bold yellow" {
-        Some(Color::Indexed(11))
-    } else if s == "bold blue" {
-        Some(Color::Indexed(12))
-    } else if s == "bold magenta" {
-        Some(Color::Indexed(13))
-    } else if s == "bold cyan" {
-        Some(Color::Indexed(14))
-    } else if s == "bold white" {
-        Some(Color::Indexed(15))
-    } else if s == "black" {
-        Some(Color::Indexed(0))
-    } else if s == "red" {
-        Some(Color::Indexed(1))
-    } else if s == "green" {
-        Some(Color::Indexed(2))
-    } else if s == "yellow" {
-        Some(Color::Indexed(3))
-    } else if s == "blue" {
-        Some(Color::Indexed(4))
-    } else if s == "magenta" {
-        Some(Color::Indexed(5))
-    } else if s == "cyan" {
-        Some(Color::Indexed(6))
-    } else if s == "white" {
-        Some(Color::Indexed(7))
-    } else {
-        None
-    }
+    ProjectDirs::from("com", "roxy", "Roxy")
+        .map(|d| d.config_local_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from(".config"))
 }
 
 pub fn get_data_dir() -> PathBuf {
+    if let Some(home) = env::var_os("HOME") {
+        return PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("roxy");
+    }
+
     ProjectDirs::from("com", "roxy", "Roxy")
         .map(|d| d.data_local_dir().to_path_buf())
         .unwrap_or_else(|| PathBuf::from(".data"))
 }
 
-pub fn get_config_dir() -> PathBuf {
-    ProjectDirs::from("com", "roxy", "Roxy")
-        .map(|d| d.config_local_dir().to_path_buf())
-        .unwrap_or_else(|| PathBuf::from(".config"))
+pub fn deserialize_color<'de, D>(deserializer: D) -> Result<Color, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    parse_color(&s).map_err(de::Error::custom)
+}
+
+pub fn parse_color(s: &str) -> Result<Color, String> {
+    let s = s.trim();
+
+    // Named color
+    if let Ok(c) = parse_named_color(s) {
+        return Ok(c);
+    }
+
+    // Rgb(255, 255, 255)
+    if let Some(rgb) = s.strip_prefix("Rgb(").and_then(|s| s.strip_suffix(")")) {
+        let parts: Vec<_> = rgb.split(',').map(|s| s.trim()).collect();
+        if parts.len() == 3 {
+            let r = parts[0].parse::<u8>().map_err(|_| "bad red value")?;
+            let g = parts[1].parse::<u8>().map_err(|_| "bad green value")?;
+            let b = parts[2].parse::<u8>().map_err(|_| "bad blue value")?;
+            return Ok(Color::Rgb(r, g, b));
+        }
+    }
+
+    // #rrggbb
+    if let Some(hex) = s.strip_prefix('#') {
+        if hex.len() == 6 {
+            let r = u8::from_str_radix(&hex[0..2], 16).map_err(|_| "bad hex")?;
+            let g = u8::from_str_radix(&hex[2..4], 16).map_err(|_| "bad hex")?;
+            let b = u8::from_str_radix(&hex[4..6], 16).map_err(|_| "bad hex")?;
+            return Ok(Color::Rgb(r, g, b));
+        }
+    }
+
+    Ok(Color::Magenta)
+}
+
+fn parse_named_color(name: &str) -> Result<Color, ()> {
+    use Color::*;
+    Ok(match name.to_lowercase().as_str() {
+        "black" => Black,
+        "red" => Red,
+        "green" => Green,
+        "yellow" => Yellow,
+        "blue" => Blue,
+        "magenta" => Magenta,
+        "cyan" => Cyan,
+        "gray" => Gray,
+        "darkgray" => DarkGray,
+        "lightred" => LightRed,
+        "lightgreen" => LightGreen,
+        "lightyellow" => LightYellow,
+        "lightblue" => LightBlue,
+        "lightmagenta" => LightMagenta,
+        "lightcyan" => LightCyan,
+        "white" => White,
+        _ => return Err(()),
+    })
 }

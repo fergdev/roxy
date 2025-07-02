@@ -1,0 +1,39 @@
+{
+  "proxy": {
+    "enabled": true,
+    "port": 6969
+  },
+  "keybindings": {
+    "Home": {
+      "<q>": "Back",
+      "<Ctrl-c>": "Quit",
+      "<Enter>": "Select",
+      "k": "Up",
+      "j": "Down",
+      "h": "Left",
+      "l": "Right",
+      "i": "EditConfig",
+      "d": "LogView",
+      "<Ctrl-u>": "Top",
+      "<Ctrl-d>": "Bottom"
+    }
+  },
+  "theme": {
+    "colors": {
+      "primary": "#7aa2f7",
+      "on_primary": "#1d202f",
+      "secondary": "#ff9e64",
+      "on_secondary": "#1d202f",
+      "surface": "#1e1b21",
+      "on_surface": "#c0caf5",
+      "background": "#1f2335",
+      "on_background": "#a9b1d6",
+      "outline": "#29a4bd",
+      "error": "#f7768e",
+      "on_error": "#1d202f"
+    },
+    "typography": {
+      "font_size": 14
+    }
+  }
+}

@@ -337,7 +337,7 @@ pub async fn read_http_response<R: AsyncRead + Unpin>(
     let mut resp = Response::new(&mut headers);
 
     // Read into buffer until we can parse headers
-    let mut n = reader.read(&mut buf).await?;
+    let n = reader.read(&mut buf).await?;
     let status = resp.parse(&buf[..n])?;
 
     let header_len = match status {

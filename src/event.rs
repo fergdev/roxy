@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use strum::Display;
+use strum::{Display, EnumString};
 
-#[derive(Debug, Clone, PartialEq, Eq, Display, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, Serialize, Deserialize, EnumString)]
 pub enum Action {
     Tick,
     Render,
@@ -12,7 +12,6 @@ pub enum Action {
     Back,
     ClearScreen,
     Error(String),
-    Help,
 
     Select,
 

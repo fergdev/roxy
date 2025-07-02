@@ -136,7 +136,11 @@ async fn proxy(
                             error!("server io error: {}", e);
                         };
                     }
-                    Err(e) => error!("upgrade error: {}", e),
+                    Err(e) => {
+                        error!("upgrade error: {}", e);
+                        debug!("CONNECT upgrade failed: {}", e);
+                        // Return a 400 Bad Request response
+                    }
                 }
             });
 
@@ -248,10 +252,11 @@ async fn tunnel(
     let host = uri.host().unwrap_or("localhost");
     let port = uri.port_u16().unwrap_or(443);
 
+    debug!("Creating TLS acceptor for host: {}", host);
     let mut params = CertificateParams::new(vec![host.to_string()]).unwrap();
     params.distinguished_name.push(DnType::CommonName, host);
     params.is_ca = IsCa::NoCa;
-    params.not_before = rcgen::date_time_ymd(2023, 1, 1); // Set sane date
+    params.not_before = rcgen::date_time_ymd(2023, 1, 1);
     params.not_after = rcgen::date_time_ymd(2030, 1, 1);
 
     params.key_usages = vec![
@@ -271,9 +276,19 @@ async fn tunnel(
         )
         .unwrap();
 
+    debug!("Creating TLS acceptor for client stream");
     let acceptor = TlsAcceptor::from(Arc::new(tls_config));
-    let client_tls = acceptor.accept(client_stream).await.unwrap();
+    let client_tls = match acceptor.accept(client_stream).await {
+        Ok(stream) => stream,
+        Err(e) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("TLS handshake failed: {}", e),
+            ));
+        }
+    };
 
+    debug!("TLS handshake completed with client");
     let (mut cr, mut cw) = tokio::io::split(BufReader::new(client_tls));
 
     let req = read_http_request(&mut cr, host, port, Scheme::Https)
@@ -305,7 +320,6 @@ async fn tunnel(
 
     let uri = target_addr.parse::<Uri>().unwrap();
     let target_host = uri.host().unwrap();
-    let port = uri.port_u16().unwrap_or(443);
 
     // Connect to upstream server with TLS
     let mut root_store = RootCertStore::empty();
@@ -322,8 +336,8 @@ async fn tunnel(
     let server_name = ServerName::try_from(target_host.to_string()).unwrap();
     debug!("Connecting to upstream server: {}", target_addr);
 
-    let server_stream = tokio::net::TcpStream::connect(target_addr).await?;
-    let upstream_tls = connector.connect(server_name, server_stream).await?;
+    let server_stream = tokio::net::TcpStream::connect(target_addr).await.unwrap();
+    let upstream_tls = connector.connect(server_name, server_stream).await.unwrap();
 
     let (mut sr, mut sw) = tokio::io::split(BufReader::new(upstream_tls));
 

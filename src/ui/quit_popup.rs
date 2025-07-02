@@ -1,34 +1,21 @@
 use color_eyre::Result;
-use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Clear, Paragraph},
+    layout::{Constraint, Layout, Margin, Rect},
+    widgets::Clear,
 };
 
 use crate::{event::Action, tui::Event};
 
-use super::{component::Component, util::centered_rect};
+use super::{
+    component::Component,
+    theme::{themed_block, themed_button},
+    util::centered_rect,
+};
 
+#[derive(Default)]
 pub struct QuitPopup {
-    options: Vec<&'static str>,
-    selected: usize,
-}
-
-impl QuitPopup {
-    pub fn new() -> Self {
-        Self {
-            options: vec!["No", "Yes"],
-            selected: 0,
-        }
-    }
-}
-
-impl Default for QuitPopup {
-    fn default() -> Self {
-        Self::new()
-    }
+    selected: bool,
 }
 
 impl Component for QuitPopup {
@@ -40,46 +27,18 @@ impl Component for QuitPopup {
         }
     }
 
-    fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
-        match key.code {
-            KeyCode::Left | KeyCode::Char('h') => {
-                if self.selected > 0 {
-                    self.selected -= 1;
-                }
-            }
-            KeyCode::Right | KeyCode::Char('l') => {
-                if self.selected < self.options.len() - 1 {
-                    self.selected += 1;
-                }
-            }
-            KeyCode::Enter => {
-                if self.options[self.selected] == "Yes" {
-                    return Ok(Some(Action::Quit));
-                } else {
-                    return Ok(None); // Let app close popup manually
-                }
-            }
-            _ => {}
-        }
-        Ok(None)
-    }
-
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::Left => {
-                if self.selected > 0 {
-                    self.selected -= 1;
-                }
+                self.selected = !self.selected;
                 Ok(None)
             }
             Action::Right => {
-                if self.selected < self.options.len() - 1 {
-                    self.selected += 1;
-                }
+                self.selected = !self.selected;
                 Ok(None)
             }
             Action::Select => {
-                if self.options[self.selected] == "Yes" {
+                if self.selected {
                     Ok(Some(Action::Quit))
                 } else {
                     Ok(Some(Action::Back))
@@ -90,47 +49,25 @@ impl Component for QuitPopup {
     }
 
     fn render(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
-        let popup_area = centered_rect(80, 40, area);
+        let popup_area = centered_rect(40, 30, area);
+        f.render_widget(Clear, popup_area);
 
-        let title = Paragraph::new("Are you sure you want to quit?")
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL).title("Confirm Exit"));
+        let padded_area = popup_area.inner(Margin {
+            vertical: 1,
+            horizontal: 2,
+        });
 
         let layout =
-            Layout::vertical([Constraint::Length(3), Constraint::Length(3)]).split(popup_area);
+            Layout::vertical([Constraint::Length(3), Constraint::Length(3)]).split(padded_area);
 
         let button_layout =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(layout[1]);
 
-        let yes = Paragraph::new("Yes")
-            .style(if self.selected == 1 {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            })
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(themed_block("Quit Roxy"), popup_area);
+        f.render_widget(themed_button("Yes", self.selected), button_layout[0]);
+        f.render_widget(themed_button("No", !self.selected), button_layout[1]);
 
-        let no = Paragraph::new("No")
-            .style(if self.selected == 0 {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            })
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-
-        f.render_widget(Clear, popup_area); // Clear background
-
-        f.render_widget(yes, button_layout[1]);
-        f.render_widget(no, button_layout[0]);
-
-        f.render_widget(title, layout[0]);
         Ok(())
     }
 }

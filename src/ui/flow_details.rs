@@ -4,19 +4,69 @@ use color_eyre::Result;
 use kuchiki::{parse_html, traits::TendrilSink};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
-    style::Style,
     text::{Line, Text},
-    widgets::{Block, Borders, Clear, Paragraph, Tabs},
+    widgets::{Clear, Paragraph},
 };
 use tokio::task::JoinHandle;
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::{
     event::Action,
     flow::{CertInfo, FlowStore, InterceptedRequest, InterceptedResponse},
+    themed_line,
 };
 
-use super::{component::Component, util::centered_rect};
+use super::{
+    component::Component,
+    theme::{themed_block, themed_tabs},
+    util::centered_rect,
+};
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+enum Tab {
+    #[default]
+    Request,
+    Response,
+    Certs,
+}
+
+impl Tab {
+    fn all() -> &'static [Tab] {
+        &[Self::Request, Self::Response, Self::Certs]
+    }
+
+    fn title(&self) -> &'static str {
+        match self {
+            Tab::Request => "Request",
+            Tab::Response => "Response",
+            Tab::Certs => "Certs",
+        }
+    }
+
+    fn index(&self) -> usize {
+        Self::all().iter().position(|&t| t == *self).unwrap_or(0)
+    }
+
+    fn prev(&self) -> Self {
+        let all_tabs = Self::all();
+        let index = self.index();
+        if index == 0 {
+            *all_tabs.last().unwrap()
+        } else {
+            all_tabs[index - 1]
+        }
+    }
+
+    fn next(&self) -> Self {
+        let all_tabs = Self::all();
+        let index = self.index();
+        if index == all_tabs.len() - 1 {
+            *all_tabs.first().unwrap()
+        } else {
+            all_tabs[index + 1]
+        }
+    }
+}
 
 #[derive(Default)]
 struct State {
@@ -29,7 +79,7 @@ pub struct FlowDetails {
     selected_flow: Option<i64>,
     state: Arc<Mutex<State>>,
     scroll: usize,
-    tab_index: usize,
+    tab: Tab,
     listener_handle: JoinHandle<()>,
     flow_id_tx: tokio::sync::watch::Sender<Option<i64>>,
 }
@@ -75,7 +125,7 @@ impl FlowDetails {
             selected_flow: None,
             state,
             scroll: 0,
-            tab_index: 0,
+            tab: Tab::Request,
             listener_handle: handle,
             flow_id_tx: tx,
         }
@@ -89,15 +139,11 @@ impl FlowDetails {
     }
 
     fn next_tab(&mut self) {
-        self.tab_index = (self.tab_index + 1) % 3;
+        self.tab = self.tab.next();
     }
 
     fn prev_tab(&mut self) {
-        if self.tab_index == 0 {
-            self.tab_index = 2;
-        } else {
-            self.tab_index = self.tab_index.wrapping_sub(1);
-        }
+        self.tab = self.tab.prev();
     }
 
     fn scroll_up(&mut self) {
@@ -112,7 +158,7 @@ impl FlowDetails {
 }
 
 fn render_request(req: &Option<InterceptedRequest>) -> Vec<String> {
-    let mut lines = vec!["== Request ==".to_string()];
+    let mut lines = vec![];
 
     if let Some(req) = req {
         lines.push(req.line_pretty());
@@ -131,7 +177,7 @@ fn render_request(req: &Option<InterceptedRequest>) -> Vec<String> {
 }
 
 fn render_response(resp: &Option<InterceptedResponse>) -> Vec<String> {
-    let mut lines = vec!["== Response ==".to_string()];
+    let mut lines = vec![];
 
     if let Some(resp) = resp {
         lines.push(resp.request_line());
@@ -163,7 +209,7 @@ fn render_response(resp: &Option<InterceptedResponse>) -> Vec<String> {
 }
 
 fn render_certs(certs: &Option<Vec<CertInfo>>) -> Vec<String> {
-    let mut lines = vec!["== Certificates ==".to_string()];
+    let mut lines = vec![];
 
     if let Some(certs) = certs {
         for cert in certs {
@@ -202,37 +248,38 @@ impl Component for FlowDetails {
             _ => Ok(None),
         }
     }
+
     fn render(&mut self, f: &mut ratatui::Frame<'_>, area: Rect) -> Result<()> {
         let popup_area = centered_rect(60, 60, area);
 
-        let tab_titles = ["Request", "Response", "Certs"];
-        let tabs = Tabs::new(tab_titles.map(Line::from).to_vec())
-            .select(self.tab_index)
-            .highlight_style(Style::default().bold());
+        f.render_widget(Clear, popup_area);
 
+        let tab_titles: Vec<Line> = Tab::all().iter().map(|t| Line::raw(t.title())).collect();
+        let tab_index = self.tab.index();
+
+        let tabs = themed_tabs(tab_titles, tab_index);
         let state = self.state.lock().unwrap();
 
-        let lines = match self.tab_index {
-            0 => &state.request_lines,
-            1 => &state.response_lines,
-            2 => &state.cert_lines,
-            _ => panic!("Invalid tab index"),
+        let lines = match self.tab {
+            Tab::Request => &state.request_lines,
+            Tab::Response => &state.response_lines,
+            Tab::Certs => &state.cert_lines,
         };
+        debug!("Rendering FlowDetails for tab: {:?}", self.tab);
 
         let text = lines
             .iter()
             .skip(self.scroll)
-            .map(|s| Line::from(s.clone()))
+            .map(|s| themed_line!(s))
             .collect::<Vec<_>>();
 
         let paragraph = Paragraph::new(Text::from(text))
             .scroll((self.scroll as u16, 0))
-            .block(Block::default().title("Flow Details").borders(Borders::ALL));
+            .block(themed_block("Flow Details"));
 
         let layout =
             Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(popup_area);
 
-        f.render_widget(Clear, popup_area);
         f.render_widget(tabs, layout[0]);
         f.render_widget(paragraph, layout[1]);
         Ok(())

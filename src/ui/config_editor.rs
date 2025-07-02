@@ -1,203 +1,419 @@
 use color_eyre::Result;
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use tracing::{debug, info};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
-    layout::Rect,
-    style::{Modifier, Style},
-    text::Line,
-    widgets::{Block, Borders, Clear, List, ListItem},
+    layout::{Constraint, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Cell, Clear, Row, TableState},
 };
 
-use crate::{config::Config, event::Action};
+use crate::{
+    config::{ConfigManager, RoxyConfig, key_event_to_string, parse_color, parse_key_event},
+    event::{Action, Mode},
+};
 
-use super::{component::Component, util::centered_rect};
+use super::{
+    component::Component,
+    theme::{themed_table, themed_tabs, with_theme},
+    util::centered_rect,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum ConfigTab {
+    App,
+    Proxy,
+    KeyBinds,
+    Theme,
+}
+
+impl ConfigTab {
+    fn all() -> &'static [ConfigTab] {
+        &[Self::App, Self::Proxy, Self::KeyBinds, Self::Theme]
+    }
+
+    fn title(&self) -> &'static str {
+        match self {
+            Self::App => "App",
+            Self::Proxy => "Proxy",
+            Self::KeyBinds => "Keys",
+            Self::Theme => "Theme",
+        }
+    }
+
+    fn index(&self) -> usize {
+        Self::all().iter().position(|&t| t == *self).unwrap_or(0)
+    }
+
+    fn prev(&self) -> ConfigTab {
+        let all_tabs = Self::all();
+        let index = self.index();
+        if index == 0 {
+            all_tabs.last().unwrap().to_owned()
+        } else {
+            all_tabs[index - 1]
+        }
+    }
+
+    fn next(&self) -> ConfigTab {
+        let all_tabs = Self::all();
+        let index = self.index();
+        if index == all_tabs.len() - 1 {
+            all_tabs.first().unwrap().to_owned()
+        } else {
+            all_tabs[index + 1]
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
-pub enum ConfigValue {
+enum ConfigValue {
     Bool(bool),
     U16(u16),
     String(String),
     Path(PathBuf),
-    None,
+    Color(Color),
 }
 
 #[derive(Debug, Clone)]
-pub struct EditableConfigField {
-    pub key: String,
-    pub section: String,
-    pub value: ConfigValue,
-    pub editing: bool,
+struct EditableConfigField {
+    key: String,
+    value: ConfigValue,
+    editing: bool,
 }
 
 #[derive(Debug)]
 pub struct ConfigEditor {
-    pub fields: Vec<EditableConfigField>,
-    pub selected: usize,
-    pub input_buffer: String,
+    config_manager: ConfigManager,
+    curr_tab: ConfigTab,
+    fields: HashMap<ConfigTab, Vec<EditableConfigField>>,
+    table_state: TableState,
+    input_buffer: String,
+    is_editing: bool,
 }
 
 impl ConfigEditor {
-    pub fn new() -> Self {
-        let fields = vec![
-            EditableConfigField {
-                key: "data_dir".into(),
-                section: "app".into(),
-                value: ConfigValue::Path(PathBuf::from("~/.roxy/data")),
-                editing: false,
-            },
-            EditableConfigField {
-                key: "enabled".into(),
-                section: "proxy".into(),
-                value: ConfigValue::Bool(true),
-                editing: false,
-            },
-            EditableConfigField {
-                key: "port".into(),
-                section: "proxy".into(),
-                value: ConfigValue::U16(6969),
-                editing: false,
-            },
-        ];
+    pub fn new(config_manager: ConfigManager) -> Self {
+        let rx = config_manager.rx.clone();
+        let cfg = rx.borrow();
+        let fields: HashMap<ConfigTab, Vec<EditableConfigField>> = (&*cfg).into();
+
         Self {
+            config_manager,
+            curr_tab: ConfigTab::App,
             fields,
-            selected: 0,
+            table_state: TableState::default(),
             input_buffer: String::new(),
+            is_editing: false,
         }
     }
 
-    pub fn update_config(&self, cfg: &mut Config) {
-        for field in &self.fields {
-            match (field.section.as_str(), field.key.as_str(), &field.value) {
-                ("app", "data_dir", ConfigValue::Path(p)) => cfg.app.data_dir = p.clone(),
-                ("app", "config_dir", ConfigValue::Path(p)) => cfg.app.config_dir = p.clone(),
-                ("app", "theme", ConfigValue::String(s)) => cfg.app.theme = Some(s.clone()),
-                ("proxy", "enabled", ConfigValue::Bool(b)) => {
-                    cfg.app.proxy.get_or_insert(Default::default()).enabled = *b
-                }
-                ("proxy", "port", ConfigValue::U16(p)) => {
-                    cfg.app.proxy.get_or_insert(Default::default()).port = *p
-                }
-                ("proxy", "ca_cert_path", ConfigValue::Path(p)) => {
-                    cfg.app.proxy.get_or_insert(Default::default()).ca_cert_path = Some(p.clone())
-                }
-                _ => {}
-            }
-        }
+    fn curr_fields(&mut self) -> &mut Vec<EditableConfigField> {
+        self.fields.get_mut(&self.curr_tab).unwrap()
     }
 
     fn on_up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        if self.is_editing() {
+            return;
+        }
+        self.table_state.select_previous()
     }
 
     fn on_down(&mut self) {
-        if self.selected + 1 < self.fields.len() {
-            self.selected += 1;
+        if self.is_editing() {
+            return;
         }
+        self.table_state.select_next();
     }
 
     fn on_select(&mut self) {
-        let field = &mut self.fields[self.selected];
+        debug!("on_select called");
+        let Some(selected) = self.table_state.selected() else {
+            return;
+        };
+        let new_val = self.input_buffer.trim().to_string(); // only immutable
+        let fields = self.curr_fields();
+
+        debug!("Selected field index: {}", selected);
+        let field = &mut fields[selected];
         field.editing = !field.editing;
         if field.editing {
+            debug!("Entering edit mode for field: {}", field.key);
+            field.editing = true;
             self.input_buffer = match &field.value {
                 ConfigValue::String(s) => s.clone(),
                 ConfigValue::U16(n) => n.to_string(),
-                ConfigValue::Bool(b) => b.to_string(),
+                ConfigValue::Bool(b) => {
+                    field.value = ConfigValue::Bool(!*b);
+                    field.editing = false;
+                    return;
+                }
+                ConfigValue::Color(c) => c.to_string(),
                 ConfigValue::Path(p) => p.display().to_string(),
-                ConfigValue::None => String::new(),
             };
+            self.is_editing = true;
         } else {
-            // Apply edit
-            let new_val = self.input_buffer.trim();
+            field.editing = false;
+            debug!("Exiting edit mode for field: {}", field.key);
             field.value = match &field.value {
-                ConfigValue::String(_) => ConfigValue::String(new_val.into()),
+                ConfigValue::String(_) => ConfigValue::String(new_val),
                 ConfigValue::U16(_) => new_val
                     .parse()
                     .map(ConfigValue::U16)
-                    .unwrap_or(ConfigValue::U16(0)),
+                    .unwrap_or(field.value.clone()),
                 ConfigValue::Bool(_) => ConfigValue::Bool(new_val.parse().unwrap_or(false)),
                 ConfigValue::Path(_) => ConfigValue::Path(PathBuf::from(new_val)),
-                ConfigValue::None => ConfigValue::String(new_val.into()),
+                ConfigValue::Color(_) => parse_color(&new_val)
+                    .map(ConfigValue::Color)
+                    .unwrap_or(field.value.clone()),
             };
+
+            self.is_editing = false;
+
+            let cfg = RoxyConfig::try_from(self.fields.clone());
+            if let Ok(cfg) = cfg {
+                info!("Updating config with new values");
+                let _ = self.config_manager.update(cfg);
+            } else {
+                debug!("Failed to convert fields to RoxyConfig");
+            }
         }
     }
 
     pub fn on_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char(c) if self.fields[self.selected].editing => {
-                self.input_buffer.push(c);
+            KeyCode::Char(c) => {
+                debug!("Key pressed: {}", c);
+                if self.is_editing() {
+                    self.input_buffer.push(c);
+                }
             }
-            KeyCode::Backspace if self.fields[self.selected].editing => {
-                self.input_buffer.pop();
+            KeyCode::Backspace => {
+                if self.is_editing() {
+                    self.input_buffer.pop();
+                }
             }
             _ => {}
         }
     }
-}
 
-impl Default for ConfigEditor {
-    fn default() -> Self {
-        Self::new()
+    fn is_editing(&self) -> bool {
+        self.is_editing
     }
 }
 
-impl From<&Config> for Vec<EditableConfigField> {
-    fn from(cfg: &Config) -> Self {
-        let mut fields = Vec::new();
+impl From<&RoxyConfig> for HashMap<ConfigTab, Vec<EditableConfigField>> {
+    fn from(cfg: &RoxyConfig) -> Self {
+        let mut fields = HashMap::new();
 
-        // App section
-        fields.push(EditableConfigField {
-            key: "data_dir".into(),
-            section: "app".into(),
-            value: ConfigValue::Path(cfg.app.data_dir.clone()),
-            editing: false,
-        });
+        let app_fieldds = vec![
+            EditableConfigField {
+                key: "data_dir".into(),
+                value: ConfigValue::Path(cfg.app.data_dir.clone()),
+                editing: false,
+            },
+            EditableConfigField {
+                key: "config_dir".into(),
+                value: ConfigValue::Path(cfg.app.config_dir.clone()),
+                editing: false,
+            },
+        ];
+        fields.insert(ConfigTab::App, app_fieldds);
 
-        fields.push(EditableConfigField {
-            key: "config_dir".into(),
-            section: "app".into(),
-            value: ConfigValue::Path(cfg.app.config_dir.clone()),
-            editing: false,
-        });
-
-        if let Some(proxy) = &cfg.app.proxy {
-            fields.push(EditableConfigField {
+        let proxy_fields = vec![
+            EditableConfigField {
                 key: "enabled".into(),
-                section: "proxy".into(),
-                value: ConfigValue::Bool(proxy.enabled),
+                value: ConfigValue::Bool(cfg.app.proxy.enabled),
                 editing: false,
-            });
-
-            fields.push(EditableConfigField {
+            },
+            EditableConfigField {
                 key: "port".into(),
-                section: "proxy".into(),
-                value: ConfigValue::U16(proxy.port),
+                value: ConfigValue::U16(cfg.app.proxy.port),
                 editing: false,
-            });
-
-            fields.push(EditableConfigField {
+            },
+            EditableConfigField {
                 key: "ca_cert_path".into(),
-                section: "proxy".into(),
-                value: match &proxy.ca_cert_path {
+                value: match &cfg.app.proxy.ca_cert_path {
                     Some(path) => ConfigValue::Path(path.clone()),
-                    None => ConfigValue::None,
+                    None => ConfigValue::Path(PathBuf::new()),
                 },
                 editing: false,
-            });
-        }
+            },
+        ];
 
-        if let Some(theme) = &cfg.app.theme {
-            fields.push(EditableConfigField {
-                key: "theme".into(),
-                section: "app".into(),
-                value: ConfigValue::String(theme.clone()),
-                editing: false,
-            });
-        }
+        fields.insert(ConfigTab::Proxy, proxy_fields);
+
+        fields.insert(ConfigTab::Theme, gen_theme(cfg));
+
+        let mut keybinds_fields = Vec::new();
+        cfg.keybindings.iter().for_each(|(_section, binds)| {
+            for (key, action) in binds {
+                keybinds_fields.push(EditableConfigField {
+                    key: action.to_string(), // TODO: yep should be vec
+                    value: ConfigValue::String(key_event_to_string(key.first().unwrap())), // TODO: yep should be vec
+                    editing: false,
+                });
+            }
+        });
+        fields.insert(ConfigTab::KeyBinds, keybinds_fields);
 
         fields
+    }
+}
+
+fn gen_theme(cfg: &RoxyConfig) -> Vec<EditableConfigField> {
+    vec![
+        EditableConfigField {
+            key: "primary".into(),
+            value: ConfigValue::Color(cfg.theme.colors.primary),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "on_primary".into(),
+            value: ConfigValue::Color(cfg.theme.colors.on_primary),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "secondary".into(),
+            value: ConfigValue::Color(cfg.theme.colors.secondary),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "on_secondary".into(),
+            value: ConfigValue::Color(cfg.theme.colors.on_secondary),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "surface".into(),
+            value: ConfigValue::Color(cfg.theme.colors.surface),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "on_surface".into(),
+            value: ConfigValue::Color(cfg.theme.colors.on_surface),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "background".into(),
+            value: ConfigValue::Color(cfg.theme.colors.background),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "on_background".into(),
+            value: ConfigValue::Color(cfg.theme.colors.on_background),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "outline".into(),
+            value: ConfigValue::Color(cfg.theme.colors.outline),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "error".into(),
+            value: ConfigValue::Color(cfg.theme.colors.error),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "on_error".into(),
+            value: ConfigValue::Color(cfg.theme.colors.on_error),
+            editing: false,
+        },
+    ]
+}
+
+impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
+    type Error = String;
+
+    fn try_from(map: HashMap<ConfigTab, Vec<EditableConfigField>>) -> Result<Self, Self::Error> {
+        let mut config = RoxyConfig::default();
+
+        for (tab, fields) in map {
+            match tab {
+                ConfigTab::App => {
+                    for field in fields {
+                        match field.key.as_str() {
+                            "data_dir" => {
+                                if let ConfigValue::Path(p) = field.value.clone() {
+                                    config.app.data_dir = p;
+                                }
+                            }
+                            "config_dir" => {
+                                if let ConfigValue::Path(p) = field.value.clone() {
+                                    config.app.config_dir = p;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                ConfigTab::Proxy => {
+                    for field in fields {
+                        match field.key.as_str() {
+                            "enabled" => {
+                                if let ConfigValue::Bool(b) = field.value {
+                                    config.app.proxy.enabled = b;
+                                }
+                            }
+                            "port" => {
+                                if let ConfigValue::U16(n) = field.value {
+                                    config.app.proxy.port = n;
+                                }
+                            }
+                            "ca_cert_path" => {
+                                if let ConfigValue::Path(p) = field.value.clone() {
+                                    config.app.proxy.ca_cert_path = Some(p);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                ConfigTab::Theme => {
+                    for field in fields {
+                        let color = match field.value {
+                            ConfigValue::Color(c) => c,
+                            _ => continue,
+                        };
+
+                        match field.key.as_str() {
+                            "primary" => config.theme.colors.primary = color,
+                            "on_primary" => config.theme.colors.on_primary = color,
+                            "secondary" => config.theme.colors.secondary = color,
+                            "on_secondary" => config.theme.colors.on_secondary = color,
+                            "surface" => config.theme.colors.surface = color,
+                            "on_surface" => config.theme.colors.on_surface = color,
+                            "background" => config.theme.colors.background = color,
+                            "on_background" => config.theme.colors.on_background = color,
+                            "outline" => config.theme.colors.outline = color,
+                            "error" => config.theme.colors.error = color,
+                            "on_error" => config.theme.colors.on_error = color,
+                            _ => {}
+                        }
+                    }
+                }
+
+                ConfigTab::KeyBinds => {
+                    let mut map = HashMap::new();
+                    for field in fields {
+                        if let ConfigValue::String(s) = field.value.clone() {
+                            if let Ok(key_event) = parse_key_event(&s) {
+                                let action = Action::from_str(&field.key)
+                                    .map_err(|e| format!("Bad action: {e}"))?;
+                                map.insert(vec![key_event], action);
+                            }
+                        }
+                    }
+                    config.keybindings.insert(Mode::Home, map);
+                }
+            }
+        }
+
+        Ok(config)
     }
 }
 
@@ -212,6 +428,18 @@ impl Component for ConfigEditor {
                 self.on_down();
                 Ok(None)
             }
+            Action::Left => {
+                if !self.is_editing() {
+                    self.curr_tab = self.curr_tab.prev();
+                }
+                Ok(None)
+            }
+            Action::Right => {
+                if !self.is_editing() {
+                    self.curr_tab = self.curr_tab.next();
+                }
+                Ok(None)
+            }
             Action::Select => {
                 self.on_select();
                 Ok(None)
@@ -219,43 +447,71 @@ impl Component for ConfigEditor {
             _ => Ok(None),
         }
     }
+
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         let popup_area = centered_rect(80, 60, area);
-        let items: Vec<ListItem> = self
-            .fields
+        frame.render_widget(Clear, popup_area);
+
+        let current_tab = self.curr_tab;
+        let visible_fields = self.fields.get(&current_tab).unwrap();
+
+        let tab_titles: Vec<Line> = ConfigTab::all()
             .iter()
-            .enumerate()
-            .map(|(i, field)| {
+            .map(|t| Line::raw(t.title()))
+            .collect();
+
+        let tabs = themed_tabs(tab_titles, current_tab.index());
+
+        let chunks =
+            Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(popup_area);
+
+        frame.render_widget(tabs, chunks[0]);
+        let rows: Vec<Row> = visible_fields
+            .iter()
+            .map(|field| {
+                let key = field.key.clone();
+
                 let value = if field.editing {
                     format!("(editing) {}", self.input_buffer)
                 } else {
                     match &field.value {
+                        ConfigValue::Color(c) => format!("{}", c),
                         ConfigValue::String(s) => s.clone(),
                         ConfigValue::U16(n) => n.to_string(),
                         ConfigValue::Bool(b) => b.to_string(),
                         ConfigValue::Path(p) => p.display().to_string(),
-                        ConfigValue::None => "-".to_string(),
                     }
                 };
 
-                let content = format!(
-                    "{}.{}: {}{}",
-                    field.section,
-                    field.key,
-                    if i == self.selected { "> " } else { "  " },
-                    value
-                );
-                ListItem::new(Line::raw(content))
+                let value_span = match &field.value {
+                    ConfigValue::Color(color) => Span::styled(value, Style::default().fg(*color)),
+                    ConfigValue::String(s) => Span::raw(s.clone()),
+                    _ => Span::raw(value),
+                };
+
+                let colors = with_theme(|t| t.colors.clone());
+                Row::new(vec![Cell::from(Span::raw(key)), Cell::from(value_span)]).style(
+                    if field.editing {
+                        Style::default()
+                            .bg(colors.surface)
+                            .fg(colors.primary)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().bg(colors.surface).fg(colors.on_surface)
+                    },
+                )
             })
             .collect();
 
-        frame.render_widget(Clear, popup_area);
-        frame.render_widget(
-            List::new(items)
-                .block(Block::default().title("Edit Config").borders(Borders::ALL))
-                .highlight_style(Style::default().add_modifier(Modifier::BOLD)),
-            popup_area,
-        );
+        let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
+
+        frame.render_stateful_widget(themed_table(rows, widths), chunks[1], &mut self.table_state);
+
         Ok(())
+    }
+
+    fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
+        self.on_key(key);
+        Ok(None)
     }
 }

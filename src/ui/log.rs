@@ -6,7 +6,7 @@ use std::{
 
 use crate::event::Action;
 
-use super::{component::Component, util::centered_rect};
+use super::{component::Component, theme::themed_block, util::centered_rect};
 use tracing::{Event, Subscriber, field::Visit};
 use tracing_subscriber::{Layer, layer::Context, registry::LookupSpan};
 
@@ -55,7 +55,7 @@ use ratatui::{
     Frame,
     layout::{Alignment, Rect},
     text::{Line, Text},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::Paragraph,
 };
 
 pub struct LogViewer {
@@ -109,6 +109,7 @@ impl Component for LogViewer {
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         let popup_area = centered_rect(80, 60, area);
+
         let paragraph = Paragraph::new(Text::from(
             self.logs
                 .lock()
@@ -120,9 +121,8 @@ impl Component for LogViewer {
         ))
         .scroll((self.v_scroll_offset as u16, self.h_scroll_offset as u16))
         .alignment(Alignment::Left)
-        .block(Block::default().title("Log Output").borders(Borders::ALL));
+        .block(themed_block("Logs"));
 
-        frame.render_widget(Clear, popup_area); // clears under the popup
         frame.render_widget(paragraph, popup_area);
         Ok(())
     }

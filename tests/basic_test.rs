@@ -4,10 +4,12 @@ use rcgen::{CertifiedKey, generate_simple_self_signed};
 use roxy::flow::FlowStore;
 use roxy::logging::initialize_logging;
 use roxy::{interceptor, proxy};
+use rustls::crypto::CryptoProvider;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use warp::Filter;
+use x509_parser::nom::AsBytes;
 
 pub fn start_warp_test_server() -> std::net::SocketAddr {
     // Define route
@@ -161,6 +163,10 @@ end
 
     let se = interceptor::ScriptEngine::new(file_path.to_str().unwrap().to_string()).unwrap();
     let ca = roxy::certs::generate_roxy_root_ca_with_path(Some(temp_dir_path)).unwrap();
+
+    let der = ca.certificate.der().clone();
+    let reqwest_cert = reqwest::Certificate::from_der(der.as_bytes()).unwrap();
+
     let handle = tokio::spawn(async move {
         proxy::start_proxy(port, ca, Some(se), flow_store).unwrap();
     });
@@ -169,8 +175,9 @@ end
 
     let proxy_url = format!("http://127.0.0.1:{}", port);
     let client = reqwest::Client::builder()
+        .use_rustls_tls() // This is required for to rust our certs
+        .add_root_certificate(reqwest_cert)
         .proxy(reqwest::Proxy::https(&proxy_url).unwrap())
-        .danger_accept_invalid_certs(true)
         .build()
         .unwrap();
 
@@ -220,9 +227,17 @@ end
     let mut file = File::create(file_path.clone()).await.unwrap();
     file.write_all(script.as_bytes()).await.unwrap();
 
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     let flow_store = FlowStore::new();
-    let se = interceptor::ScriptEngine::new(file_path.to_str().unwrap().to_string()).unwrap();
-    let ca = roxy::certs::generate_roxy_root_ca_with_path(Some(temp_dir_path)).unwrap();
+    let se = interceptor::ScriptEngine::new(file_path.to_str().unwrap()).unwrap();
+    let ca = roxy::certs::generate_roxy_root_ca_with_path(Some(temp_dir_path.clone())).unwrap();
+
+    let der = ca.certificate.der().clone();
+    let reqwest_cert = reqwest::Certificate::from_der(der.as_bytes()).unwrap();
+
     let handle = tokio::spawn(async move {
         proxy::start_proxy(port, ca, Some(se), flow_store).unwrap();
     });
@@ -231,8 +246,9 @@ end
 
     let proxy_url = format!("http://127.0.0.1:{}", port);
     let client = reqwest::Client::builder()
+        .use_rustls_tls() // This is required for to rust our certs
+        .add_root_certificate(reqwest_cert)
         .proxy(reqwest::Proxy::https(&proxy_url).unwrap())
-        .danger_accept_invalid_certs(true)
         .build()
         .unwrap();
 

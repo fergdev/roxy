@@ -4,19 +4,14 @@ use color_eyre::Result;
 use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},
-    style::{Modifier, Style, Stylize},
-    widgets::{Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState},
+    widgets::{Scrollbar, ScrollbarOrientation, ScrollbarState, TableState},
 };
 use tokio::{sync::watch, task::JoinHandle};
 use tracing::debug;
 
-use crate::{
-    app::{ITEM_HEIGHT, TableColors},
-    event::Action,
-    flow::FlowStore,
-};
+use crate::{app::ITEM_HEIGHT, event::Action, flow::FlowStore, themed_row};
 
-use super::component::Component;
+use super::{component::Component, theme::themed_table};
 
 struct UiFlow {
     pub id: i64,
@@ -33,13 +28,12 @@ pub struct FlowList {
     state: TableState,
     scroll_state: ScrollbarState,
     ui_state: UiState,
-    colors: TableColors,
     shutdown_tx: watch::Sender<()>,
     listener_handle: Option<JoinHandle<()>>,
 }
 
 impl FlowList {
-    pub fn new(flow_store: FlowStore, colors: TableColors) -> Self {
+    pub fn new(flow_store: FlowStore) -> Self {
         let (shutdown_tx, shutdown_rx) = watch::channel(());
 
         let mut instance = Self {
@@ -49,7 +43,6 @@ impl FlowList {
             ui_state: UiState {
                 flows: Arc::new(Mutex::new(Vec::new())),
             },
-            colors,
             listener_handle: None,
             shutdown_tx,
         };
@@ -175,19 +168,13 @@ impl Component for FlowList {
     }
 
     fn render(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
-        let selected_row_style = Style::default()
-            .add_modifier(Modifier::REVERSED)
-            .fg(self.colors.selected_row_style_fg);
-
         let guard = self.ui_state.flows.lock().unwrap();
-        let rows = guard.iter().map(|f| Row::new(vec![f.line.clone()]));
 
-        let table = Table::new(rows, [Constraint::Fill(1)])
-            .highlight_symbol(">> ")
-            .bg(self.colors.buffer_bg)
-            .row_highlight_style(selected_row_style);
+        let rows = guard.iter().map(|f| themed_row!(vec![f.line.clone()]));
 
-        f.render_stateful_widget(table, area, &mut self.state);
+        let widths = [Constraint::Fill(1)];
+
+        f.render_stateful_widget(themed_table(rows, widths), area, &mut self.state);
         f.render_stateful_widget(
             Scrollbar::default().orientation(ScrollbarOrientation::VerticalRight),
             area.inner(Margin::default()),

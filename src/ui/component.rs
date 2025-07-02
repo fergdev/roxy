@@ -6,19 +6,13 @@ use ratatui::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{config::Config, event::Action, tui::Event};
+use crate::{event::Action, tui::Event};
 
 pub trait Component {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        let _ = tx; // to appease clippy
+    fn register_action_handler(&mut self, _tx: UnboundedSender<Action>) -> Result<()> {
         Ok(())
     }
-    fn register_config_handler(&mut self, config: Config) -> Result<()> {
-        let _ = config; // to appease clippy
-        Ok(())
-    }
-    fn init(&mut self, area: Size) -> Result<()> {
-        let _ = area; // to appease clippy
+    fn init(&mut self, _area: Size) -> Result<()> {
         Ok(())
     }
     fn handle_events(&mut self, event: Event) -> Result<Option<Action>> {
@@ -29,16 +23,13 @@ pub trait Component {
         };
         Ok(action)
     }
-    fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
-        let _ = key; // to appease clippy
+    fn handle_key_event(&mut self, _key: KeyEvent) -> Result<Option<Action>> {
         Ok(None)
     }
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
-        let _ = mouse; // to appease clippy
+    fn handle_mouse_event(&mut self, _mouse: MouseEvent) -> Result<Option<Action>> {
         Ok(None)
     }
-    fn update(&mut self, action: Action) -> Result<Option<Action>> {
-        let _ = action; // to appease clippy
+    fn update(&mut self, _action: Action) -> Result<Option<Action>> {
         Ok(None)
     }
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()>;

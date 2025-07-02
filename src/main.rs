@@ -5,7 +5,7 @@ use std::{
 
 use clap::Parser;
 use roxy::{
-    app, certs, config::Config, flow::FlowStore, interceptor::ScriptEngine, logging, proxy,
+    app, certs, config::ConfigManager, flow::FlowStore, interceptor::ScriptEngine, logging, proxy,
     ui::log::UiLogLayer,
 };
 
@@ -24,8 +24,9 @@ async fn main() -> color_eyre::Result<()> {
     let log_buffer = Arc::new(Mutex::new(VecDeque::new()));
     let log_layer = UiLogLayer::new(log_buffer.clone());
 
-    let config = Config::new().unwrap();
     logging::initialize_logging_with_layer(Some(log_layer)).unwrap();
+
+    let config = ConfigManager::new().unwrap();
 
     let args = Args::parse();
     let roxy_certs = certs::generate_roxy_root_ca().unwrap();
