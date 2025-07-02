@@ -4,7 +4,6 @@ use rcgen::{CertifiedKey, generate_simple_self_signed};
 use roxy::flow::FlowStore;
 use roxy::logging::initialize_logging;
 use roxy::{interceptor, proxy};
-use rustls::crypto::CryptoProvider;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;

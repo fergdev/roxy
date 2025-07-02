@@ -123,6 +123,7 @@ pub struct InterceptedRequest {
 }
 
 impl InterceptedRequest {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         timestamp: DateTime<Utc>,
         scheme: Scheme,

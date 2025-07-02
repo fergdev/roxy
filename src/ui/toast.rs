@@ -4,11 +4,12 @@ use std::{
 };
 
 use once_cell::sync::OnceCell;
+use ratatui::widgets::Clear;
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, HorizontalAlignment, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Paragraph},
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{error, trace};
@@ -72,68 +73,75 @@ struct ActiveToast {
 pub struct Toaster {
     receiver: Receiver<Toast>,
     toasts: VecDeque<ActiveToast>,
+    max_visible: usize,
 }
 
 impl Toaster {
     pub fn new() -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<Toast>(100); // holds up to 100 toast events
+        let (tx, rx) = tokio::sync::mpsc::channel::<Toast>(100);
         TOAST_SENDER.set(tx).unwrap();
-
-        // let deque = Arc::new(Mutex::new(VecDeque::new()));
 
         Self {
             receiver: rx,
             toasts: VecDeque::new(),
+            max_visible: 5,
         }
     }
 
     fn update(&mut self) {
-        // drain new toasts from channel
+        let now = Instant::now();
+        self.toasts
+            .retain(|t| now.duration_since(t.created_at) < t.toast.duration);
+
+        if self.toasts.len() >= self.max_visible {
+            return;
+        }
+
         while let Ok(toast) = self.receiver.try_recv() {
             self.toasts.push_back(ActiveToast {
                 toast,
                 created_at: Instant::now(),
             });
         }
-
-        // remove expired toasts
-        let now = Instant::now();
-        self.toasts
-            .retain(|t| now.duration_since(t.created_at) < t.toast.duration);
     }
-
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
-        self.update();
+        self.update(); // Clear expired toasts
 
-        if let Some(active) = self.toasts.front() {
-            let layout = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Min(0),
-                    Constraint::Length(40), // Toast width
-                ])
-                .split(area);
+        let active_toasts: Vec<_> = self.toasts.iter().take(self.max_visible).collect();
+        if active_toasts.is_empty() {
+            return;
+        }
 
-            let toast_area = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Length(3), Constraint::Min(0)])
-                .split(layout[1])[0];
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                active_toasts
+                    .iter()
+                    .map(|_| Constraint::Length(3))
+                    .collect::<Vec<_>>(),
+            )
+            .split(area);
 
-            frame.render_widget(Clear, toast_area);
+        for (idx, toast) in active_toasts.iter().enumerate() {
+            let horizontal = Layout::horizontal([
+                Constraint::Min(0),
+                Constraint::Length(40), // Toast width
+            ])
+            .split(layout[idx]);
 
-            let style = toast_style(&active.toast.kind);
+            let style = toast_style(&toast.toast.kind);
             let block = Block::default()
-                .title(toast_title(&active.toast.kind))
-                .title_alignment(HorizontalAlignment::Center)
                 .borders(Borders::ALL)
-                .style(style);
+                .style(style)
+                .title(toast_title(&toast.toast.kind));
 
-            let text = Paragraph::new(active.toast.message.clone())
+            let paragraph = Paragraph::new(toast.toast.message.clone())
                 .block(block)
-                .alignment(Alignment::Center)
-                .style(style);
+                .style(style)
+                .alignment(Alignment::Center);
 
-            frame.render_widget(text, toast_area);
+            frame.render_widget(Clear, horizontal[1]);
+            frame.render_widget(paragraph, horizontal[1]);
         }
     }
 }
