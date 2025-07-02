@@ -31,7 +31,6 @@ pub fn start_warp_test_server() -> std::net::SocketAddr {
 pub fn start_https_warp_server() -> std::net::SocketAddr {
     let route = warp::any().map(|| warp::reply::html("Hello from warp HTTPS test server"));
 
-    // Generate a self-signed cert for localhost
     let CertifiedKey { cert, key_pair } =
         generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
 

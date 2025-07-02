@@ -201,7 +201,7 @@ async fn proxy(
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
                 .collect(),
-            body: Some(String::from_utf8_lossy(&body_bytes).to_string()),
+            body: Some(body_bytes.clone().into()),
         };
 
         let mut guard = flow.write().await;

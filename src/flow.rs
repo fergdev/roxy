@@ -239,7 +239,7 @@ pub struct InterceptedResponse {
     pub reason: String,
     pub version: u8,
     pub headers: HashMap<String, String>,
-    pub body: Option<String>,
+    pub body: Option<Vec<u8>>,
 }
 
 impl InterceptedResponse {
@@ -272,7 +272,7 @@ impl InterceptedResponse {
         out.extend_from_slice(b"\r\n");
 
         if let Some(body) = &self.body {
-            out.extend_from_slice(body.as_bytes());
+            out.extend_from_slice(body);
         }
 
         out
@@ -384,6 +384,6 @@ pub async fn read_http_response<R: AsyncRead + Unpin>(
         status: code,
         reason,
         headers: header_map,
-        body: Some(String::from_utf8_lossy(&body).to_string()),
+        body: Some(body),
     })
 }

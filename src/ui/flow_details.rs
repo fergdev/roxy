@@ -1,18 +1,27 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    fs,
+    sync::{Arc, Mutex},
+};
 
+use base64::{
+    Engine, alphabet,
+    engine::{GeneralPurpose, general_purpose},
+};
 use color_eyre::Result;
 use kuchiki::{parse_html, traits::TendrilSink};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     text::{Line, Text},
-    widgets::{Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
+use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
+
 use tokio::task::JoinHandle;
 use tracing::{debug, error};
 
 use crate::{
     event::Action,
-    flow::{CertInfo, FlowStore, InterceptedRequest, InterceptedResponse},
+    flow::{CertInfo, Flow, FlowStore, InterceptedRequest, InterceptedResponse},
     themed_line,
 };
 
@@ -73,6 +82,7 @@ struct State {
     request_lines: Vec<String>,
     response_lines: Vec<String>,
     cert_lines: Vec<String>,
+    flow: Option<Flow>, // HACK: Hack fest
 }
 
 pub struct FlowDetails {
@@ -82,6 +92,7 @@ pub struct FlowDetails {
     tab: Tab,
     listener_handle: JoinHandle<()>,
     flow_id_tx: tokio::sync::watch::Sender<Option<i64>>,
+    proto: Option<StatefulProtocol>,
 }
 
 impl FlowDetails {
@@ -97,18 +108,20 @@ impl FlowDetails {
                 if let Some(flow_id) = id_opt {
                     let maybe_entry = task_flow_store.get_flow_by_id(flow_id).await;
 
-                    let (req, resp, certs) = if let Some(entry) = maybe_entry {
+                    let (req, resp, certs, flow) = if let Some(entry) = maybe_entry {
                         let flow = entry.read().await;
                         (
                             render_request(&flow.request),
                             render_response(&flow.response),
                             render_certs(&flow.cert_info),
+                            Some(flow.clone()),
                         )
                     } else {
                         (
                             vec!["No request".into()],
                             vec!["No response".into()],
                             vec!["No certs".into()],
+                            None,
                         )
                     };
 
@@ -116,6 +129,7 @@ impl FlowDetails {
                         guard.request_lines = req;
                         guard.response_lines = resp;
                         guard.cert_lines = certs;
+                        guard.flow = flow
                     }
                 }
             }
@@ -128,6 +142,7 @@ impl FlowDetails {
             tab: Tab::Request,
             listener_handle: handle,
             flow_id_tx: tx,
+            proto: None,
         }
     }
 
@@ -192,13 +207,13 @@ fn render_response(resp: &Option<InterceptedResponse>) -> Vec<String> {
 
         if let Some(body) = &resp.body {
             if content_type.contains("xml") {
-                lines.extend(pretty_print_xml(body));
+                lines.extend(pretty_print_xml(String::from_utf8_lossy(body).as_ref()));
             } else if content_type.contains("html") {
-                lines.extend(pretty_print_html(body));
+                lines.extend(pretty_print_html(String::from_utf8_lossy(body).as_ref()));
             } else if content_type.contains("json") {
-                lines.extend(pretty_print_json(body));
+                lines.extend(pretty_print_json(String::from_utf8_lossy(body).as_ref()));
             } else {
-                lines.push(body.clone());
+                lines.push(String::from_utf8_lossy(body).to_string());
             }
         }
     } else {
@@ -254,34 +269,129 @@ impl Component for FlowDetails {
 
         f.render_widget(Clear, popup_area);
 
+        let layout =
+            Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(popup_area);
         let tab_titles: Vec<Line> = Tab::all().iter().map(|t| Line::raw(t.title())).collect();
         let tab_index = self.tab.index();
 
         let tabs = themed_tabs(tab_titles, tab_index);
+        f.render_widget(tabs, layout[0]);
+
         let state = self.state.lock().unwrap();
 
-        let lines = match self.tab {
-            Tab::Request => &state.request_lines,
-            Tab::Response => &state.response_lines,
-            Tab::Certs => &state.cert_lines,
-        };
-        debug!("Rendering FlowDetails for tab: {:?}", self.tab);
+        debug!(
+            "Rendering FlowDetails for flow ID: {:?}",
+            self.selected_flow
+        );
+        if self.tab == Tab::Request {
+            let lines = match self.tab {
+                Tab::Request => &state.request_lines,
+                Tab::Response => &state.response_lines,
+                Tab::Certs => &state.cert_lines,
+            };
+            debug!("Rendering FlowDetails for tab: {:?}", self.tab);
 
-        let text = lines
-            .iter()
-            .skip(self.scroll)
-            .map(|s| themed_line!(s))
-            .collect::<Vec<_>>();
+            let text = lines
+                .iter()
+                .skip(self.scroll)
+                .map(|s| themed_line!(s))
+                .collect::<Vec<_>>();
 
-        let paragraph = Paragraph::new(Text::from(text))
-            .scroll((self.scroll as u16, 0))
-            .block(themed_block("Flow Details"));
+            let paragraph = Paragraph::new(Text::from(text))
+                .scroll((self.scroll as u16, 0))
+                .block(themed_block("Flow Details"));
 
-        let layout =
-            Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(popup_area);
+            let layout =
+                Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(popup_area);
 
-        f.render_widget(tabs, layout[0]);
-        f.render_widget(paragraph, layout[1]);
+            f.render_widget(paragraph, layout[1]);
+        } else if let Some(flow) = &state.flow {
+            debug!("Rendering FlowDetails for flow ID: {}", flow.id);
+            if let Some(resp) = &flow.response {
+                let content_type = resp
+                    .headers
+                    .get("Content-Type")
+                    .map(String::as_str)
+                    .unwrap_or("text/plain");
+
+                match content_type {
+                    ct if ct.contains("json") => {
+                        if let Some(body) = &resp.body {
+                            let lines = pretty_print_json("blah").join("\n");
+                            let para = Paragraph::new(lines)
+                                .block(Block::default().title("JSON").borders(Borders::ALL));
+                            f.render_widget(para, popup_area);
+                        }
+                    }
+                    // ct if ct.contains("html") => {
+                    //     // Render HTML as styled text (or raw)
+                    // }
+                    ct if ct.contains("png") => {
+                        debug!("Rendering PNG image in FlowDetails");
+                        if let Some(proto) = &mut self.proto {
+                            let image = StatefulImage::default();
+
+                            error!("Image size: ");
+                            f.render_stateful_widget(image, popup_area, proto);
+                        } else {
+                            if let Some(body) = &resp.body {
+                                let preview = String::from_utf8_lossy(body)
+                                    .to_string()
+                                    .chars()
+                                    .take(50)
+                                    .collect::<String>();
+
+                                let path = "/tmp/dump.png"; // or .jpg, .pdf, etc.
+                                if let Err(e) = fs::write(path, &body) {
+                                } else {
+                                    println!("Wrote decoded body to: {path}");
+                                }
+                                debug!("Body preview: {:?}", preview);
+                                // debug!(
+                                //     "Body preview: {:?}",
+                                //     &body.chars().take(50).collect::<String>()
+                                // );
+                                // let decoded = GeneralPurpose::new(
+                                //     &alphabet::URL_SAFE,
+                                //     general_purpose::NO_PAD,
+                                // )
+                                // .decode(body);
+                                // match decoded {
+                                //     Ok(bytes) => {
+                                // if let Ok(image) = image::load_from_memory(&bytes) {
+                                if let Ok(image) = image::load_from_memory(&body) {
+                                    debug!("Loaded image with size: ");
+                                    let mut picker = Picker::from_fontsize((8, 12));
+                                    let mut proto = picker.new_resize_protocol(image);
+                                    self.proto = Some(proto);
+                                } else {
+                                    error!("Failed to load image from memory");
+                                }
+                                //     }
+                                //     Err(_) => {
+                                //         error!("Failed to decode base64 PNG body: ");
+                                //     }
+                                // }
+                            } else {
+                                error!("No body found for PNG response");
+                            }
+                        }
+                    }
+                    _ => {
+                        // fallback raw body
+                        if let Some(body) = &resp.body {
+                            let para = Paragraph::new("blah".to_string())
+                                .block(Block::default().title("Body").borders(Borders::ALL));
+                            f.render_widget(para, popup_area);
+                        }
+                    }
+                }
+            } else {
+                let empty =
+                    Paragraph::new("(no response)").block(Block::default().borders(Borders::ALL));
+                f.render_widget(empty, popup_area);
+            }
+        }
         Ok(())
     }
 }
