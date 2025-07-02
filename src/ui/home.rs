@@ -3,12 +3,15 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{config::ConfigManager, event::Action, flow::FlowStore, tui::Event};
+use crate::{
+    config::ConfigManager, event::Action, flow::FlowStore, toast_error, toast_info, toast_success,
+    toast_warn, tui::Event,
+};
 
 use super::{
     component::Component, config_editor::ConfigEditor, flow_details::FlowDetails,
     flow_list::FlowList, fps_counter::FpsCounter, log::LogViewer, quit_popup::QuitPopup,
-    splash::Splash,
+    splash::Splash, toast::Toaster,
 };
 
 use color_eyre::Result;
@@ -25,6 +28,7 @@ pub struct HomeComponent {
     quit_popup: QuitPopup,
     log_viewer: LogViewer,
     fps_counter: FpsCounter,
+    toaster: Toaster,
 }
 
 impl HomeComponent {
@@ -46,6 +50,7 @@ impl HomeComponent {
             flow_details: FlowDetails::new(flow_store.clone()),
             log_viewer: LogViewer::new(log_buffer),
             fps_counter: FpsCounter::new(),
+            toaster: Toaster::new(),
         }
     }
 
@@ -116,18 +121,22 @@ impl Component for HomeComponent {
         match action {
             Action::LogView => {
                 self.active_popup = Some(ActivePopup::LogViewer);
+                toast_error!("Log viewer config");
                 Ok(None)
             }
             Action::EditConfig => {
                 self.active_popup = Some(ActivePopup::ConfigEditor);
+                toast_success!("Edit config");
                 Ok(None)
             }
             Action::Back => match self.active_popup {
                 Some(_) => {
+                    toast_info!("Back");
                     self.active_popup = None;
                     Ok(None)
                 }
                 _ => {
+                    toast_warn!("Back");
                     self.active_popup = Some(ActivePopup::QuitPopup);
                     Ok(None)
                 }
@@ -145,19 +154,22 @@ impl Component for HomeComponent {
     }
 
     fn render(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
-        let res = match self.active_view {
-            ActiveView::Splash => self.splash.render(f, area),
-            ActiveView::FlowList => self.flow_list.render(f, area),
+        match self.active_view {
+            ActiveView::Splash => self.splash.render(f, area)?,
+            ActiveView::FlowList => self.flow_list.render(f, area)?,
         };
 
         self.fps_counter.render(f, area)?;
         match self.active_popup {
-            Some(ActivePopup::ConfigEditor) => self.config_editor.render(f, area),
-            Some(ActivePopup::QuitPopup) => self.quit_popup.render(f, area),
-            Some(ActivePopup::FlowDetails) => self.flow_details.render(f, area),
-            Some(ActivePopup::LogViewer) => self.log_viewer.render(f, area),
-            None => res,
-        }
+            Some(ActivePopup::ConfigEditor) => self.config_editor.render(f, area)?,
+            Some(ActivePopup::QuitPopup) => self.quit_popup.render(f, area)?,
+            Some(ActivePopup::FlowDetails) => self.flow_details.render(f, area)?,
+            Some(ActivePopup::LogViewer) => self.log_viewer.render(f, area)?,
+            None => {}
+        };
+
+        self.toaster.render(f, area);
+        Ok(())
     }
 
     fn handle_key_event(&mut self, key: crossterm::event::KeyEvent) -> Result<Option<Action>> {

@@ -14,6 +14,7 @@ pub fn generate_roxy_root_ca() -> anyhow::Result<RoxyCA> {
 pub fn generate_roxy_root_ca_with_path(path: Option<PathBuf>) -> anyhow::Result<RoxyCA> {
     let root_dir: PathBuf = path.unwrap_or(dirs::home_dir().unwrap());
 
+    // TODO: use config dir if available
     let home = root_dir.join(".roxy");
     fs::create_dir_all(&home)?;
 

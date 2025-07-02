@@ -8,4 +8,5 @@ pub mod log;
 pub mod quit_popup;
 pub mod splash;
 pub mod theme;
+mod toast;
 mod util;

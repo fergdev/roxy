@@ -129,8 +129,6 @@ impl ScriptEngine {
             .get("host")
             .map_err(|e| anyhow!("Missing or invalid 'host' in Lua result: {}", e.to_string()))?;
 
-        debug!("DEBUGPRINT[39]: interceptor.rs:124: host={:#?}", req.host);
-
         req.port = new_req
             .get("port")
             .map_err(|e| anyhow!("Missing or invalid 'port' in Lua result: {}", e.to_string()))?;
@@ -201,7 +199,6 @@ impl ScriptEngine {
             .call(res_table)
             .map_err(|e| anyhow!("Lua call to 'intercept_response' failed: {}", e.to_string()))?;
 
-        // Update body
         res.body =
             Some(new_res.get("body").map_err(|e| {
                 anyhow!("Missing or invalid 'body' in Lua result: {}", e.to_string())

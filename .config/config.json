@@ -29,8 +29,14 @@
       "background": "#1f2335",
       "on_background": "#a9b1d6",
       "outline": "#29a4bd",
+      "success": "#1abc9c",
+      "on_success": "#233745",
       "error": "#f7768e",
-      "on_error": "#1d202f"
+      "on_error": "#1d202f",
+      "warn": "#e0af68",
+      "on_warn": "#373640",
+      "info": "#0db9d7",
+      "on_info": "#22374b"
     },
     "typography": {
       "font_size": 14

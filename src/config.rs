@@ -87,10 +87,26 @@ pub struct RoxyColors {
     pub on_background: Color,
     #[serde(deserialize_with = "deserialize_color")]
     pub outline: Color,
+
     #[serde(deserialize_with = "deserialize_color")]
     pub error: Color,
     #[serde(deserialize_with = "deserialize_color")]
     pub on_error: Color,
+
+    #[serde(deserialize_with = "deserialize_color")]
+    pub success: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub on_success: Color,
+
+    #[serde(deserialize_with = "deserialize_color")]
+    pub info: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub on_info: Color,
+
+    #[serde(deserialize_with = "deserialize_color")]
+    pub warn: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub on_warn: Color,
 }
 
 #[derive(Clone, Debug, Default, Deref, DerefMut)]
