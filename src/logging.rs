@@ -60,6 +60,7 @@ pub fn initialize_logging_with_layer(layer: Option<UiLogLayer>) -> Result<()> {
             .with_ansi(false)
             .without_time()
             .with_filter(tracing_subscriber::filter::EnvFilter::from_default_env());
+
         let builder = tracing_subscriber::registry()
             .with(file_subscriber)
             .with(ErrorLayer::default());

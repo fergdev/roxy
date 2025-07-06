@@ -1,0 +1,57 @@
+{
+  "user": {
+    "id": 12345,
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "verified": true,
+    "preferences": {
+      "notifications": {
+        "email": true,
+        "sms": false,
+        "push": true
+      },
+      "theme": "dark",
+      "language": "en-NZ"
+    }
+  },
+  "dashboard": {
+    "widgets": [
+      {
+        "id": "weather",
+        "type": "info",
+        "data": {
+          "location": "Wellington",
+          "temperature": 15,
+          "conditions": "Cloudy"
+        }
+      },
+      {
+        "id": "stocks",
+        "type": "chart",
+        "data": [
+          { "symbol": "AAPL", "price": 187.34, "change": -0.84 },
+          { "symbol": "TSLA", "price": 256.12, "change": 1.26 }
+        ]
+      }
+    ]
+  },
+  "todos": [
+    {
+      "id": 1,
+      "title": "Finish Rust project",
+      "completed": false,
+      "tags": ["work", "rust"]
+    },
+    {
+      "id": 2,
+      "title": "Read 'The Pragmatic Programmer'",
+      "completed": true,
+      "tags": ["reading", "books"]
+    }
+  ],
+  "session": {
+    "token": null,
+    "expires_in": 3600,
+    "scopes": ["read", "write", "admin"]
+  }
+}

@@ -1,0 +1,35 @@
+user:
+  id: 42
+  name: "Jane Doe"
+  email: "jane.doe@example.com"
+  roles:
+    - admin
+    - editor
+    - viewer
+  active: true
+  preferences:
+    theme: dark
+    notifications:
+      email: true
+      sms: false
+      push: true
+
+projects:
+  - id: "p1"
+    name: "Roxy Proxy"
+    tags: ["rust", "mitm", "tui"]
+    status: active
+  - id: "p2"
+    name: "QuantSim"
+    tags: ["finance", "simulator"]
+    status: archived
+
+metrics:
+  uptime: 93712
+  memory_mb: 120.5
+  requests_handled: 3452
+
+notes: |
+  This is a multi-line
+  YAML string block that should
+  render nicely in your UI.

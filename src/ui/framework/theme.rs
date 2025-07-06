@@ -24,31 +24,59 @@ where
     CURRENT_THEME.with(|t| f(&t.borrow()))
 }
 
-pub fn themed_block(title: &str) -> Block<'_> {
+pub fn themed_block(title: Option<&str>, has_focus: bool) -> Block<'_> {
     let colors = with_theme(|t| t.colors.clone());
-    Block::default()
+
+    let mut title_style = Style::default().fg(colors.secondary).bg(colors.surface);
+    title_style = if has_focus {
+        title_style.add_modifier(Modifier::BOLD)
+    } else {
+        title_style
+    };
+
+    let mut b = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(colors.outline).bg(colors.surface))
-        .style(Style::default().fg(colors.secondary).bg(colors.surface))
-        .title(title)
-        .title_style(
+        .border_style(if has_focus {
+            Style::default().fg(colors.outline).bg(colors.surface)
+        } else {
             Style::default()
-                .fg(colors.secondary)
+                .fg(colors.outline_unfocused)
                 .bg(colors.surface)
-                .add_modifier(Modifier::BOLD),
-        )
-        .title_alignment(Alignment::Center)
+        })
+        .style(Style::default().fg(colors.secondary).bg(colors.surface));
+    if let Some(title) = title {
+        b = b
+            .title(title)
+            .title_style(title_style)
+            .title_alignment(Alignment::Center)
+    }
+    b
 }
 
-pub fn themed_tabs(titles: Vec<Line<'_>>, selected: usize) -> Tabs<'_> {
+pub fn themed_tabs<'a>(
+    title: &'a str,
+    titles: Vec<Line<'a>>,
+    selected: usize,
+    has_focus: bool,
+) -> Tabs<'a> {
     let colors = with_theme(|t| t.colors.clone());
+
     Tabs::new(titles)
-        .block(themed_block("Config"))
-        .highlight_style(Style::default().fg(colors.primary))
+        .block(themed_block(Some(title), has_focus))
+        .highlight_style(
+            Style::default()
+                .fg(colors.primary)
+                .add_modifier(Modifier::BOLD),
+        )
         .select(selected)
 }
 
-pub fn themed_table<'a, R, C>(rows: R, widths: C) -> Table<'a>
+pub fn themed_table<'a, R, C>(
+    rows: R,
+    widths: C,
+    title: Option<&'a str>,
+    has_focus: bool,
+) -> Table<'a>
 where
     R: IntoIterator,
     R::Item: Into<Row<'a>>,
@@ -63,11 +91,7 @@ where
         .add_modifier(Modifier::BOLD);
 
     Table::new(rows, widths)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(colors.outline)),
-        )
+        .block(themed_block(title, has_focus))
         .column_spacing(2)
         .row_highlight_style(hl_style)
 }
@@ -111,7 +135,7 @@ pub fn themed_info_block(message: &str) -> Paragraph<'_> {
 #[macro_export]
 macro_rules! themed_line {
     ($text:expr) => {{
-        $crate::ui::theme::with_theme(|t| {
+        $crate::ui::framework::theme::with_theme(|t| {
             ratatui::text::Line::styled(
                 $text.to_string(),
                 ratatui::style::Style::default().fg(t.colors.on_surface),
@@ -123,7 +147,7 @@ macro_rules! themed_line {
 #[macro_export]
 macro_rules! themed_row {
     ($text:expr) => {{
-        $crate::ui::theme::with_theme(|t| {
+        $crate::ui::framework::theme::with_theme(|t| {
             ratatui::widgets::Row::new($text)
                 .style(ratatui::style::Style::default().fg(t.colors.on_surface))
         })

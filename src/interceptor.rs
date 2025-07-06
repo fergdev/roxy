@@ -1,4 +1,5 @@
-use anyhow::{Result, anyhow};
+use anyhow::anyhow;
+use bytes::Bytes;
 use mlua::{Function, Lua, Table, Value, Variadic};
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::fs;
@@ -6,9 +7,10 @@ use std::path::Path;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace, warn};
 
-use crate::flow::Flow;
+use crate::flow::{Flow, InterceptedRequest, InterceptedResponse};
+use crate::{notify_debug, notify_error, notify_info, notify_trace, notify_warn};
 
 #[derive(Debug, Clone)]
 pub struct ScriptEngine {
@@ -25,13 +27,7 @@ impl ScriptEngine {
         );
         let lua = Lua::new();
 
-        let print_fn = lua.create_function(|_, args: Variadic<Value>| {
-            let output: Vec<String> = args.iter().map(|v| format!("{:?}", v)).collect();
-            info!("[lua] {}", output.join("\t"));
-            Ok(())
-        })?;
-
-        lua.globals().set("print", print_fn)?;
+        ScriptEngine::register_functions(&lua)?;
         let engine = Self {
             lua: Arc::new(RwLock::new(lua)),
             script_path: script_path.clone(),
@@ -39,6 +35,53 @@ impl ScriptEngine {
         engine.load_script()?;
         engine.watch_script()?;
         Ok(engine)
+    }
+
+    pub fn register_functions(lua: &Lua) -> anyhow::Result<()> {
+        let globals = lua.globals();
+
+        let notify = lua.create_function(move |_, (msg, level): (String, Option<i32>)| {
+            match level {
+                Some(0) => notify_trace!("{}", msg),
+                Some(1) => notify_debug!("{}", msg),
+                Some(2) => notify_info!("{}", msg),
+                Some(3) => notify_warn!("{}", msg),
+                Some(4) => notify_error!("{}", msg),
+                _ => {
+                    // Off
+                }
+            };
+            Ok(())
+        })?;
+
+        let print = lua.create_function(move |_, (msg, level): (String, Option<i32>)| {
+            match level {
+                Some(0) => trace!("{}", msg),
+                Some(1) => debug!("{}", msg),
+                Some(2) => info!("{}", msg),
+                Some(3) => warn!("{}", msg),
+                Some(4) => error!("{}", msg),
+                _ => {
+                    // Off
+                }
+            };
+            Ok(())
+        })?;
+
+        globals.set(
+            "roxy",
+            lua.create_table_from([("notify", notify), ("print", print)])?,
+        )?;
+
+        let print_fn = lua.create_function(|_, args: Variadic<Value>| {
+            let output: Vec<String> = args.iter().map(|v| format!("{:?}", v)).collect();
+            info!("{}", output.join("\t"));
+            Ok(())
+        })?;
+
+        lua.globals().set("print", print_fn)?;
+
+        Ok(())
     }
 
     fn load_script(&self) -> anyhow::Result<()> {
@@ -73,11 +116,7 @@ impl ScriptEngine {
         Ok(())
     }
 
-    pub fn intercept_request(&self, flow: &mut Flow) -> Result<()> {
-        let req = match &mut flow.request {
-            Some(req) => req,
-            None => panic!("No response to intercept"),
-        };
+    pub fn intercept_request(&self, req: &mut InterceptedRequest) -> anyhow::Result<()> {
         debug!("Intercepting request: {}", req.request_line());
         let lua = self
             .lua
@@ -103,8 +142,10 @@ impl ScriptEngine {
             .set("port", req.port)
             .map_err(|e| anyhow!("Failed to set 'host': {}", e.to_string()))?;
 
+        // TODO: figure how to do this properly
+        let body = String::from_utf8_lossy(&req.body).to_string();
         req_table
-            .set("body", req.body.clone().unwrap_or_default())
+            .set("body", body)
             .map_err(|e| anyhow!("Failed to set 'body': {}", e.to_string()))?;
 
         let headers_table = lua
@@ -133,10 +174,26 @@ impl ScriptEngine {
             .get("port")
             .map_err(|e| anyhow!("Missing or invalid 'port' in Lua result: {}", e.to_string()))?;
 
-        req.body =
-            Some(new_req.get("body").map_err(|e| {
-                anyhow!("Missing or invalid 'body' in Lua result: {}", e.to_string())
-            })?);
+        let new_body = new_req
+            .get("body")
+            .map_err(|e| anyhow!("Missing or invalid 'body' in Lua result: {}", e.to_string()))?;
+        match new_body {
+            Value::String(s) => {
+                req.body = s
+                    .to_str()
+                    .map(|s| Bytes::copy_from_slice(s.as_bytes()))
+                    .unwrap_or_else(|_| Bytes::new());
+            }
+            Value::Nil => {
+                req.body.clear();
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Invalid 'body' type in Lua result: expected string or nil, got {:?}",
+                    new_body
+                ));
+            }
+        }
 
         let new_headers: Table = new_req.get("headers").map_err(|e| {
             anyhow!(
@@ -155,12 +212,7 @@ impl ScriptEngine {
         Ok(())
     }
 
-    pub fn intercept_response(&self, flow: &mut Flow) -> Result<()> {
-        let res = match &mut flow.response {
-            Some(resp) => resp,
-            None => panic!("No response to intercept"),
-        };
-
+    pub fn intercept_response(&self, res: &mut InterceptedResponse) -> anyhow::Result<()> {
         let lua = self
             .lua
             .read()
@@ -177,8 +229,9 @@ impl ScriptEngine {
             .create_table()
             .map_err(|e| anyhow!("Failed to create Lua table: {}", e.to_string()))?;
 
+        let body = String::from_utf8_lossy(&res.body).to_string();
         res_table
-            .set("body", res.body.clone().unwrap_or_default())
+            .set("body", body)
             .map_err(|e| anyhow!("Failed to set 'body' in Lua table: {}", e.to_string()))?;
 
         let headers_table = lua
@@ -199,10 +252,27 @@ impl ScriptEngine {
             .call(res_table)
             .map_err(|e| anyhow!("Lua call to 'intercept_response' failed: {}", e.to_string()))?;
 
-        res.body =
-            Some(new_res.get("body").map_err(|e| {
-                anyhow!("Missing or invalid 'body' in Lua result: {}", e.to_string())
-            })?);
+        let new_body = new_res
+            .get("body")
+            .map_err(|e| anyhow!("Missing or invalid 'body' in Lua result: {}", e.to_string()))?;
+
+        match new_body {
+            Value::String(s) => {
+                res.body = s
+                    .to_str()
+                    .map(|s| Bytes::copy_from_slice(s.as_bytes()))
+                    .unwrap_or_else(|_| Bytes::new());
+            }
+            Value::Nil => {
+                res.body.clear();
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Invalid 'body' type in Lua result: expected string or nil, got {:?}",
+                    new_body
+                ));
+            }
+        }
 
         // Update headers
         let new_headers: Table = new_res.get("headers").map_err(|e| {

@@ -7,6 +7,19 @@ pub struct RoxyCA {
     pub key_pair: KeyPair,
 }
 
+impl RoxyCA {
+    pub fn sign_leaf(&self, host: &str) -> anyhow::Result<Certificate> {
+        let mut params = CertificateParams::new(vec![host.to_string()])?;
+
+        params.distinguished_name.push(DnType::CommonName, host);
+        params.is_ca = IsCa::NoCa;
+
+        let leaf = params.signed_by(&self.key_pair, &self.certificate, &self.key_pair)?;
+
+        Ok(leaf)
+    }
+}
+
 pub fn generate_roxy_root_ca() -> anyhow::Result<RoxyCA> {
     generate_roxy_root_ca_with_path(None)
 }
@@ -40,7 +53,6 @@ pub fn generate_roxy_root_ca_with_path(path: Option<PathBuf>) -> anyhow::Result<
             key_pair,
         });
     }
-
     let mut params = CertificateParams::default();
     params.is_ca = IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
     params.distinguished_name = DistinguishedName::new();

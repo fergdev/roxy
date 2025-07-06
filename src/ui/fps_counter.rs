@@ -8,7 +8,10 @@ use ratatui::{
 
 use crate::event::Action;
 
-use super::{component::Component, theme::themed_info_block};
+use super::framework::{
+    component::{ActionResult, Component},
+    theme::themed_info_block,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FpsCounter {
@@ -19,6 +22,8 @@ pub struct FpsCounter {
     last_frame_update: Instant,
     frame_count: u32,
     frames_per_second: f64,
+
+    visible: bool,
 }
 
 impl Default for FpsCounter {
@@ -36,10 +41,11 @@ impl FpsCounter {
             last_frame_update: Instant::now(),
             frame_count: 0,
             frames_per_second: 0.0,
+            visible: false,
         }
     }
 
-    fn app_tick(&mut self) -> Result<()> {
+    fn app_tick(&mut self) {
         self.tick_count += 1;
         let now = Instant::now();
         let elapsed = (now - self.last_tick_update).as_secs_f64();
@@ -48,10 +54,9 @@ impl FpsCounter {
             self.last_tick_update = now;
             self.tick_count = 0;
         }
-        Ok(())
     }
 
-    fn render_tick(&mut self) -> Result<()> {
+    fn render_tick(&mut self) {
         self.frame_count += 1;
         let now = Instant::now();
         let elapsed = (now - self.last_frame_update).as_secs_f64();
@@ -60,21 +65,24 @@ impl FpsCounter {
             self.last_frame_update = now;
             self.frame_count = 0;
         }
-        Ok(())
     }
 }
 
 impl Component for FpsCounter {
-    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+    fn update(&mut self, action: Action) -> ActionResult {
         match action {
-            Action::Tick => self.app_tick()?,
-            Action::Render => self.render_tick()?,
+            Action::FpsView => self.visible = !self.visible,
+            Action::Tick => self.app_tick(),
+            Action::Render => self.render_tick(),
             _ => {}
         };
-        Ok(None)
+        ActionResult::Ignored
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        if !self.visible {
+            return Ok(());
+        }
         let vertical = Layout::vertical([
             Constraint::Length(3), // height of the block
             Constraint::Min(0),

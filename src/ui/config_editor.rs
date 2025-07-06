@@ -1,4 +1,5 @@
 use color_eyre::Result;
+use rat_focus::{FocusFlag, HasFocus};
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::{debug, info};
 
@@ -16,8 +17,8 @@ use crate::{
     event::{Action, Mode},
 };
 
-use super::{
-    component::Component,
+use super::framework::{
+    component::{ActionResult, Component, KeyEventResult},
     theme::{themed_table, themed_tabs, with_theme},
     util::centered_rect,
 };
@@ -87,12 +88,27 @@ struct EditableConfigField {
 
 #[derive(Debug)]
 pub struct ConfigEditor {
+    focus: FocusFlag,
     config_manager: ConfigManager,
     curr_tab: ConfigTab,
     fields: HashMap<ConfigTab, Vec<EditableConfigField>>,
     table_state: TableState,
     input_buffer: String,
     is_editing: bool,
+}
+
+impl HasFocus for ConfigEditor {
+    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
+    }
+
+    fn focus(&self) -> rat_focus::FocusFlag {
+        self.focus.clone()
+    }
 }
 
 impl ConfigEditor {
@@ -102,6 +118,7 @@ impl ConfigEditor {
         let fields: HashMap<ConfigTab, Vec<EditableConfigField>> = (&*cfg).into();
 
         Self {
+            focus: FocusFlag::named("ConfigEditor"),
             config_manager,
             curr_tab: ConfigTab::App,
             fields,
@@ -137,7 +154,6 @@ impl ConfigEditor {
         let new_val = self.input_buffer.trim().to_string(); // only immutable
         let fields = self.curr_fields();
 
-        debug!("Selected field index: {}", selected);
         let field = &mut fields[selected];
         field.editing = !field.editing;
         if field.editing {
@@ -183,20 +199,26 @@ impl ConfigEditor {
         }
     }
 
-    pub fn on_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Char(c) => {
-                debug!("Key pressed: {}", c);
-                if self.is_editing() {
+    pub fn on_key(&mut self, key: &KeyEvent) -> KeyEventResult {
+        if self.is_editing() {
+            match key.code {
+                KeyCode::Esc => {
+                    self.on_select();
+                }
+                KeyCode::Enter => {
+                    self.on_select();
+                }
+                KeyCode::Char(c) => {
                     self.input_buffer.push(c);
                 }
-            }
-            KeyCode::Backspace => {
-                if self.is_editing() {
+                KeyCode::Backspace => {
                     self.input_buffer.pop();
                 }
+                _ => {}
             }
-            _ => {}
+            KeyEventResult::Consumed
+        } else {
+            KeyEventResult::Ignored
         }
     }
 
@@ -312,13 +334,33 @@ fn gen_theme(cfg: &RoxyConfig) -> Vec<EditableConfigField> {
             editing: false,
         },
         EditableConfigField {
+            key: "outline_unfocused".into(),
+            value: ConfigValue::Color(cfg.theme.colors.outline_unfocused),
+            editing: false,
+        },
+        EditableConfigField {
             key: "error".into(),
             value: ConfigValue::Color(cfg.theme.colors.error),
             editing: false,
         },
         EditableConfigField {
-            key: "on_error".into(),
-            value: ConfigValue::Color(cfg.theme.colors.on_error),
+            key: "info".into(),
+            value: ConfigValue::Color(cfg.theme.colors.info),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "warn".into(),
+            value: ConfigValue::Color(cfg.theme.colors.warn),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "debug".into(),
+            value: ConfigValue::Color(cfg.theme.colors.debug),
+            editing: false,
+        },
+        EditableConfigField {
+            key: "trace".into(),
+            value: ConfigValue::Color(cfg.theme.colors.trace),
             editing: false,
         },
     ]
@@ -390,8 +432,13 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                             "background" => config.theme.colors.background = color,
                             "on_background" => config.theme.colors.on_background = color,
                             "outline" => config.theme.colors.outline = color,
+
                             "error" => config.theme.colors.error = color,
-                            "on_error" => config.theme.colors.on_error = color,
+                            "success" => config.theme.colors.success = color,
+                            "warn" => config.theme.colors.warn = color,
+                            "info" => config.theme.colors.info = color,
+                            "debug" => config.theme.colors.debug = color,
+                            "trace" => config.theme.colors.trace = color,
                             _ => {}
                         }
                     }
@@ -408,7 +455,7 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                             }
                         }
                     }
-                    config.keybindings.insert(Mode::Home, map);
+                    config.keybindings.insert(Mode::Normal, map);
                 }
             }
         }
@@ -418,33 +465,33 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
 }
 
 impl Component for ConfigEditor {
-    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+    fn update(&mut self, action: Action) -> ActionResult {
         match action {
             Action::Up => {
                 self.on_up();
-                Ok(None)
+                ActionResult::Consumed
             }
             Action::Down => {
                 self.on_down();
-                Ok(None)
+                ActionResult::Consumed
             }
             Action::Left => {
                 if !self.is_editing() {
                     self.curr_tab = self.curr_tab.prev();
                 }
-                Ok(None)
+                ActionResult::Consumed
             }
             Action::Right => {
                 if !self.is_editing() {
                     self.curr_tab = self.curr_tab.next();
                 }
-                Ok(None)
+                ActionResult::Consumed
             }
             Action::Select => {
                 self.on_select();
-                Ok(None)
+                ActionResult::Consumed
             }
-            _ => Ok(None),
+            _ => ActionResult::Ignored,
         }
     }
 
@@ -460,7 +507,7 @@ impl Component for ConfigEditor {
             .map(|t| Line::raw(t.title()))
             .collect();
 
-        let tabs = themed_tabs(tab_titles, current_tab.index());
+        let tabs = themed_tabs("Config", tab_titles, current_tab.index(), true);
 
         let chunks =
             Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(popup_area);
@@ -505,13 +552,16 @@ impl Component for ConfigEditor {
 
         let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
 
-        frame.render_stateful_widget(themed_table(rows, widths), chunks[1], &mut self.table_state);
+        frame.render_stateful_widget(
+            themed_table(rows, widths, None, true),
+            chunks[1],
+            &mut self.table_state,
+        );
 
         Ok(())
     }
 
-    fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
-        self.on_key(key);
-        Ok(None)
+    fn handle_key_event(&mut self, key: &KeyEvent) -> KeyEventResult {
+        self.on_key(key)
     }
 }

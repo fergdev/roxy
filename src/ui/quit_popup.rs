@@ -1,55 +1,76 @@
 use color_eyre::Result;
+use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Margin, Rect},
     widgets::Clear,
 };
 
-use crate::{event::Action, tui::Event};
+use crate::event::Action;
 
-use super::{
-    component::Component,
+use super::framework::{
+    component::{ActionResult, Component},
     theme::{themed_block, themed_button},
-    util::centered_rect,
+    util::centered_rect_abs,
 };
 
 #[derive(Default)]
 pub struct QuitPopup {
+    focus: FocusFlag,
     selected: bool,
 }
 
-impl Component for QuitPopup {
-    fn handle_events(&mut self, event: Event) -> Result<Option<Action>> {
-        match event {
-            Event::Key(key_event) => self.handle_key_event(key_event),
-            Event::Mouse(mouse_event) => self.handle_mouse_event(mouse_event),
-            _ => Ok(None),
+impl HasFocus for QuitPopup {
+    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
+    }
+
+    fn focus(&self) -> rat_focus::FocusFlag {
+        self.focus.clone()
+    }
+}
+
+impl QuitPopup {
+    pub fn new() -> Self {
+        Self {
+            focus: FocusFlag::named("QuitPopup"),
+            selected: false,
         }
     }
 
-    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+    pub fn reset(&mut self) {
+        self.selected = false;
+    }
+}
+
+impl Component for QuitPopup {
+    fn update(&mut self, action: Action) -> ActionResult {
         match action {
             Action::Left => {
                 self.selected = !self.selected;
-                Ok(None)
+                ActionResult::Consumed
             }
             Action::Right => {
                 self.selected = !self.selected;
-                Ok(None)
+                ActionResult::Consumed
             }
             Action::Select => {
                 if self.selected {
-                    Ok(Some(Action::Quit))
+                    ActionResult::Action(Action::Quit)
                 } else {
-                    Ok(Some(Action::Back))
+                    ActionResult::Action(Action::Back)
                 }
             }
-            _ => Ok(None), // No other actions handled here
+            _ => ActionResult::Ignored,
         }
     }
 
     fn render(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
-        let popup_area = centered_rect(40, 30, area);
+        let popup_area = centered_rect_abs(30, 4, area);
         f.render_widget(Clear, popup_area);
 
         let padded_area = popup_area.inner(Margin {
@@ -58,13 +79,13 @@ impl Component for QuitPopup {
         });
 
         let layout =
-            Layout::vertical([Constraint::Length(3), Constraint::Length(3)]).split(padded_area);
+            Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(padded_area);
 
         let button_layout =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(layout[1]);
 
-        f.render_widget(themed_block("Quit Roxy"), popup_area);
+        f.render_widget(themed_block(Some("Quit Roxy"), true), popup_area);
         f.render_widget(themed_button("Yes", self.selected), button_layout[0]);
         f.render_widget(themed_button("No", !self.selected), button_layout[1]);
 

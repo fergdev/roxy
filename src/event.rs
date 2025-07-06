@@ -20,21 +20,20 @@ pub enum Action {
     Left,
     Right,
 
+    FocusNext,
+    FocusPrev,
+
     Top,
     Bottom,
 
     EditConfig,
     LogView,
-}
-
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum AppEvent {
-    #[default]
-    Quit,
+    FpsView,
 }
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Mode {
     #[default]
-    Home,
+    Normal,
+    Insert,
 }

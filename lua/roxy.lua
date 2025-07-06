@@ -34,4 +34,29 @@ function roxy.intercept_response(res)
 	return res
 end
 
+--- @nodoc
+roxy.log = {
+	--- @enum roxy.log.levels
+	levels = {
+		TRACE = 0,
+		DEBUG = 1,
+		INFO = 2,
+		WARN = 3,
+		ERROR = 4,
+		OFF = 5,
+	},
+}
+
+--- Displays a notification
+---
+--- This function can be overridden by plugins to display notifications using
+--- a custom provider (such as the system notification provider). By default,
+--- writes to |:messages|.
+---@param msg string Content of the notification to show to the user.
+---@param level integer|nil One of the values from |vim.log.levels|.
+---@diagnostic disable-next-line: unused-local
+function roxy.notify(msg, level) -- luacheck: no unused args
+	-- Placeholder
+end
+
 return roxy

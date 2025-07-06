@@ -1,12 +1,8 @@
-pub mod component;
 pub mod config_editor;
-pub mod flow_details;
-pub mod flow_list;
+pub mod flow;
 mod fps_counter;
+pub mod framework;
 pub mod home;
 pub mod log;
 pub mod quit_popup;
 pub mod splash;
-pub mod theme;
-mod toast;
-mod util;

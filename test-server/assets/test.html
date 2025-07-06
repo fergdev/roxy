@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test Dashboard</title>
+  <style>
+    body { font-family: sans-serif; background: #f0f0f0; }
+    .card { border: 1px solid #ccc; padding: 1rem; margin: 1rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Welcome, Jane!</h1>
+    <nav>
+      <ul>
+        <li><a href="/home">Home</a></li>
+        <li><a href="/settings">Settings</a></li>
+        <li><a href="/logout">Logout</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <section id="weather" class="card">
+    <h2>Weather</h2>
+    <p>Location: <strong>Wellington</strong></p>
+    <p>Temperature: <span>15°C</span></p>
+    <p>Condition: <em>Cloudy</em></p>
+  </section>
+
+  <section id="todos" class="card">
+    <h2>Todo List</h2>
+    <ul>
+      <li>✓ Finish Rust project</li>
+      <li>☐ Read "The Pragmatic Programmer"</li>
+      <li>☐ Update dependencies</li>
+    </ul>
+  </section>
+
+  <footer>
+    <small>&copy; 2025 Dev Dashboard Inc.</small>
+  </footer>
+</body>
+</html>

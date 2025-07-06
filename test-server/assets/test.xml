@@ -1,0 +1,51 @@
+<user id="12345" verified="true">
+  <name>Jane Doe</name>
+  <email>jane@example.com</email>
+  <preferences>
+    <notifications email="true" sms="false" push="true" />
+    <theme>dark</theme>
+    <language>en-NZ</language>
+  </preferences>
+  <dashboard>
+    <widget id="weather" type="info">
+      <location>Wellington</location>
+      <temperature unit="C">15</temperature>
+      <conditions>Cloudy</conditions>
+    </widget>
+    <widget id="stocks" type="chart">
+      <stock symbol="AAPL">
+        <price>187.34</price>
+        <change>-0.84</change>
+      </stock>
+      <stock symbol="TSLA">
+        <price>256.12</price>
+        <change>1.26</change>
+      </stock>
+    </widget>
+  </dashboard>
+  <todos>
+    <todo id="1" completed="false">
+      <title>Finish Rust project</title>
+      <tags>
+        <tag>work</tag>
+        <tag>rust</tag>
+      </tags>
+    </todo>
+    <todo id="2" completed="true">
+      <title>Read 'The Pragmatic Programmer'</title>
+      <tags>
+        <tag>reading</tag>
+        <tag>books</tag>
+      </tags>
+    </todo>
+  </todos>
+  <session>
+    <token xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+    <expires_in>3600</expires_in>
+    <scopes>
+      <scope>read</scope>
+      <scope>write</scope>
+      <scope>admin</scope>
+    </scopes>
+  </session>
+</user>

@@ -1,3 +1,5 @@
+#![allow(clippy::derivable_impls)]
+
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -5,8 +7,12 @@ use std::{
 
 use clap::Parser;
 use roxy::{
-    app, certs, config::ConfigManager, flow::FlowStore, interceptor::ScriptEngine, logging, proxy,
-    ui::log::UiLogLayer,
+    app,
+    config::ConfigManager,
+    flow::FlowStore,
+    interceptor::ScriptEngine,
+    logging, proxy,
+    ui::{framework::notify::Notifier, log::UiLogLayer},
 };
 
 #[derive(Parser, Debug)]
@@ -21,15 +27,18 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
+    // let local = tokio::task::LocalSet::new();
     let log_buffer = Arc::new(Mutex::new(VecDeque::new()));
     let log_layer = UiLogLayer::new(log_buffer.clone());
+
+    let notifier = Notifier::new();
 
     logging::initialize_logging_with_layer(Some(log_layer)).unwrap();
 
     let config = ConfigManager::new().unwrap();
 
     let args = Args::parse();
-    let roxy_certs = certs::generate_roxy_root_ca().unwrap();
+    let roxy_certs = roxy_shared::generate_roxy_root_ca().unwrap();
 
     let flow_store = FlowStore::new();
 
@@ -39,7 +48,7 @@ async fn main() -> color_eyre::Result<()> {
     color_eyre::install().unwrap();
     // let mut terminal = ratatui::init();
 
-    let mut app = app::App::new(config, flow_store.clone(), log_buffer);
+    let mut app = app::App::new(config, flow_store.clone(), log_buffer, notifier);
     let result = app.run().await;
     ratatui::restore();
     result

@@ -14,6 +14,7 @@ use ratatui::style::Color;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 use crate::event::{Action, Mode};
+use crate::notify_error;
 
 const CONFIG: &str = include_str!("../.config/config.json");
 
@@ -73,40 +74,40 @@ pub struct RoxyColors {
     pub primary: Color,
     #[serde(deserialize_with = "deserialize_color")]
     pub on_primary: Color,
+
     #[serde(deserialize_with = "deserialize_color")]
     pub secondary: Color,
     #[serde(deserialize_with = "deserialize_color")]
     pub on_secondary: Color,
+
     #[serde(deserialize_with = "deserialize_color")]
     pub surface: Color,
     #[serde(deserialize_with = "deserialize_color")]
     pub on_surface: Color,
+
     #[serde(deserialize_with = "deserialize_color")]
     pub background: Color,
     #[serde(deserialize_with = "deserialize_color")]
     pub on_background: Color,
+
     #[serde(deserialize_with = "deserialize_color")]
     pub outline: Color,
 
     #[serde(deserialize_with = "deserialize_color")]
-    pub error: Color,
-    #[serde(deserialize_with = "deserialize_color")]
-    pub on_error: Color,
+    pub outline_unfocused: Color,
 
+    #[serde(deserialize_with = "deserialize_color")]
+    pub error: Color,
     #[serde(deserialize_with = "deserialize_color")]
     pub success: Color,
     #[serde(deserialize_with = "deserialize_color")]
-    pub on_success: Color,
-
-    #[serde(deserialize_with = "deserialize_color")]
     pub info: Color,
-    #[serde(deserialize_with = "deserialize_color")]
-    pub on_info: Color,
-
     #[serde(deserialize_with = "deserialize_color")]
     pub warn: Color,
     #[serde(deserialize_with = "deserialize_color")]
-    pub on_warn: Color,
+    pub debug: Color,
+    #[serde(deserialize_with = "deserialize_color")]
+    pub trace: Color,
 }
 
 #[derive(Clone, Debug, Default, Deref, DerefMut)]
@@ -275,7 +276,13 @@ impl<'de> Deserialize<'de> for KeyBindings {
             .map(|(mode, inner_map)| {
                 let converted_inner_map = inner_map
                     .into_iter()
-                    .map(|(key_str, cmd)| (parse_key_sequence(&key_str).unwrap(), cmd))
+                    .filter_map(|(key_str, cmd)| match parse_key_sequence(&key_str) {
+                        Ok(seq) => Some((seq, cmd)),
+                        Err(e) => {
+                            notify_error!("Failed to parse key '{}': {}", key_str, e);
+                            None
+                        }
+                    })
                     .collect();
                 (mode, converted_inner_map)
             })
@@ -512,7 +519,7 @@ pub fn deserialize_color<'de, D>(deserializer: D) -> Result<Color, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s: String = Deserialize::deserialize(deserializer)?;
+    let s: String = Deserialize::deserialize(deserializer).unwrap_or("#ffffff".to_string());
     parse_color(&s).map_err(de::Error::custom)
 }
 

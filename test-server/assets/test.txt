@@ -1,0 +1,17 @@
+# Rust Proxy TUI
+
+A minimal terminal-based HTTP proxy built with Ratatui and Hyper.
+
+## Features
+
+- MITM HTTP/HTTPS inspection
+- Colorized JSON, XML, HTML, and text
+- Focus navigation tree
+- Scrollable views
+- Image rendering (JPEG, PNG, etc.)
+
+## Installation
+
+```bash
+cargo build --release
+./target/release/proxy-tui
