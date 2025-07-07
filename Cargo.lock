@@ -3488,6 +3488,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rcgen"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "218a7fbb357f6da42c9fd3610b1a5128d087d460e5386eaa5040705c464611dc"
+dependencies = [
+ "pem",
+ "ring",
+ "rustls-pki-types",
+ "time",
+ "x509-parser 0.17.0",
+ "yasna",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3667,7 +3681,7 @@ dependencies = [
  "rat-focus",
  "ratatui",
  "ratatui-image",
- "rcgen",
+ "rcgen 0.14.1",
  "reqwest",
  "ring",
  "roxy-shared",
@@ -3704,7 +3718,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dirs",
- "rcgen",
+ "rcgen 0.13.2",
  "tracing",
  "tracing-subscriber",
 ]
@@ -5553,6 +5567,7 @@ dependencies = [
  "lazy_static",
  "nom",
  "oid-registry 0.8.1",
+ "ring",
  "rusticata-macros",
  "thiserror 2.0.12",
  "time",

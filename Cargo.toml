@@ -22,7 +22,7 @@ ratatui = { version = "0.29.0", features = [
   "macros",
   "unstable-widget-ref",
 ] }
-rcgen = { version = "0.13.2", features = [
+rcgen = { version = "0.14.1", features = [
   "crypto",
   "ring",
   "pem",
