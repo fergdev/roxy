@@ -33,7 +33,7 @@ tracing-error = "0.2.1"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 unicode-segmentation = "1"
 unicode-truncate = { version = "2", default-features = false }
-webpki-roots = "1.0.1"
+webpki-roots = "1.0.2"
 
 unicode-width = "=0.2.0"                               # See <https://github.com/ratatui/ratatui/issues/1271> for information about why we pin unicode-width
 anyhow = "1.0.85"
