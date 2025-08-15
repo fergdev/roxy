@@ -4,21 +4,23 @@ use ratatui::{
 };
 use std::io::Cursor;
 
-pub fn render_csv(data: &[u8]) -> Vec<Line<'static>> {
+pub fn render_csv(data: &[u8]) -> Result<Vec<Line<'static>>, String> {
     let mut rdr = csv::Reader::from_reader(Cursor::new(data));
     render(&mut rdr)
 }
 
-pub fn render_tsv(data: &[u8]) -> Vec<Line<'static>> {
+pub fn render_tsv(data: &[u8]) -> Result<Vec<Line<'static>>, String> {
     let mut rdr = csv::ReaderBuilder::new()
         .delimiter(b'\t')
         .from_reader(Cursor::new(data));
     render(&mut rdr)
 }
 
-fn render(rdr: &mut csv::Reader<Cursor<&[u8]>>) -> Vec<Line<'static>> {
+fn render(rdr: &mut csv::Reader<Cursor<&[u8]>>) -> Result<Vec<Line<'static>>, String> {
     let mut lines = vec![];
-    let headers = rdr.headers().unwrap();
+    let headers = rdr
+        .headers()
+        .map_err(|_| "Failed to get headers".to_string())?;
 
     // Render headers
     lines.push(Line::from(
@@ -47,5 +49,5 @@ fn render(rdr: &mut csv::Reader<Cursor<&[u8]>>) -> Vec<Line<'static>> {
         }
     });
 
-    lines
+    Ok(lines)
 }

@@ -8,12 +8,12 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
-use roxy_proxy::flow::ContentType;
+use roxy_shared::content::ContentType;
 use snowflake::SnowflakeIdGenerator;
 use tokio::sync::{mpsc, watch};
 use tracing::debug;
+use x509_parser::nom::HexDisplay;
 
-use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
     io::Cursor,
@@ -37,6 +37,13 @@ use crate::{
         theme::themed_block,
     },
 };
+
+fn render_plain_text(body: &Bytes) -> Vec<Line<'static>> {
+    let utf = String::from_utf8_lossy(body);
+    utf.lines()
+        .map(|line| Line::from(line.to_string()))
+        .collect::<Vec<Line>>()
+}
 
 struct UiState {
     data: Body,
@@ -64,53 +71,62 @@ impl UiState {
 
 pub struct FlowDetailsBody {
     state: watch::Receiver<UiState>,
+    image_cache: ImageCache,
     focus: FocusFlag,
     scroll: u16,
 }
 
 impl FlowDetailsBody {
-    pub fn new(mut body_rx: mpsc::Receiver<(ContentType, Bytes)>) -> Self {
+    pub fn new(mut body_rx: mpsc::Receiver<(Option<ContentType>, Bytes)>) -> Self {
         let (ui_tx, ui_rx) = watch::channel(UiState::default());
+
+        let ic = ImageCache::new();
+        let mut image_cache = ic.clone();
 
         tokio::spawn(async move {
             while let Some((content_type, mut body)) = body_rx.recv().await {
                 let lines = match content_type {
-                    ContentType::Json => Body::Text(highlight_json(body)),
-                    ContentType::Xml => Body::Text(pretty_print_xml(&body)),
-                    ContentType::Html => {
-                        let mut cursor = Cursor::new(&mut body);
-                        let lines = highlight_html_dom(&mut cursor);
-                        Body::Text(lines)
-                    }
-                    ContentType::Toml => Body::Text(highlight_toml(&body)),
-                    ContentType::Yaml => Body::Text(pretty_print_yaml(&body)),
-                    ContentType::Csv => Body::Text(render_csv(&body)),
-                    ContentType::Tsv => Body::Text(render_tsv(&body)),
-                    ContentType::Md => Body::Text(render_markdown(&body)),
-                    ContentType::Png => Body::Image(render_image(&body)),
-                    ContentType::Gif => Body::Image(render_image(&body)),
-                    ContentType::Jpeg => Body::Image(render_image(&body)),
-                    ContentType::Webp => Body::Image(render_image(&body)),
-                    ContentType::XIcon => Body::Image(render_image(&body)),
-                    ContentType::Bmp => Body::Image(render_image(&body)),
-                    ContentType::Text => {
-                        let utf = String::from_utf8_lossy(&body);
-                        let lines = utf
-                            .lines()
-                            .map(|line| Line::from(line.to_string()))
-                            .collect::<Vec<Line>>();
-                        Body::Text(lines)
-                    }
-                    ContentType::Unknown => {
+                    Some(ct) => match ct {
+                        ContentType::Json => Body::Text(highlight_json(body)),
+                        ContentType::Svg | ContentType::Xml => Body::Text(pretty_print_xml(&body)), // TODO:
+                        // can we render svg
+                        ContentType::Html => {
+                            let mut cursor = Cursor::new(&mut body);
+                            match highlight_html_dom(&mut cursor) {
+                                Ok(lines) => Body::Text(lines),
+                                Err(_) => Body::None,
+                            }
+                        }
+                        ContentType::Toml => Body::Text(highlight_toml(&body)),
+                        ContentType::Yaml => Body::Text(pretty_print_yaml(&body)),
+                        ContentType::Csv => {
+                            Body::Text(render_csv(&body).unwrap_or(render_plain_text(&body)))
+                        }
+                        ContentType::Tsv => {
+                            Body::Text(render_tsv(&body).unwrap_or(render_plain_text(&body)))
+                        }
+                        ContentType::Md => Body::Text(render_markdown(&body)),
+                        ContentType::Png => Body::Image(image_cache.render_image(&body)),
+                        ContentType::Gif => Body::Image(image_cache.render_image(&body)),
+                        ContentType::Jpeg => Body::Image(image_cache.render_image(&body)),
+                        ContentType::Webp => Body::Image(image_cache.render_image(&body)),
+                        ContentType::XIcon => Body::Image(image_cache.render_image(&body)),
+                        ContentType::Bmp => Body::Image(image_cache.render_image(&body)),
+                        ContentType::OctetStream => {
+                            let hex = body.to_hex(8);
+                            let line = vec![hex.into()];
+                            Body::Text(line)
+                        }
+                        ContentType::Text => {
+                            let lines = render_plain_text(&body);
+                            Body::Text(lines)
+                        }
+                    },
+                    None => {
                         if body.is_empty() {
                             Body::None
                         } else {
-                            debug!("Unknown content type, treating as text");
-                            let utf = String::from_utf8_lossy(&body);
-                            let lines = utf
-                                .lines()
-                                .map(|line| Line::from(line.to_string()))
-                                .collect::<Vec<Line>>();
+                            let lines = render_plain_text(&body);
                             Body::Text(lines)
                         }
                     }
@@ -123,6 +139,7 @@ impl FlowDetailsBody {
         });
         Self {
             state: ui_rx,
+            image_cache: ic,
             focus: rat_focus::FocusFlag::named("FlowBody"),
             scroll: 0,
         }
@@ -155,7 +172,7 @@ impl Component for FlowDetailsBody {
                     ActionResult::Consumed
                 }
                 Action::Down => {
-                    let len = self.state.borrow().len();
+                    let len = self.state.borrow().len() + 5;
 
                     self.scroll += 1;
                     if self.scroll > len {
@@ -190,18 +207,7 @@ impl Component for FlowDetailsBody {
             }
             Body::Image(ref id) => {
                 if let Some(id) = id {
-                    let cache = IMAGE_CACHE.lock().unwrap();
-                    if let Some(proto_arc) = cache.get(id) {
-                        match proto_arc.lock() {
-                            Ok(mut proto) => {
-                                let image = StatefulImage::default().resize(Resize::default());
-                                f.render_stateful_widget(image, area, &mut *proto);
-                            }
-                            Err(_) => {
-                                eprintln!("Failed to lock image protocol for rendering");
-                            }
-                        }
-                    }
+                    return self.image_cache.render(f, area, id);
                 } else {
                     let para = Paragraph::new(Line::raw("Failed to render image"))
                         .block(Block::default().title("Body").borders(Borders::ALL))
@@ -215,37 +221,65 @@ impl Component for FlowDetailsBody {
     }
 }
 
-static ID_GEN: Lazy<Arc<Mutex<SnowflakeIdGenerator>>> =
-    Lazy::new(|| Arc::new(Mutex::new(SnowflakeIdGenerator::new(1, 1))));
-
-fn generate_id() -> i64 {
-    let mut generator = ID_GEN.lock().unwrap();
-    generator.generate()
+#[derive(Clone)]
+struct ImageCache {
+    inner: Arc<Mutex<ImageCacheInner>>,
 }
 
-fn render_image(raw: &[u8]) -> Option<i64> {
-    if let Ok(image) = image::load_from_memory(raw) {
-        debug!("Loaded image with size: ");
-        // TODO: make this configurable
-        let mut picker = Picker::from_fontsize((9, 20));
-        picker.set_protocol_type(ratatui_image::picker::ProtocolType::Kitty);
-        let proto = picker.new_resize_protocol(image);
+struct ImageCacheInner {
+    id_gen: SnowflakeIdGenerator,
+    cache: HashMap<i64, Arc<Mutex<StatefulProtocol>>>,
+}
 
-        let id = generate_id();
-        cache_image(id, proto);
-        Some(id)
-    } else {
-        None
+impl ImageCache {
+    fn new() -> Self {
+        ImageCache {
+            inner: Arc::new(Mutex::new(ImageCacheInner {
+                id_gen: SnowflakeIdGenerator::new(1, 1),
+                cache: HashMap::new(),
+            })),
+        }
     }
-}
 
-// TODO: remove from cache
-pub static IMAGE_CACHE: Lazy<Mutex<HashMap<i64, Arc<Mutex<StatefulProtocol>>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+    fn render_image(&mut self, raw: &[u8]) -> Option<i64> {
+        if let Ok(image) = image::load_from_memory(raw) {
+            debug!("Loaded image with size: ");
+            // TODO: make this configurable
+            let mut picker = Picker::from_fontsize((9, 20));
+            picker.set_protocol_type(ratatui_image::picker::ProtocolType::Kitty);
+            let proto = picker.new_resize_protocol(image);
 
-pub fn cache_image(id: i64, proto: StatefulProtocol) {
-    IMAGE_CACHE
-        .lock()
-        .unwrap()
-        .insert(id, Arc::new(Mutex::new(proto)));
+            if let Ok(mut guard) = self.inner.lock() {
+                let id = guard.id_gen.generate();
+                guard.cache.insert(id, Arc::new(Mutex::new(proto)));
+                Some(id)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn render(&mut self, f: &mut Frame, area: Rect, id: &i64) -> Result<()> {
+        if let Ok(guard) = self.inner.lock() {
+            if let Some(proto_arc) = guard.cache.get(id) {
+                match proto_arc.lock() {
+                    Ok(mut proto) => {
+                        let image = StatefulImage::default().resize(Resize::default());
+                        f.render_stateful_widget(image, area, &mut *proto);
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        eprintln!("Failed to lock image protocol for rendering");
+                    }
+                }
+            }
+        }
+        let para = Paragraph::new(Line::raw("Failed to render image"))
+            .block(Block::default().title("Body").borders(Borders::ALL))
+            .scroll((0, 0));
+        f.render_widget(para, area);
+        Ok(())
+    }
 }

@@ -38,8 +38,9 @@ impl CachedRender {
             self.last_area = Some(area);
         }
 
-        let widget = self.widget.as_ref().unwrap();
-        widget.render_ref(area, f.buffer_mut());
+        if let Some(widget) = self.widget.as_ref() {
+            widget.render_ref(area, f.buffer_mut());
+        }
     }
 }
 

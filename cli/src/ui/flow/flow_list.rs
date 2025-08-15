@@ -1,14 +1,18 @@
-use std::sync::{Arc, Mutex};
-
 use color_eyre::Result;
+use hyper::{Method, header::CONTENT_TYPE};
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},
-    widgets::{Scrollbar, ScrollbarOrientation, ScrollbarState, TableState},
+    style::{Color, Style},
+    text::{Line, Span, Text},
+    widgets::{
+        Cell, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, TableState, Wrap,
+    },
 };
-use roxy_proxy::flow::{FlowKind, FlowStore};
+use roxy_proxy::flow::FlowStore;
 use tokio::{sync::watch, task::JoinHandle};
+use tracing::{error, info};
 
 use crate::{
     app::ITEM_HEIGHT,
@@ -20,14 +24,24 @@ use crate::{
     },
 };
 
+#[derive(Debug, Clone)]
 struct UiFlow {
-    pub id: i64,
-    pub line: String,
+    id: i64,
+    method: Method,
+    uri: String,
+    response: Option<UiResponse>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+struct UiResponse {
+    code: u16,
+    content_type: String,
+    duration: i64,
+}
+
+#[derive(Clone, Default)]
 struct UiState {
-    flows: Arc<Mutex<Vec<UiFlow>>>,
+    flows: Vec<UiFlow>,
 }
 
 pub struct FlowList {
@@ -35,7 +49,7 @@ pub struct FlowList {
     flow_store: FlowStore,
     state: TableState,
     scroll_state: ScrollbarState,
-    ui_state: UiState,
+    ui_rx: watch::Receiver<UiState>,
     shutdown_tx: watch::Sender<()>,
     listener_handle: Option<JoinHandle<()>>,
 }
@@ -58,27 +72,30 @@ impl FlowList {
     pub fn new(flow_store: FlowStore) -> Self {
         let (shutdown_tx, shutdown_rx) = watch::channel(());
 
+        let (ui_tx, ui_rx) = watch::channel(UiState::default());
+
         let mut instance = Self {
             focus: FocusFlag::named("FlowList"),
             flow_store,
             state: TableState::default().with_selected(0),
             scroll_state: ScrollbarState::new(0),
-            ui_state: UiState {
-                flows: Arc::new(Mutex::new(Vec::new())),
-            },
+            ui_rx,
             listener_handle: None,
             shutdown_tx,
         };
 
-        let handle = instance.start_listener(shutdown_rx);
+        let handle = instance.start_listener(ui_tx, shutdown_rx);
         instance.listener_handle = Some(handle);
 
         instance
     }
 
-    fn start_listener(&self, mut shutdown_rx: watch::Receiver<()>) -> tokio::task::JoinHandle<()> {
+    fn start_listener(
+        &self,
+        ui_tx: watch::Sender<UiState>,
+        mut shutdown_rx: watch::Receiver<()>,
+    ) -> tokio::task::JoinHandle<()> {
         let flow_store = self.flow_store.clone();
-        let ui_state = self.ui_state.clone();
 
         tokio::spawn(async move {
             let mut flow_rx = flow_store.subscribe();
@@ -88,91 +105,42 @@ impl FlowList {
                     _ = flow_rx.changed() => {
                         let ids = flow_store.ordered_ids.read().await;
 
-                        let mut rows = Vec::new();
+                        let mut flows = Vec::new();
                         for id in ids.iter() {
                             if let Some(entry) = flow_store.flows.get(id) {
 
                                 let flow = entry.value().read().await;
-                                match &flow.kind {
-                                    FlowKind::Https(flow) => {
-                                        let c = if flow.response.is_some() { "+" } else { "-" };
-                                        let resp = flow
-                                            .response
-                                            .as_ref()
-                                            .map(|r| r.status.to_string())
-                                            .unwrap_or_else(|| "-".into());
-                                        let req = flow
-                                            .request.line_pretty();
 
-                                        rows.push(UiFlow {
-                                            id: *id,
-                                            line: format!("{c} {req} -> {resp}"),
-                                        });
-                                    }
-                                    FlowKind::Http(flow) => {
-                                        let c = if flow.response.is_some() { "+" } else { "-" };
-                                        let resp = flow
-                                            .response
-                                            .as_ref()
-                                            .map(|r| r.status.to_string())
-                                            .unwrap_or_else(|| "-".into());
-                                        let req = flow
-                                            .request.line_pretty();
-                                        rows.push(UiFlow {
-                                            id: *id,
-                                            line: format!("{c} {req} -> {resp}"),
-                                        });
-                                    }
-                                    FlowKind::Ws(_) => {
-                                        rows.push(UiFlow {
-                                            id: *id,
-                                            line: "web socket".to_owned()
-                                        });
-                                    }
-                                    FlowKind::Wss(_) => {
-                                        rows.push(UiFlow {
-                                            id: *id,
-                                            line: "WSS".to_owned()
-                                        });
-                                    }
-                                    FlowKind::Http2(flow) => {
-                                        rows.push(UiFlow {
-                                            id: *id,
-                                            line: flow.request.line_pretty()
-                                        });
-                                    }
-                                    FlowKind::Unknown => {
-                                        let s = match &flow.error {
-                                            Some(err) => {
-                                                format!("Unknown {err}")
-                                            }
-                                            None => {
-                                                "Unknown".to_string()
-                                            }
-                                        };
-                                        let conn = match &flow.connect {
-                                            Some(conn)=>{
-                                                conn.line_pretty()
-                                            }
-                                            None => {
-                                                "No-conn".to_string()
-                                            }
+                                let response = flow.response.as_ref()
+                                    .map(|r| UiResponse{
+                                    code: r.status.as_u16(),
+                                    content_type: r.headers.get(CONTENT_TYPE).map(|h| h.to_str().ok())
+                                        .flatten()
+                                        .unwrap_or("No content").to_string(),
+                                    duration: 100
+                                });
 
-                                        };
-
-                                        let s = format!("{conn} :{s}");
-
-                                        rows.push(UiFlow {
-                                            id: *id,
-                                            line: s
-                                        });
+                                let (method, line) = match flow.request.as_ref() {
+                                    Some(req) => {
+                                        (req.method.clone(), req.line_pretty())
+                                    },
+                                    None => {
+                                        (Method::GET, "?????".to_string())
                                     }
-                                }
+                                };
+
+                                flows.push(UiFlow {
+                                    id: *id,
+                                    method,
+                                    uri: line,
+                                    response
+                                });
                             }
                         }
-                        let mut flows = ui_state.flows.lock().unwrap();
-                        flows.clear();
-                        flows.extend(rows);
+                        if let Err(e) = ui_tx.send(UiState{ flows }) {
+                            error!("error posting ui state {e}");
+
+                        }
                     }
                     _ = shutdown_rx.changed() => {
                         break;
@@ -185,7 +153,7 @@ impl FlowList {
     fn next_row(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                let len = self.ui_state.flows.lock().unwrap().len();
+                let len = self.ui_rx.borrow().flows.len();
                 if i + 1 < len { i + 1 } else { i }
             }
             None => 0,
@@ -210,10 +178,10 @@ impl FlowList {
     }
 
     pub fn selected_id(&self) -> Option<i64> {
-        let guard = self.ui_state.flows.lock().unwrap();
         if let Some(selected) = self.state.selected() {
-            if selected < guard.len() {
-                Some(guard[selected].id)
+            let state = self.ui_rx.borrow();
+            if selected < state.flows.len() {
+                Some(state.flows[selected].id)
             } else {
                 None
             }
@@ -249,9 +217,31 @@ impl Component for FlowList {
     }
 
     fn render(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
-        let guard = self.ui_state.flows.lock().unwrap();
+        let guard = self.ui_rx.borrow_and_update();
 
-        let rows = guard.iter().map(|f| themed_row!(vec![f.line.clone()]));
+        let mut rows = vec![];
+        for flow in &guard.flows {
+            let c = Line::from(vec![
+                Span::styled(
+                    flow.method.to_string(),
+                    Style::default().fg(method_color(&flow.method)),
+                ),
+                Span::styled("   ", Style::default()),
+                Span::styled(&flow.uri, Style::default().fg(Color::Cyan)),
+            ]);
+            let l = Row::new(vec![Cell::new(c)]);
+
+            rows.push(l);
+            match &flow.response {
+                Some(resp) => {
+                    rows.push(themed_row!(Line::from(vec![Span::styled(
+                        format!(" - {} {} {}", resp.code, resp.content_type, resp.duration),
+                        Style::default().fg(method_color(&flow.method))
+                    ),])));
+                }
+                None => rows.push(themed_row!(Line::from("-"))),
+            }
+        }
 
         let widths = [Constraint::Fill(1)];
 
@@ -266,5 +256,20 @@ impl Component for FlowList {
             &mut self.scroll_state,
         );
         Ok(())
+    }
+}
+
+fn method_color(method: &Method) -> Color {
+    match *method {
+        Method::GET => Color::Green,
+        Method::POST => Color::Green,
+        Method::PUT => Color::Green,
+        Method::DELETE => Color::Green,
+        Method::HEAD => Color::Green,
+        Method::OPTIONS => Color::Green,
+        Method::CONNECT => Color::Green,
+        Method::PATCH => Color::Green,
+        Method::TRACE => Color::Green,
+        _ => Color::Yellow,
     }
 }

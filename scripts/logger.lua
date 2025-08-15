@@ -26,12 +26,17 @@ local function log_to_file(label, data)
 	end
 end
 
-function intercept_request(req)
+local function intercept_request(req)
 	log_to_file("Request", req)
-	return req
 end
 
-function intercept_response(res)
+local function intercept_response(res)
 	log_to_file("Response", res)
-	return res
 end
+
+Extensions = {
+	{
+		intercept_request,
+		intercept_response,
+	},
+}

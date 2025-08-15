@@ -6,6 +6,7 @@ use crossterm::event::KeyEvent;
 use rat_focus::{Focus, FocusBuilder};
 use ratatui::layout::Rect;
 use roxy_proxy::flow::FlowStore;
+use roxy_proxy::proxy::ProxyManager;
 use tokio::sync::mpsc;
 
 use crate::config::ConfigManager;
@@ -20,6 +21,7 @@ use crate::ui::log::LogLine;
 pub const ITEM_HEIGHT: usize = 4;
 
 pub struct App {
+    _proxy_manager: ProxyManager,
     config_manager: ConfigManager,
     home: HomeComponent,
     should_quit: bool,
@@ -32,6 +34,7 @@ pub struct App {
 
 impl App {
     pub fn new(
+        proxy_manager: ProxyManager,
         config_manager: ConfigManager,
         flow_store: FlowStore,
         log_buffer: Arc<Mutex<VecDeque<LogLine>>>,
@@ -45,6 +48,7 @@ impl App {
             notifier,
         );
         Self {
+            _proxy_manager: proxy_manager,
             config_manager,
             home,
             should_quit: false,
@@ -59,18 +63,10 @@ impl App {
     pub async fn run(&mut self) -> Result<()> {
         let mut tui = Tui::new()?.mouse(true).tick_rate(4.0).frame_rate(60.0);
         tui.enter()?;
-
-        // for component in self.home.iter_mut() {
-        //     component.register_action_handler(self.action_tx.clone())?;
-        // }
-        // for component in self.home.iter_mut() {
-        //     component.init(tui.size()?)?;
-        // }
-
         let action_tx = self.action_tx.clone();
         loop {
             let mut focus = FocusBuilder::build_for(&self.home);
-            focus.enable_log();
+            // focus.enable_log();
 
             self.handle_events(&mut tui).await?;
             self.handle_actions(&mut tui, &mut focus)?;
@@ -164,17 +160,6 @@ impl App {
         }
         Ok(())
     }
-
-    // fn print_focus(focus: &Focus) {
-    //     if focus.is_log_enabled() {
-    //         let focused = focus.focused();
-    //         if let Some(focused) = focused {
-    //             trace!("Focused component: {}", focused.name());
-    //         } else {
-    //             trace!("No component is focused");
-    //         }
-    //     }
-    // }
 
     fn handle_resize(&mut self, tui: &mut Tui, w: u16, h: u16) -> Result<()> {
         tui.resize(Rect::new(0, 0, w, h))?;

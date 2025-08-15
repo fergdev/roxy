@@ -1,13 +1,24 @@
-use std::process::Command;
+use std::{
+    net::{SocketAddr, UdpSocket},
+    process::Command,
+    time::Duration,
+};
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use http::{Method, Version};
+use http_body_util::{Empty, combinators::BoxBody};
 use once_cell::sync::OnceCell;
-use roxy_proxy::{flow::FlowStore, interceptor, proxy::start_proxy};
-use roxy_servers::start_warp_test_server;
-use roxy_shared::{RoxyCA, generate_roxy_root_ca_with_path, init_crypto};
+use roxy_proxy::{flow::FlowStore, interceptor, proxy::ProxyManager};
+use roxy_servers::{H11_BODY, h1::h1_server};
+use roxy_shared::{
+    RoxyCA, client::ClientContext, crypto::init_crypto, generate_roxy_root_ca_with_path,
+    http::HttpResponse, tls::TlsConfig, uri::RUri,
+};
 use tempfile::TempDir;
-use tokio::{fs::File, io::AsyncWriteExt, net::TcpListener, task::JoinHandle as TokioJoinHandle};
-use warp::Filter;
+use tokio::{
+    net::TcpListener,
+    time::{sleep, timeout},
+};
 
 pub static INIT_LOGGER: OnceCell<()> = OnceCell::new();
 
@@ -20,79 +31,51 @@ pub fn init_logging() {
     });
 }
 
-struct TestContext {
-    proxy_addr: String,
+pub struct TestContext {
+    _proxy_socket_addr: SocketAddr,
+    proxy_addr: RUri,
     _temp_dir: TempDir,
-    _roxy_ca: RoxyCA,
-    proxy_handle: TokioJoinHandle<()>,
-}
-
-impl Drop for TestContext {
-    fn drop(&mut self) {
-        self.proxy_handle.abort();
-    }
+    roxy_ca: RoxyCA,
+    _proxy_manager: ProxyManager,
 }
 
 impl TestContext {
     pub async fn new() -> Self {
-        TestContext::init(None).await
-    }
-
-    pub async fn init(script: Option<String>) -> Self {
         init_logging();
         init_crypto();
 
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_dir_path = temp_dir.path().to_path_buf();
 
-        let script_engine = match script {
-            Some(script) => {
-                let file_path = temp_dir.path().join("test.lua");
-                let mut file = File::create(file_path.clone()).await.unwrap();
-                file.write_all(script.as_bytes()).await.unwrap();
-                Some(interceptor::ScriptEngine::new(file_path).unwrap())
-            }
-            None => None,
-        };
-
-        let proxy_port = rnd_ephemeral().await;
-        let proxy_addr = format!("127.0.0.1:{proxy_port}");
+        let script_engine = interceptor::ScriptEngine::new().await.unwrap();
 
         let flow_store = FlowStore::new();
         let roxy_ca = generate_roxy_root_ca_with_path(Some(temp_dir_path.clone())).unwrap();
 
-        let proxy_handle = tokio::spawn(async move {
-            start_proxy(proxy_port, roxy_ca, script_engine, flow_store).unwrap();
-        });
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy_socket_addr = listener.local_addr().unwrap();
+        let proxy_port = proxy_socket_addr.port();
+        let addr = format!("127.0.0.1:{proxy_port}");
+        let proxy_uri: RUri = addr.parse().unwrap();
+        let udp_socket = UdpSocket::bind(format!("127.0.0.1:{proxy_port}")).unwrap();
+
+        let tls_config = TlsConfig::default();
+        let mut proxy_manager =
+            ProxyManager::new(0, roxy_ca, script_engine, tls_config, flow_store);
+        proxy_manager.start_tcp(listener).await.unwrap();
+        proxy_manager.start_udp(udp_socket).await.unwrap();
+
+        sleep(Duration::from_millis(300)).await;
 
         let roxy_ca = generate_roxy_root_ca_with_path(Some(temp_dir_path.clone())).unwrap();
         TestContext {
-            proxy_addr,
+            _proxy_socket_addr: proxy_socket_addr,
+            proxy_addr: proxy_uri,
             _temp_dir: temp_dir,
-            proxy_handle,
-            _roxy_ca: roxy_ca,
+            _proxy_manager: proxy_manager,
+            roxy_ca,
         }
     }
-}
-
-async fn rnd_ephemeral() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-    drop(listener); // TODO: is this automatically dropped
-    port
-}
-
-async fn default_http() -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
-    let root = warp::path::end().map(|| {
-        warp::http::Response::builder()
-            .header("test", "test")
-            .body("Hello from warp test server")
-            .unwrap()
-    });
-
-    let routes = warp::get().and(root);
-    start_warp_test_server(routes).await
 }
 
 fn criterion_benchmark_roxy(c: &mut Criterion) {
@@ -103,22 +86,34 @@ fn criterion_benchmark_roxy(c: &mut Criterion) {
     rt.block_on(async {
         let cxt = TestContext::new().await;
 
-        let (server_addr, server_handle) = default_http().await;
+        let (server_addr, server_handle) = h1_server(roxy_servers::HttpServers::H11).await.unwrap();
 
+        let target_uri: RUri = format!("http://{server_addr}").parse().unwrap();
         c.bench_function("http get roxy", |b| {
             b.iter(|| async {
-                let target_url = format!("http://{server_addr}");
-                let proxy_addr = cxt.proxy_addr.clone();
-                let client = reqwest::Client::builder()
-                    .proxy(reqwest::Proxy::http(proxy_addr).unwrap())
-                    .build()
+                let req = http::Request::builder()
+                    .method(Method::GET)
+                    .version(Version::HTTP_11)
+                    .uri(target_uri.clone())
+                    .body(BoxBody::new(Empty::new()))
                     .unwrap();
-                let res = client.get(target_url).send().await.unwrap();
-                let status = res.status();
-                let body = res.text().await.unwrap();
 
-                assert!(status.is_success());
-                assert_eq!(body, "Hello from warp test server");
+                let client = ClientContext::builder()
+                    .with_proxy(cxt.proxy_addr.clone())
+                    .with_roxy_ca(cxt.roxy_ca.clone())
+                    .build();
+                let HttpResponse {
+                    parts,
+                    body,
+                    trailers,
+                } = timeout(Duration::from_millis(300), client.request(req))
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                assert!(trailers.is_none());
+                assert_eq!(parts.status, 200);
+                assert_eq!(body, H11_BODY);
             });
         });
         server_handle.abort();
@@ -133,26 +128,43 @@ fn criterion_benchmark_roxy_multi(c: &mut Criterion) {
     rt.block_on(async {
         let cxt = TestContext::new().await;
 
-        let (server_addr, server_handle) = default_http().await;
+        let (server_addr, server_handle) = h1_server(roxy_servers::HttpServers::H11).await.unwrap();
 
         c.bench_function("http get roxy multi", |b| {
             b.iter(|| async {
                 let mut handles = vec![];
+                let proxy_uri: RUri = cxt.proxy_addr.clone();
+                let target_uri: RUri = format!("http://{server_addr}").parse().unwrap();
                 for _i in 0..10000 {
-                    let target_url = format!("http://{server_addr}");
-                    let proxy_addr = cxt.proxy_addr.clone();
-                    let handle = tokio::spawn(async {
-                        let client = reqwest::Client::builder()
-                            .proxy(reqwest::Proxy::http(proxy_addr).unwrap())
-                            .build()
+                    let proxy_uri = proxy_uri.clone();
+                    let target_uri = target_uri.clone();
+                    let ca = cxt.roxy_ca.clone();
+                    let handle = tokio::spawn(async move {
+                        let req = http::Request::builder()
+                            .method(Method::GET)
+                            .version(Version::HTTP_11)
+                            .uri(target_uri.clone())
+                            .body(BoxBody::new(Empty::new()))
                             .unwrap();
-                        let res = client.get(target_url).send().await.unwrap();
-                        let status = res.status();
-                        let body = res.text().await.unwrap();
 
-                        assert!(status.is_success());
-                        assert_eq!(body, "Hello from warp test server");
+                        let client = ClientContext::builder()
+                            .with_proxy(proxy_uri)
+                            .with_roxy_ca(ca)
+                            .build();
+                        let HttpResponse {
+                            parts,
+                            body,
+                            trailers,
+                        } = timeout(Duration::from_millis(300), client.request(req))
+                            .await
+                            .unwrap()
+                            .unwrap();
+
+                        assert!(trailers.is_none());
+                        assert_eq!(parts.status, 200);
+                        assert_eq!(body, H11_BODY);
                     });
+
                     handles.push(handle);
                 }
                 for h in handles {
@@ -177,7 +189,7 @@ fn criterion_benchmark_mitm(c: &mut Criterion) {
         let roxy_ca = generate_roxy_root_ca_with_path(Some(temp_dir_path.clone())).unwrap();
         let mut ca_path = temp_dir.path().to_path_buf();
         ca_path.push("roxy-ca.pem");
-        let proxy_port = rnd_ephemeral().await;
+        let proxy_port = 6161;
 
         let mut a = Command::new("mitmproxy")
             .arg("--mode")
@@ -189,23 +201,37 @@ fn criterion_benchmark_mitm(c: &mut Criterion) {
             .spawn()
             .expect("can't execute");
 
-        let (server_addr, server_handle) = default_http().await;
-        let target_url = format!("http://{server_addr}");
+        let (server_addr, server_handle) = h1_server(roxy_servers::HttpServers::H11).await.unwrap();
 
-        let proxy_addr = format!("localhost:{proxy_port}");
-        let client = reqwest::Client::builder()
-            .proxy(reqwest::Proxy::http(proxy_addr).unwrap())
-            .build()
-            .unwrap();
+        let proxy_uri: RUri = format!("http://localhost:{proxy_port}").parse().unwrap();
+        let target_uri: RUri = format!("http://{server_addr}").parse().unwrap();
 
         c.bench_function("http get mitm", |b| {
             b.iter(|| async {
-                let res = client.get(&target_url).send().await.unwrap();
-                let status = res.status();
-                let body = res.text().await.unwrap();
+                let req = http::Request::builder()
+                    .method(Method::GET)
+                    .version(Version::HTTP_11)
+                    .uri(target_uri.clone())
+                    .body(BoxBody::new(Empty::new()))
+                    .unwrap();
 
-                assert!(status.is_success());
-                assert_eq!(body, "Hello from warp test server");
+                let client = ClientContext::builder()
+                    .with_proxy(proxy_uri.clone())
+                    .with_roxy_ca(roxy_ca.clone())
+                    .build();
+
+                let HttpResponse {
+                    parts,
+                    body,
+                    trailers,
+                } = timeout(Duration::from_millis(300), client.request(req))
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                assert!(trailers.is_none());
+                assert_eq!(parts.status, 200);
+                assert_eq!(body, H11_BODY);
             })
         });
         a.kill().unwrap();
@@ -227,7 +253,7 @@ fn criterion_benchmark_mitm_multi(c: &mut Criterion) {
         let roxy_ca = generate_roxy_root_ca_with_path(Some(temp_dir_path.clone())).unwrap();
         let mut ca_path = temp_dir.path().to_path_buf();
         ca_path.push("roxy-ca.pem");
-        let proxy_port = rnd_ephemeral().await;
+        let proxy_port = 6161;
 
         let mut a = Command::new("mitmproxy")
             .arg("--mode")
@@ -239,26 +265,43 @@ fn criterion_benchmark_mitm_multi(c: &mut Criterion) {
             .spawn()
             .expect("can't execute");
 
-        let (server_addr, server_handle) = default_http().await;
+        let (server_addr, server_handle) = h1_server(roxy_servers::HttpServers::H11).await.unwrap();
 
         c.bench_function("http get mitm multi", |b| {
             b.iter(|| async {
                 let mut handles = vec![];
+                let proxy_uri: RUri = format!("http://localhost:{proxy_port}").parse().unwrap();
+                let target_uri: RUri = format!("http://{server_addr}").parse().unwrap();
                 for _i in 0..10000 {
-                    let proxy_addr = format!("localhost:{proxy_port}");
-                    let target_url = format!("http://{server_addr}");
-                    let handle = tokio::spawn(async {
-                        let client = reqwest::Client::builder()
-                            .proxy(reqwest::Proxy::http(proxy_addr).unwrap())
-                            .build()
+                    let proxy_uri = proxy_uri.clone();
+                    let target_uri = target_uri.clone();
+                    let roxy_ca = roxy_ca.clone();
+                    let handle = tokio::spawn(async move {
+                        let req = http::Request::builder()
+                            .method(Method::GET)
+                            .version(Version::HTTP_11)
+                            .uri(target_uri.clone())
+                            .body(BoxBody::new(Empty::new()))
                             .unwrap();
-                        let res = client.get(target_url).send().await.unwrap();
-                        let status = res.status();
-                        let body = res.text().await.unwrap();
 
-                        assert!(status.is_success());
-                        assert_eq!(body, "Hello from warp test server");
+                        let client = ClientContext::builder()
+                            .with_proxy(proxy_uri.clone())
+                            .with_roxy_ca(roxy_ca.clone())
+                            .build();
+                        let HttpResponse {
+                            parts,
+                            body,
+                            trailers,
+                        } = timeout(Duration::from_millis(300), client.request(req))
+                            .await
+                            .unwrap()
+                            .unwrap();
+
+                        assert!(trailers.is_none());
+                        assert_eq!(parts.status, 200);
+                        assert_eq!(body, H11_BODY);
                     });
+
                     handles.push(handle);
                 }
                 for h in handles {

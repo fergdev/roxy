@@ -59,7 +59,7 @@ pub fn themed_block(title: Option<&str>, has_focus: bool) -> Block<'_> {
 }
 
 pub fn themed_tabs<'a>(
-    title: &'a str,
+    title: Option<&'a str>,
     titles: Vec<Line<'a>>,
     selected: usize,
     has_focus: bool,
@@ -67,7 +67,7 @@ pub fn themed_tabs<'a>(
     let colors = with_theme(|t| t.colors.clone());
 
     Tabs::new(titles)
-        .block(themed_block(Some(title), has_focus))
+        .block(themed_block(title, has_focus))
         .highlight_style(
             Style::default()
                 .fg(colors.primary)

@@ -6,14 +6,13 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
 
-// TODO: replace with tokio version
-pub struct PeekableDuplex<S> {
+pub struct PeekStream<S> {
     stream: S,
     buffer: Bytes,
     consumed: usize,
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> PeekableDuplex<S> {
+impl<S: AsyncRead + AsyncWrite + Unpin> PeekStream<S> {
     pub async fn new(mut stream: S, peek_len: usize) -> io::Result<(Self, Bytes)> {
         let mut buf = vec![0u8; peek_len];
         let n = stream.read(&mut buf).await?;
@@ -29,7 +28,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> PeekableDuplex<S> {
     }
 }
 
-impl<S: AsyncRead + Unpin> AsyncRead for PeekableDuplex<S> {
+impl<S: AsyncRead + Unpin> AsyncRead for PeekStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -47,7 +46,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for PeekableDuplex<S> {
     }
 }
 
-impl<S: AsyncWrite + Unpin> AsyncWrite for PeekableDuplex<S> {
+impl<S: AsyncWrite + Unpin> AsyncWrite for PeekStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

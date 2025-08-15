@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
+use hyper::HeaderMap;
 use ratatui::{
     layout::{Constraint, Rect},
     style::{Style, Stylize},
-    text::{Line, Span, Text},
+    text::Span,
     widgets::{Cell, Clear, Row, TableState},
 };
 use tokio::sync::{
@@ -21,13 +20,13 @@ use crate::{
 };
 
 pub struct FlowDetailsHeaders {
-    headers: watch::Receiver<Option<HashMap<String, String>>>,
+    headers: watch::Receiver<Option<HeaderMap>>,
     focus: rat_focus::FocusFlag,
     table_state: TableState,
 }
 
 impl FlowDetailsHeaders {
-    pub fn new(mut req_rx: mpsc::Receiver<HashMap<String, String>>) -> Self {
+    pub fn new(mut req_rx: mpsc::Receiver<HeaderMap>) -> Self {
         let (headers_tx, headers_rx) = watch::channel(None);
 
         tokio::spawn(async move {
@@ -88,17 +87,20 @@ impl Component for FlowDetailsHeaders {
         let headers = self.headers.borrow_and_update();
         match headers.as_ref() {
             Some(headers) => {
-                let width = area.width.saturating_sub(20).max(10) as usize;
+                // let width = area.width.saturating_sub(20).max(10) as usize;
 
                 let header_style = Style::default().bold();
-                let rows = headers.iter().map(|(k, v)| {
-                    let (height, cell) = wrap_text(width, v);
-                    Row::new(vec![
-                        Cell::from(Span::styled(k.clone(), header_style)),
-                        Cell::from(cell),
+                let mut rows = vec![];
+                for (k, v) in headers {
+                    let value = v.to_str().unwrap_or("error").to_string();
+
+                    let r = Row::new(vec![
+                        Cell::from(Span::styled(k.clone().to_string(), header_style)),
+                        Cell::from(value),
                     ])
-                    .height(height as u16)
-                });
+                    .height(1_u16);
+                    rows.push(r);
+                }
                 let widths = [Constraint::Length(20), Constraint::Min(10)];
                 let table = themed_table(rows, widths, Some("Headers"), self.focus.get());
 
@@ -115,17 +117,18 @@ impl Component for FlowDetailsHeaders {
     }
 }
 
-fn wrap_text(width: usize, str: &str) -> (usize, Text) {
-    let mut lines = Vec::new();
-    let mut i = 0;
-    while i < str.len() {
-        let mut end = i + width;
-        if end > str.len() {
-            end = str.len();
-        }
-        lines.push(Line::from(&str[i..end]));
-        i += width;
-    }
-
-    (lines.len(), Text::from(lines))
-}
+// fn wrap_text(width: usize, str: String) -> (usize, Text<'static>) {
+//     let mut lines = Vec::new();
+//     let mut i = 0;
+//     while i < str.len() {
+//         let mut end = i + width;
+//         if end > str.len() {
+//             end = str.len();
+//         }
+//         let s = &str[i..end];
+//         lines.push(Line::from(s.clone()));
+//         i += width;
+//     }
+//
+//     (lines.len(), Text::from(lines))
+// }

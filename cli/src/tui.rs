@@ -111,10 +111,10 @@ impl Tui {
         let mut tick_interval = interval(Duration::from_secs_f64(1.0 / tick_rate));
         let mut render_interval = interval(Duration::from_secs_f64(1.0 / frame_rate));
 
-        // if this fails, then it's likely a bug in the calling code
-        event_tx
-            .send(Event::Init)
-            .expect("failed to send init event");
+        if event_tx.send(Event::Init).is_err() {
+            error!("Failed to send init");
+        }
+
         loop {
             let event = tokio::select! {
                 _ = cancellation_token.cancelled() => {
@@ -225,8 +225,9 @@ impl DerefMut for Tui {
     }
 }
 
+#[allow(clippy::unwrap_used)]
 impl Drop for Tui {
     fn drop(&mut self) {
-        self.exit().unwrap();
+        self.exit().unwrap()
     }
 }

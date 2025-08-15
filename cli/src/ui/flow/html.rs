@@ -4,12 +4,14 @@ use ratatui::{
     text::{Line, Span},
 };
 
-pub fn highlight_html_dom<'a, R: std::io::Read>(reader: &mut R) -> Vec<Line<'a>> {
+pub fn highlight_html_dom<'a, R: std::io::Read>(
+    reader: &mut R,
+) -> Result<Vec<Line<'a>>, std::io::Error> {
     let parser = parse_html().from_utf8();
-    let dom = parser.read_from(reader).unwrap();
+    let dom = parser.read_from(reader)?;
     let mut out = Vec::new();
     walk_node(&dom, 0, &mut out);
-    out
+    Ok(out)
 }
 
 fn walk_node(node: &NodeRef, depth: usize, out: &mut Vec<Line>) {

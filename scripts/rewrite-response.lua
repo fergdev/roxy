@@ -1,17 +1,21 @@
-function intercept_request(req)
-	print("[lua] intercept_request to:", req.url)
-	return req
+local function intercept_request(flow)
+	print("[lua] intercept_request to:", flow.request.url_pretty)
 end
 
-function intercept_response(res)
+local function intercept_response(flow)
 	print("[lua] intercept_response")
 
 	-- Overwrite the body with a custom HTML message
-	res.body = "<html><body><h1>Intercepted by Roxy</h1><p>This response was rewritten.</p></body></html>"
+	flow.response.body = "<html><body><h1>Intercepted by Roxy</h1><p>This response was rewritten.</p></body></html>"
 
 	-- Add or override a response header
-	res.headers["Content-Type"] = "text/html"
-	res.headers["X-Intercepted-By"] = "Roxy"
-
-	return res
+	flow.response.headers["Content-Type"] = "text/html"
+	flow.response.headers["X-Intercepted-By"] = "Roxy"
 end
+
+Extensions = {
+	{
+		intercept_request,
+		intercept_response,
+	},
+}

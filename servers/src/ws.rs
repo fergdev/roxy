@@ -1,69 +1,97 @@
+use std::error::Error;
+
 use futures_util::{SinkExt, StreamExt};
-use rcgen::{CertifiedKey, generate_simple_self_signed};
-use rustls::{ServerConfig, pki_types::PrivateKeyDer};
-use std::sync::Arc;
-use tokio::{net::TcpListener, task::JoinHandle};
-use tokio_rustls::TlsAcceptor;
+use roxy_shared::{
+    RoxyCA,
+    alpn::{alp_h1, alp_h2},
+    tls::TlsConfig,
+};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpListener,
+    task::JoinHandle,
+};
 use tokio_tungstenite::{WebSocketStream, accept_async, tungstenite::Message};
 use tracing::info;
 
-pub fn start_ws_server(port: u16) -> JoinHandle<()> {
-    let addr = format!("127.0.0.1:{port}");
+use crate::local_tls_acceptor;
+
+pub async fn start_ws_server(tcp_listener: TcpListener) -> Result<JoinHandle<()>, Box<dyn Error>> {
+    let addr = tcp_listener.local_addr()?;
     info!("Starting ws at {}", addr);
-    tokio::spawn(async {
-        let listener = TcpListener::bind(addr).await.unwrap();
-        while let Ok((stream, _)) = listener.accept().await {
+    let handle = tokio::spawn(async move {
+        while let Ok((stream, _)) = tcp_listener.accept().await {
             tokio::spawn(async move {
-                let ws_stream = accept_async(stream).await.expect("WS handshake failed");
-                handle_ws(ws_stream).await;
+                if let Ok(ws_stream) = accept_async(stream).await {
+                    handle_ws(ws_stream).await;
+                }
             });
         }
-    })
+    });
+    Ok(handle)
 }
 
-pub fn start_wss_server(port: u16) -> JoinHandle<()> {
-    let CertifiedKey { cert, signing_key } =
-        generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
-    let tls_config = {
-        let config = ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(
-                vec![cert.der().clone()],
-                PrivateKeyDer::try_from(signing_key.serialize_der()).unwrap(),
-            )
-            .expect("bad certs");
+pub async fn start_wss_server(
+    tcp_listener: TcpListener,
+    roxy_ca: &RoxyCA,
+    tls_config: &TlsConfig,
+) -> Result<JoinHandle<()>, Box<dyn Error>> {
+    let tls_acceptor = local_tls_acceptor(roxy_ca, tls_config, alp_h1())?;
+    let addr = tcp_listener.local_addr()?;
+    info!("Starting ws at {}", addr);
 
-        TlsAcceptor::from(Arc::new(config))
-    };
-
-    tokio::spawn(async move {
-        let addr = format!("127.0.0.1:{port}");
-        let listener = TcpListener::bind(addr).await.unwrap();
-        while let Ok((stream, _)) = listener.accept().await {
-            let tls_acceptor = tls_config.clone();
+    let handle = tokio::spawn(async move {
+        while let Ok((stream, _)) = tcp_listener.accept().await {
+            let tls_acceptor = tls_acceptor.clone();
             tokio::spawn(async move {
                 match tls_acceptor.accept(stream).await {
                     Ok(tls_stream) => {
-                        let ws_stream = accept_async(tls_stream)
-                            .await
-                            .expect("WSS handshake failed");
-                        handle_ws(ws_stream).await;
+                        if let Ok(ws_stream) = accept_async(tls_stream).await {
+                            handle_ws(ws_stream).await;
+                        }
                     }
                     Err(err) => eprintln!("TLS error: {err:?}"),
                 }
             });
         }
-    })
+    });
+
+    Ok(handle)
+}
+pub async fn start_wss_h2_server(
+    tcp_listener: TcpListener,
+    roxy_ca: &RoxyCA,
+    tls_config: &TlsConfig,
+) -> Result<JoinHandle<()>, Box<dyn Error>> {
+    let tls_acceptor = local_tls_acceptor(roxy_ca, tls_config, alp_h2())?;
+    let addr = tcp_listener.local_addr()?;
+    info!("Starting ws at {}", addr);
+
+    let handle = tokio::spawn(async move {
+        while let Ok((stream, _)) = tcp_listener.accept().await {
+            let tls_acceptor = tls_acceptor.clone();
+            tokio::spawn(async move {
+                match tls_acceptor.accept(stream).await {
+                    Ok(tls_stream) => {
+                        if let Ok(ws_stream) = accept_async(tls_stream).await {
+                            handle_ws(ws_stream).await;
+                        }
+                    }
+                    Err(err) => eprintln!("TLS error: {err:?}"),
+                }
+            });
+        }
+    });
+
+    Ok(handle)
 }
 
 async fn handle_ws<S>(ws: WebSocketStream<S>)
 where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     info!("New WebSocket connection");
-
     let (mut write, mut read) = ws.split();
-
     while let Some(Ok(msg)) = read.next().await {
         info!("Received: {:?}", msg);
         if msg.is_text() || msg.is_binary() {

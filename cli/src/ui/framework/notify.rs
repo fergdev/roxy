@@ -24,6 +24,36 @@ enum Level {
     Warning,
     Error,
 }
+const TITLE_TRACE: &str = "Trace";
+const TITLE_DEBUG: &str = "Debug";
+const TITLE_INFO: &str = "Info";
+const TITLE_WARNING: &str = "Warning";
+const TITLE_ERROR: &str = "Error";
+
+impl Level {
+    fn title(&self) -> &str {
+        match self {
+            Level::Trace => TITLE_TRACE,
+            Level::Debug => TITLE_DEBUG,
+            Level::Info => TITLE_INFO,
+            Level::Warning => TITLE_WARNING,
+            Level::Error => TITLE_ERROR,
+        }
+    }
+    fn toast_style(&self) -> Style {
+        let colors = with_theme(|t| t.colors.clone());
+        match self {
+            Level::Trace => Style::default().fg(colors.trace).bg(colors.surface),
+            Level::Debug => Style::default().fg(colors.debug).bg(colors.surface),
+            Level::Info => Style::default().fg(colors.info).bg(colors.surface),
+            Level::Warning => Style::default().fg(colors.warn).bg(colors.surface),
+            Level::Error => Style::default()
+                .fg(colors.error)
+                .bg(colors.surface)
+                .add_modifier(Modifier::BOLD),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Notification {
@@ -67,7 +97,7 @@ impl Notification {
         Self {
             level: Level::Error,
             message: msg.into(),
-            duration: Duration::from_secs(10), // TODO: make configurable
+            duration: Duration::from_secs(3), // TODO: make configurable
         }
     }
 }
@@ -87,7 +117,7 @@ pub struct Notifier {
 impl Notifier {
     pub fn new() -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<Notification>(100);
-        TOAST_SENDER.set(tx).unwrap();
+        let _ = TOAST_SENDER.set(tx); // TODO: yeah this bad, maybe no globals???
 
         Self {
             receiver: rx,
@@ -138,11 +168,11 @@ impl Notifier {
             let horizontal =
                 Layout::horizontal([Constraint::Min(0), Constraint::Length(40)]).split(layout[idx]);
 
-            let style = toast_style(&notification.notification.level);
+            let style = notification.notification.level.toast_style();
             let block = Block::default()
                 .borders(Borders::ALL)
                 .style(style)
-                .title(toast_title(&notification.notification.level))
+                .title(notification.notification.level.title())
                 .title_alignment(Alignment::Center);
 
             let paragraph = Paragraph::new(notification.notification.message.clone())
@@ -159,30 +189,6 @@ impl Notifier {
 impl Default for Notifier {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-fn toast_title(level: &Level) -> String {
-    match level {
-        Level::Trace => "Trace".to_string(),
-        Level::Debug => "Debug".to_string(),
-        Level::Info => "Info".to_string(),
-        Level::Warning => "Warning".to_string(),
-        Level::Error => "Error".to_string(),
-    }
-}
-
-fn toast_style(level: &Level) -> Style {
-    let colors = with_theme(|t| t.colors.clone());
-    match level {
-        Level::Trace => Style::default().fg(colors.trace).bg(colors.surface),
-        Level::Debug => Style::default().fg(colors.debug).bg(colors.surface),
-        Level::Info => Style::default().fg(colors.info).bg(colors.surface),
-        Level::Warning => Style::default().fg(colors.warn).bg(colors.surface),
-        Level::Error => Style::default()
-            .fg(colors.error)
-            .bg(colors.surface)
-            .add_modifier(Modifier::BOLD),
     }
 }
 

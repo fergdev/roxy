@@ -5,6 +5,7 @@ use ratatui::{
     widgets::{Paragraph, Wrap},
 };
 use roxy_proxy::flow::InterceptedResponse;
+use roxy_shared::content::content_type;
 use tokio::sync::{mpsc, watch};
 use tracing::debug;
 
@@ -70,8 +71,9 @@ impl FlowDetailsResponse {
                                 debug!("Failed to send headers: {}", e);
                             });
 
+                        let content_type = content_type(&resp.headers);
                         body_tx
-                            .send((resp.content_type(), resp.body.clone()))
+                            .send((content_type, resp.body.clone()))
                             .await
                             .unwrap_or_else(|e| {
                                 debug!("Failed to send body: {}", e);

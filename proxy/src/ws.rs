@@ -1,188 +1,128 @@
-use std::{
-    io::{self, Error},
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{io::Error, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
-use rustls::ClientConfig;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_tungstenite::{
-    Connector, accept_async, connect_async_tls_with_config, tungstenite::client::IntoClientRequest,
+use roxy_shared::tls::RustlsClientConfig;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
 };
-use tracing::error;
+use tokio_tungstenite::{
+    Connector, WebSocketStream, accept_async, connect_async_tls_with_config,
+    tungstenite::client::IntoClientRequest,
+};
+use tracing::info;
 
 use crate::{
-    cert::LoggingCertVerifier,
-    flow::{FlowConnection, FlowKind, FlowStore, WsFlow, WsMessage, WssFlow},
+    flow::{FlowConnection, FlowEvent, WsMessage},
+    proxy::FlowContext,
 };
 
 pub async fn handle_ws<S>(
-    socket_addr: SocketAddr,
+    flow_cxt: FlowContext,
     stream: S,
-    target_addr: &str,
-    flow_store: FlowStore,
-) -> io::Result<()>
+) -> Result<(), Box<dyn std::error::Error>>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    error!("Handing ws");
-    let flow = flow_store
-        .new_flow(FlowConnection { addr: socket_addr })
+    info!("Handing WS {:?}", flow_cxt.target_uri);
+
+    let flow_id = flow_cxt
+        .proxy_cxt
+        .flow_store
+        .new_ws_flow(FlowConnection {
+            addr: flow_cxt.client_addr,
+        })
         .await;
 
-    flow.write().await.kind = FlowKind::Ws(WsFlow::new());
-    flow_store.notify();
-
-    error!("Client accept");
+    info!("Client accept");
     let ws_client = accept_async(stream).await.map_err(Error::other)?;
+    let server_stream = TcpStream::connect(&flow_cxt.target_uri.host_port()).await?;
 
-    error!("server tcp connect {}", target_addr);
-    let server_stream = tokio::net::TcpStream::connect(target_addr).await?;
-
-    error!("ws server connect");
+    info!("ws server connect");
     let ws_server = tokio_tungstenite::client_async("ws://fake", server_stream)
         .await
         .map(|(ws, _resp)| ws)
         .map_err(Error::other)?;
 
-    error!("connected");
-    let (mut client_write, mut client_read) = ws_client.split();
-    let (mut server_write, mut server_read) = ws_server.split();
-
-    let to_server = async {
-        while let Some(msg) = client_read.next().await {
-            let msg = msg.map_err(Error::other)?;
-            let mut guard = flow.write().await;
-            match &mut guard.kind {
-                FlowKind::Ws(flow) => {
-                    flow.messages.push(WsMessage::client(msg.clone()));
-                }
-                _ => {
-                    panic!("Unexpected flow kind");
-                }
-            }
-            flow_store.notify();
-            server_write.send(msg).await.map_err(Error::other)?;
-        }
-        Ok::<(), Error>(())
-    };
-
-    let to_client = async {
-        while let Some(msg) = server_read.next().await {
-            let msg = msg.map_err(Error::other)?;
-            let mut guard = flow.write().await;
-            match &mut guard.kind {
-                FlowKind::Ws(flow) => {
-                    flow.messages.push(WsMessage::server(msg.clone()));
-                }
-                _ => {
-                    panic!("Unexpected flow kind");
-                }
-            }
-            flow_store.notify();
-            client_write.send(msg).await.map_err(Error::other)?;
-        }
-        Ok::<(), Error>(())
-    };
-
-    tokio::try_join!(to_server, to_client)?;
+    process_ws(flow_id, flow_cxt, ws_client, ws_server).await?;
     Ok(())
 }
 
 pub async fn handle_wss<S>(
-    socket_addr: SocketAddr,
+    flow_cxt: FlowContext,
     stream: S,
-    target_addr: &str,
-    flow_store: FlowStore,
-) -> io::Result<()>
+) -> Result<(), Box<dyn std::error::Error>>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let flow = flow_store
-        .new_flow(FlowConnection { addr: socket_addr })
+    let flow_id = flow_cxt
+        .proxy_cxt
+        .flow_store
+        .new_ws_flow(FlowConnection {
+            addr: flow_cxt.client_addr,
+        })
         .await;
 
-    flow.write().await.kind = FlowKind::Wss(WssFlow::new());
-    flow_store.notify();
+    let ws_client = accept_async(stream).await.map_err(Error::other)?;
 
-    let ws_stream = accept_async(stream)
-        .await
-        .map_err(|e| Error::other(format!("WS accept failed: {e}")))?;
+    let RustlsClientConfig {
+        cert_logger: _,
+        resolver: _,
+        client_config,
+    } = flow_cxt
+        .proxy_cxt
+        .tls_config
+        .rustls_client_config(flow_cxt.proxy_cxt.ca.roots());
 
-    let config = ClientConfig::builder()
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(LoggingCertVerifier::new()))
-        .with_no_client_auth();
+    let url = format!("wss://{}", flow_cxt.target_uri);
+    let req = url.clone().into_client_request().map_err(Error::other)?;
 
-    let url = format!("wss://{target_addr}");
+    let (ws_server, _) = connect_async_tls_with_config(
+        req,
+        None,
+        false,
+        Some(Connector::Rustls(Arc::new(client_config))),
+    )
+    .await
+    .map_err(Error::other)?;
 
-    let req = url
-        .clone()
-        .into_client_request()
-        .map_err(|e| Error::other(format!("WS accept failed: {e}")))?;
-    let (server_ws_stream, _) =
-        connect_async_tls_with_config(req, None, false, Some(Connector::Rustls(Arc::new(config))))
-            .await
-            .map_err(|e| Error::other(format!("WS connect failed: {e}")))?;
+    process_ws(flow_id, flow_cxt, ws_client, ws_server).await?;
+    Ok(())
+}
 
-    let (mut client_write, mut client_read) = ws_stream.split();
-    let (mut server_write, mut server_read) = server_ws_stream.split();
+async fn process_ws<S, T>(
+    flow_id: i64,
+    flow_cxt: FlowContext,
+    ws_client: WebSocketStream<S>,
+    ws_server: WebSocketStream<T>,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let (mut client_write, mut client_read) = ws_client.split();
+    let (mut server_write, mut server_read) = ws_server.split();
 
     let client_to_server = async {
         while let Some(msg) = client_read.next().await {
-            match msg {
-                Ok(msg) => {
-                    let mut guard = flow.write().await;
-                    match &mut guard.kind {
-                        FlowKind::Wss(flow) => {
-                            flow.messages.push(WsMessage::client(msg.clone()));
-                        }
-                        _ => {
-                            panic!("Unexpected flow kind");
-                        }
-                    }
-                    flow_store.notify();
-                    server_write
-                        .send(msg)
-                        .await
-                        .map_err(|e| Error::other(format!("WS accept failed: {e}")))?;
-                }
-                Err(e) => {
-                    // TODO: add to flow
-                    error!("WSS server read error: {}", e);
-                    break;
-                }
-            }
+            let msg = msg.map_err(Error::other)?;
+            flow_cxt.proxy_cxt.flow_store.post_event(
+                flow_id,
+                FlowEvent::WsMessage(WsMessage::client(msg.clone())),
+            );
+            server_write.send(msg).await.map_err(Error::other)?;
         }
         Ok::<_, Error>(())
     };
 
     let server_to_client = async {
         while let Some(msg) = server_read.next().await {
-            match msg {
-                Ok(msg) => {
-                    let mut guard = flow.write().await;
-                    match &mut guard.kind {
-                        FlowKind::Wss(flow) => {
-                            flow.messages.push(WsMessage::client(msg.clone()));
-                        }
-                        _ => {
-                            panic!("Unexpected flow kind");
-                        }
-                    }
-                    flow_store.notify();
-                    client_write
-                        .send(msg)
-                        .await
-                        .map_err(|e| Error::other(format!("WS accept failed: {e}")))?;
-                }
-                Err(e) => {
-                    // TODO: add to flow
-                    error!("WSS server read error: {}", e);
-                    break;
-                }
-            }
+            let msg = msg.map_err(Error::other)?;
+            flow_cxt.proxy_cxt.flow_store.post_event(
+                flow_id,
+                FlowEvent::WsMessage(WsMessage::server(msg.clone())),
+            );
+            client_write.send(msg).await.map_err(Error::other)?;
         }
         Ok::<_, Error>(())
     };
@@ -191,4 +131,6 @@ where
         res = client_to_server => res,
         res = server_to_client => res,
     }
+    .map_err(Box::new)?;
+    Ok(())
 }

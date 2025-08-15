@@ -110,7 +110,10 @@ impl Component for LogViewer {
                 ActionResult::Consumed
             }
             Action::Bottom => {
-                self.v_scroll_offset = self.logs.lock().unwrap().len();
+                if let Ok(guard) = self.logs.lock() {
+                    self.v_scroll_offset = guard.len();
+                }
+
                 ActionResult::Consumed
             }
             Action::Up => {
@@ -120,9 +123,10 @@ impl Component for LogViewer {
                 ActionResult::Consumed
             }
             Action::Down => {
-                let logs_len = self.logs.lock().unwrap().len();
-                if self.v_scroll_offset < logs_len.saturating_sub(1) {
-                    self.v_scroll_offset += 1;
+                if let Ok(guard) = self.logs.lock() {
+                    if self.v_scroll_offset < guard.len().saturating_sub(1) {
+                        self.v_scroll_offset += 1;
+                    }
                 }
                 ActionResult::Consumed
             }
@@ -146,29 +150,41 @@ impl Component for LogViewer {
         frame.render_widget(Clear, popup_area);
 
         let colors = with_theme(|t| t.colors.clone());
-        let paragraph = Paragraph::new(Text::from(
-            self.logs
-                .lock()
-                .unwrap()
-                .iter()
-                .map(|l| {
-                    let style = match l.level {
-                        tracing::Level::ERROR => ratatui::style::Style::default().fg(colors.error),
-                        tracing::Level::WARN => ratatui::style::Style::default().fg(colors.warn),
-                        tracing::Level::INFO => ratatui::style::Style::default().fg(colors.info),
-                        tracing::Level::DEBUG => ratatui::style::Style::default().fg(colors.debug),
-                        tracing::Level::TRACE => ratatui::style::Style::default().fg(colors.trace),
-                    };
-                    Line::from(l.message.clone().unwrap_or("this is bad".to_string())).style(style)
-                })
-                .collect::<Vec<_>>(),
-        ))
-        .wrap(Wrap { trim: false })
-        .scroll((self.v_scroll_offset as u16, self.h_scroll_offset as u16))
-        .alignment(Alignment::Left)
-        .block(themed_block(Some("Logs"), true));
+        if let Ok(logs) = self.logs.lock() {
+            let paragraph = Paragraph::new(Text::from(
+                logs.iter()
+                    .map(|l| {
+                        let style = match l.level {
+                            tracing::Level::ERROR => {
+                                ratatui::style::Style::default().fg(colors.error)
+                            }
+                            tracing::Level::WARN => {
+                                ratatui::style::Style::default().fg(colors.warn)
+                            }
+                            tracing::Level::INFO => {
+                                ratatui::style::Style::default().fg(colors.info)
+                            }
+                            tracing::Level::DEBUG => {
+                                ratatui::style::Style::default().fg(colors.debug)
+                            }
+                            tracing::Level::TRACE => {
+                                ratatui::style::Style::default().fg(colors.trace)
+                            }
+                        };
+                        Line::from(l.message.clone().unwrap_or("this is bad".to_string()))
+                            .style(style)
+                    })
+                    .collect::<Vec<_>>(),
+            ))
+            .wrap(Wrap { trim: false })
+            .scroll((self.v_scroll_offset as u16, self.h_scroll_offset as u16))
+            .alignment(Alignment::Left)
+            .block(themed_block(Some("Logs"), true));
+            frame.render_widget(paragraph, popup_area);
+        } else {
+            frame.render_widget(Paragraph::new("No logs"), popup_area);
+        }
 
-        frame.render_widget(paragraph, popup_area);
         Ok(())
     }
 }

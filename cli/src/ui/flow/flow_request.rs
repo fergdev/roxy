@@ -5,8 +5,9 @@ use ratatui::{
     widgets::{Clear, Paragraph, Wrap},
 };
 use roxy_proxy::flow::InterceptedRequest;
+use roxy_shared::content::content_type;
 use tokio::sync::{mpsc, watch};
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::{
     event::Action,
@@ -70,15 +71,16 @@ impl FlowDetailsRequest {
                                 debug!("Failed to send headers: {}", e);
                             });
 
+                        let content_type = content_type(&req.headers);
                         body_tx
-                            .send((req.content_type(), req.body.clone()))
+                            .send((content_type, req.body.clone()))
                             .await
                             .unwrap_or_else(|e| {
                                 debug!("Failed to send body: {}", e);
                             });
-                        debug!("Received request: {}", req.line_pretty());
+                        trace!("Received request: {}", req.line_pretty());
                     } else {
-                        debug!("Received None request");
+                        trace!("Received None request");
                     }
                 }
             }

@@ -1,59 +1,112 @@
-use std::{collections::HashMap, fmt::Display, net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 
-use http::Uri;
+use http::StatusCode;
+use http::header::{CONTENT_LENGTH, TRANSFER_ENCODING};
+use roxy_shared::alpn::AlpnProtocol;
+
+use roxy_shared::body::create_http_body;
+use roxy_shared::cert::CapturedClientHello;
+use roxy_shared::cert::CapturedResolveClientCert;
+use roxy_shared::cert::ClientTlsConnectionData;
+use roxy_shared::cert::ClientVerificationCapture;
+use roxy_shared::cert::ServerTlsConnectionData;
+use roxy_shared::cert::ServerVerificationCapture;
+use roxy_shared::content::get_content_encoding;
+use roxy_shared::content::{Encodings, decode_body};
+use roxy_shared::http::{HttpEmitter, HttpEvent};
+use roxy_shared::uri::RUri;
+use roxy_shared::uri::Scheme;
+
+use http::HeaderMap;
 use once_cell::sync::Lazy;
+use roxy_shared::body::BytesBody;
 use snowflake::SnowflakeIdGenerator;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{Mutex, RwLock, watch};
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{info, warn};
+use tracing::error;
+use tracing::warn;
+
+use crate::proxy::FlowContext;
 
 static ID_GENERATOR: Lazy<Mutex<SnowflakeIdGenerator>> = Lazy::new(|| {
     let generator = SnowflakeIdGenerator::new(1, 1);
     Mutex::new(generator)
 });
 
-pub async fn next_id() -> i64 {
+async fn next_id() -> i64 {
     ID_GENERATOR.lock().await.generate()
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FlowStore {
     pub flows: Arc<DashMap<i64, Arc<RwLock<Flow>>>>,
     pub ordered_ids: Arc<RwLock<Vec<i64>>>,
     pub notifier: watch::Sender<()>,
+    pub notifier_new_flow: watch::Sender<()>,
+    event_tx: UnboundedSender<(i64, FlowEvent)>,
 }
 
 impl FlowStore {
     pub fn new() -> Self {
         let (notifier, _) = watch::channel(());
-        Self {
+        let (notifier_new_flow, _) = watch::channel(()); // TODO: write this
+        let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+        let s = Self {
             flows: Arc::new(DashMap::new()),
             ordered_ids: Arc::new(RwLock::new(Vec::new())),
             notifier,
-        }
+            notifier_new_flow,
+            event_tx,
+        };
+
+        s.event_proc(event_rx);
+        s
     }
-    pub async fn new_flow(&self, client_connect: FlowConnection) -> Arc<RwLock<Flow>> {
+
+    pub async fn new_flow_cxt(&self, cxt: &FlowContext, req: InterceptedRequest) -> i64 {
         let id = next_id().await;
-        let flow = Arc::new(RwLock::new(Flow::new(id, client_connect)));
+        let mut flow = Flow::new(
+            id,
+            FlowConnection {
+                addr: cxt.client_addr,
+            },
+            Some(req),
+        );
+
+        flow.certs = cxt.certs.clone();
+
+        let flow = Arc::new(RwLock::new(flow));
         self.flows.insert(id, flow.clone());
         self.ordered_ids.write().await.push(id);
-        flow
+        self.notify();
+        id
     }
-    pub async fn add_flow(&self, flow: Flow) {
-        self.flows.insert(flow.id, Arc::new(RwLock::new(flow)));
-        let _ = self.notifier.send(());
+
+    pub async fn new_ws_flow(&self, client_connect: FlowConnection) -> i64 {
+        let id = next_id().await;
+        let flow = Arc::new(RwLock::new(Flow::new(id, client_connect, None)));
+        self.flows.insert(id, flow.clone());
+        self.ordered_ids.write().await.push(id);
+        self.notify();
+        id
     }
 
     pub async fn get_flow_by_id(&self, id: i64) -> Option<Arc<RwLock<Flow>>> {
         self.flows.get(&id).map(|f| f.value().clone())
     }
 
-    pub fn notify(&self) {
-        info!("notify");
+    pub fn post_event(&self, flow_id: i64, event: FlowEvent) {
+        if let Err(err) = self.event_tx.send((flow_id, event)) {
+            error!("Error posting event {err} {flow_id}");
+        }
+    }
+
+    fn notify(&self) {
         self.notifier.send(()).unwrap_or_else(|_| {
             warn!("Failed to notify subscribers, channel closed");
         });
@@ -62,6 +115,81 @@ impl FlowStore {
     pub fn subscribe(&self) -> watch::Receiver<()> {
         self.notifier.subscribe()
     }
+
+    #[allow(clippy::expect_used)]
+    fn event_proc(&self, mut event_rx: UnboundedReceiver<(i64, FlowEvent)>) {
+        let fs = self.clone();
+        tokio::spawn(async move {
+            while let Some((flow_id, event)) = event_rx.recv().await {
+                let flow = fs.flows.get(&flow_id).expect("FlowId not in map {flow_id}");
+
+                let mut guard = flow.write().await;
+                match event {
+                    FlowEvent::HttpEvent(inner) => match inner {
+                        HttpEvent::TcpConnect(addr) => {
+                            guard.server_connection = Some(FlowConnection { addr });
+                            guard.timing.server_conn_tcp_handshake = Some(Utc::now());
+                        }
+                        HttpEvent::ClientHttpHandshakeStart => {
+                            guard.timing.server_conn_http_handshake = Some(Utc::now());
+                        }
+                        HttpEvent::ClientHttpHandshakeComplete => {}
+                        HttpEvent::ClientTlsConn(tls_conn_data, server_verification) => {
+                            guard.certs.server_tls = Some(tls_conn_data);
+                            guard.certs.server_verification = Some(server_verification);
+                            guard.timing.server_conn_tls_handshake = Some(Utc::now());
+                        }
+                        HttpEvent::ServerTlsConn(_server_tls_conn, _client_verification) => {
+                            // TODO: this is captured earlier in the flow
+                            // guard.certs.client_tls = Some(server_tls_conn);
+                            // guard.certs.client_verification = Some(client_verification);
+                        }
+                        HttpEvent::ServerTlsConnInitiated => {
+                            guard.timing.server_conn_tls_initiated = Some(Utc::now())
+                        }
+                        HttpEvent::ClientTlsHandshake => {
+                            guard.timing.client_conn_tls_handshake = Some(Utc::now());
+                        }
+                    },
+                    FlowEvent::Response(resp) => {
+                        guard.response = Some(resp);
+                    }
+                    FlowEvent::WsMessage(wsm) => {
+                        guard.messages.push(wsm);
+                    }
+                }
+                drop(guard);
+
+                fs.notify();
+            }
+        });
+    }
+}
+
+#[derive(Debug)]
+pub struct FlowEventEmitter {
+    id: i64,
+    flow_store: FlowStore,
+}
+
+impl FlowEventEmitter {
+    pub fn new(id: i64, flow_store: FlowStore) -> Self {
+        Self { id, flow_store }
+    }
+}
+
+impl HttpEmitter for FlowEventEmitter {
+    fn emit(&self, event: roxy_shared::http::HttpEvent) {
+        self.flow_store
+            .post_event(self.id, FlowEvent::HttpEvent(event));
+    }
+}
+
+#[derive(Debug)]
+pub enum FlowEvent {
+    Response(InterceptedResponse),
+    WsMessage(WsMessage),
+    HttpEvent(HttpEvent),
 }
 
 impl Default for FlowStore {
@@ -70,102 +198,58 @@ impl Default for FlowStore {
     }
 }
 
+#[derive(Debug)]
 pub struct Flow {
     pub id: i64,
     pub timing: Timing,
+
     pub client_connection: FlowConnection,
+    pub request: Option<InterceptedRequest>,
+
     pub server_connection: Option<FlowConnection>,
-    pub connect: Option<InterceptedRequest>,
+    pub response: Option<InterceptedResponse>,
+
     pub error: Option<String>,
-    pub leaf: Option<Bytes>,
-    pub kind: FlowKind,
+
+    pub certs: FlowCerts,
+
+    pub messages: Vec<WsMessage>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Default, Clone)]
+pub struct FlowCerts {
+    pub client_hello: Option<CapturedClientHello>,
+    pub client_verification: Option<ClientVerificationCapture>,
+    pub client_tls: Option<ServerTlsConnectionData>,
+
+    pub server_resolve_client_cert: Option<CapturedResolveClientCert>,
+    pub server_verification: Option<ServerVerificationCapture>,
+    pub server_tls: Option<ClientTlsConnectionData>,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct FlowConnection {
     pub addr: SocketAddr,
 }
 
 impl Flow {
-    pub fn new(id: i64, client_connection: FlowConnection) -> Self {
+    fn new(
+        id: i64,
+        client_connection: FlowConnection,
+        request: Option<InterceptedRequest>,
+    ) -> Self {
         Self {
             id,
             timing: Timing::default(),
             client_connection,
             server_connection: None,
-            kind: FlowKind::Unknown,
-            connect: None,
+            request,
+            response: None,
+            certs: FlowCerts::default(),
             error: None,
-            leaf: None,
+            messages: vec![],
         }
     }
-}
-
-pub enum FlowKind {
-    Http(HttpFlow),
-    Https(HttpsFlow),
-    Http2(Http2Flow),
-
-    Ws(WsFlow),
-    Wss(WssFlow),
-
-    Unknown,
-}
-
-pub struct HttpFlow {
-    pub request: InterceptedRequest,
-    pub response: Option<InterceptedResponse>,
-}
-
-impl HttpFlow {
-    pub fn new(request: InterceptedRequest) -> Self {
-        Self {
-            request,
-            response: None,
-        }
-    }
-}
-
-pub struct HttpsFlow {
-    pub request: InterceptedRequest,
-    pub response: Option<InterceptedResponse>,
-    pub tls_metadata: Option<TlsMetadata>,
-    pub cert_info: Vec<Bytes>,
-}
-
-impl HttpsFlow {
-    pub fn new(request: InterceptedRequest) -> Self {
-        Self {
-            request,
-            response: None,
-            tls_metadata: None,
-            cert_info: Vec::new(),
-        }
-    }
-}
-
-pub struct WsFlow {
-    pub messages: Vec<WsMessage>,
-}
-
-impl WsFlow {
-    pub fn new() -> Self {
-        Self {
-            messages: Vec::new(),
-        }
-    }
-}
-
-impl Default for WsFlow {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub struct WssFlow {
-    pub messages: Vec<WsMessage>,
-    pub cert_info: Vec<Bytes>,
-    pub tls_metadata: Option<TlsMetadata>,
 }
 
 #[derive(Debug, Clone)]
@@ -198,377 +282,196 @@ pub enum WsDirection {
     Server,
 }
 
-impl WssFlow {
-    pub fn new() -> Self {
-        Self {
-            messages: Vec::new(),
-            cert_info: Vec::new(),
-            tls_metadata: None,
-        }
-    }
-}
-
-impl Default for WssFlow {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub struct Http2Flow {
-    pub request: InterceptedRequest,
-    pub response: Option<InterceptedResponse>,
-    pub cert_info: Vec<Bytes>,
-    pub tls_metadata: Option<TlsMetadata>,
-}
-
-impl Http2Flow {
-    pub fn new(req: InterceptedRequest) -> Self {
-        Self {
-            request: req,
-            response: None,
-            cert_info: Vec::new(),
-            tls_metadata: None,
-        }
-    }
-}
-
+#[derive(Debug, Default, Clone)]
 pub struct TlsMetadata {
     pub sni: Option<String>,
     pub alpn: Option<String>,
     pub negotiated_cipher: Option<String>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Timing {
     pub client_conn_established: Option<DateTime<Utc>>,
+    pub client_conn_tls_handshake: Option<DateTime<Utc>>,
+
     pub server_conn_initiated: Option<DateTime<Utc>>,
     pub server_conn_tcp_handshake: Option<DateTime<Utc>>,
+
+    pub server_conn_tls_initiated: Option<DateTime<Utc>>,
     pub server_conn_tls_handshake: Option<DateTime<Utc>>,
-    pub client_conn_tls_handshake: Option<DateTime<Utc>>,
-    pub first_reques_byte: Option<DateTime<Utc>>,
-    pub request_complet_: Option<DateTime<Utc>>,
-    pub first_respons_byte: Option<DateTime<Utc>>,
-    pub response_complet_: Option<DateTime<Utc>>,
+
+    pub server_conn_http_handshake: Option<DateTime<Utc>>,
+
+    pub first_request_bytes: Option<DateTime<Utc>>,
+    pub request_complete: Option<DateTime<Utc>>,
+
+    pub first_response_bytes: Option<DateTime<Utc>>,
+    pub response_complete: Option<DateTime<Utc>>,
+
     pub client_conn_closed: Option<DateTime<Utc>>,
     pub server_conn_closed: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone)]
-pub enum Scheme {
-    Http,
-    Https,
-}
-
-impl Display for Scheme {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Scheme::Http => "http".to_string(),
-            Scheme::Https => "https".to_string(),
-        };
-        write!(f, "{s}")
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterceptedRequest {
     pub timestamp: DateTime<Utc>,
-    pub scheme: Scheme,
-    pub host: String,
-    pub port: u16,
-    pub path: String,
-    pub method: String,
-    pub version: u8,
-    pub headers: HashMap<String, String>,
+    pub uri: RUri,
+    pub encoding: Option<Vec<Encodings>>,
+    pub alpn: AlpnProtocol,
+    pub method: http::Method,
+    pub version: http::Version,
+    pub headers: HeaderMap,
     pub body: bytes::Bytes,
+    pub trailers: Option<HeaderMap>,
 }
 
 impl InterceptedRequest {
     pub fn from_http(
-        scheme: Scheme,
-        parts: &http::request::Parts,
-        host: &str,
-        port: u16,
-        body_bytes: &bytes::Bytes,
+        uri: RUri,
+        alpn: AlpnProtocol,
+        parts: http::request::Parts,
+        body_bytes: bytes::Bytes,
+        trailers: Option<HeaderMap>,
     ) -> Self {
+        let encoding = get_content_encoding(&parts.headers);
+
+        let body = match encoding.clone() {
+            Some(enc) => match decode_body(&body_bytes, &enc) {
+                Ok(body) => body,
+                Err(e) => {
+                    warn!("Failed to decode body encoding  err: '{e}'");
+                    body_bytes
+                }
+            },
+            None => body_bytes,
+        };
+        let mut headers = parts.headers;
+        headers.remove(CONTENT_LENGTH);
+        headers.remove(TRANSFER_ENCODING);
+
         InterceptedRequest {
             timestamp: Utc::now(),
-            scheme,
-            host: parts.uri.host().unwrap_or(host).to_string(),
-            port: parts.uri.port_u16().unwrap_or(port),
-            path: parts.uri.path().to_string(),
-            method: parts.method.to_string(),
-            version: match parts.version {
-                http::Version::HTTP_10 => 0,
-                http::Version::HTTP_11 => 1,
-                http::Version::HTTP_2 => 2,
-                _ => 3,
-            },
-            headers: parts
-                .headers
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-                .collect(),
-            body: body_bytes.clone(),
-        }
-    }
-
-    pub fn uri(&self) -> Result<Uri, http::Error> {
-        Uri::builder()
-            .scheme(self.scheme.to_string().as_str())
-            .authority(self.host.clone())
-            .path_and_query(self.path.clone())
-            .build()
-    }
-    pub fn uri_https(&self) -> Result<Uri, http::Error> {
-        Uri::builder()
-            .scheme("http")
-            .authority(self.host.clone())
-            .path_and_query(self.path.clone())
-            .build()
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        timestamp: DateTime<Utc>,
-        scheme: Scheme,
-        host: String,
-        port: u16,
-        path: String,
-        method: String,
-        version: u8,
-        headers: HashMap<String, String>,
-        body: bytes::Bytes,
-    ) -> Self {
-        Self {
-            timestamp,
-            scheme,
-            host,
-            port,
-            path,
-            method,
-            version,
+            uri: uri.clone(),
+            encoding,
+            alpn,
+            method: parts.method,
+            version: parts.version,
             headers,
             body,
+            trailers,
         }
     }
 
-    pub fn version_str(&self) -> &str {
-        match self.version {
-            0 => "1.0",
-            1 => "1.1",
-            _ => "1.1", // fallback
+    pub fn scheme(&self) -> Scheme {
+        if self.uri.scheme_str().is_some() {
+            return self.uri.scheme();
+        }
+        if self.alpn.is_tls() {
+            Scheme::Https
+        } else {
+            Scheme::Http
         }
     }
 
     pub fn line_pretty(&self) -> String {
-        let scheme_str = match self.scheme {
-            Scheme::Http => "http",
-            Scheme::Https => "https",
-        };
-
-        format!(
-            "{} {}://{}:{}{} HTTP/{}",
-            self.method,
-            scheme_str,
-            self.host,
-            self.port,
-            self.path,
-            self.version_str()
-        )
+        self.uri.inner.to_string()
     }
 
-    pub fn content_type(&self) -> ContentType {
-        parse_content_type(&self.headers)
-    }
+    pub fn request_builder(&self) -> http::request::Builder {
+        let parts = format!(
+            "{}://{}:{}{}",
+            self.uri.scheme(),
+            self.uri.host(),
+            self.uri.port(),
+            self.uri.path_and_query()
+        );
 
-    pub fn request_line(&self) -> String {
-        match self.scheme {
-            Scheme::Http => {
-                format!(
-                    "{} {}://{}:{}{} HTTP/{}",
-                    self.method,
-                    "http",
-                    self.host,
-                    self.port,
-                    self.path,
-                    self.version_str()
-                )
-            }
-            Scheme::Https => {
-                format!("{} {} HTTP/{}", self.method, self.path, self.version_str())
-            }
+        let mut builder = http::Request::builder()
+            .method(self.method.clone())
+            .uri(parts)
+            .version(self.version);
+
+        for (key, value) in self.headers.iter() {
+            builder = builder.header(key, value);
         }
+        builder
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        out.extend_from_slice(self.request_line().as_bytes());
-        out.extend_from_slice(b"\r\n");
-
-        let mut headers = self.headers.clone();
-
-        headers.remove("Content-Length");
-        headers.remove("content-length");
-
-        headers.remove("Host");
-        headers.remove("host");
-
-        headers.insert("Host".to_string(), self.host.to_string());
-
-        headers.insert("Content-Length".to_string(), self.body.len().to_string());
-
-        for (k, v) in &headers {
-            out.extend_from_slice(format!("{k}: {v}\r\n").as_bytes());
-        }
-
-        out.extend_from_slice(b"\r\n");
-        out.extend_from_slice(self.body.as_ref());
-
-        out
-    }
-
-    pub fn target_host(&self) -> String {
-        format!("{}:{}", self.host, self.port)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct InterceptedResponse {
-    pub timestamp: DateTime<Utc>,
-    pub status: u16,
-    pub reason: String,
-    pub version: u8,
-    pub headers: HashMap<String, String>,
-    pub body: bytes::Bytes,
-}
-
-impl InterceptedResponse {
-    pub fn from_http(parts: &http::response::Parts, body_bytes: &bytes::Bytes) -> Self {
-        InterceptedResponse {
-            timestamp: Utc::now(),
-            status: parts.status.as_u16(),
-            reason: parts.status.canonical_reason().unwrap_or("").to_string(),
-            version: match parts.version {
-                http::Version::HTTP_10 => 0,
-                http::Version::HTTP_11 => 1,
-                http::Version::HTTP_2 => 2,
-                http::Version::HTTP_3 => 2,
-                _ => 1, // fallback
-            },
-            headers: parts
-                .headers
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-                .collect(),
-            body: body_bytes.clone(),
-        }
-    }
-
-    pub fn request_line(&self) -> String {
-        let version_str = match self.version {
-            0 => "1.0",
-            1 => "1.1",
-            _ => "1.1", // default fallback
-        };
-        format!("HTTP/{} {} {}", version_str, self.status, self.reason)
-    }
-
-    pub fn mapped_headers(&self) -> HashMap<String, String> {
-        let mut headers = self.headers.clone();
-
-        headers.remove("Content-Length");
-        headers.remove("content-length");
-        headers.insert("Content-Length".to_string(), self.body.len().to_string());
-        headers
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        out.extend_from_slice(self.request_line().as_bytes());
-        out.extend_from_slice(b"\r\n");
-
-        let mut headers = self.headers.clone();
-
-        headers.remove("Content-Length");
-        headers.remove("content-length");
-        headers.insert("Content-Length".to_string(), self.body.len().to_string());
-
-        for (k, v) in &headers {
-            out.extend_from_slice(format!("{k}: {v}\r\n").as_bytes());
-        }
-
-        out.extend_from_slice(b"\r\n");
-        if !self.body.is_empty() {
-            out.extend_from_slice(self.body.as_ref());
-            out.extend_from_slice(b"\r\n");
-        }
-
-        out
-    }
-
-    pub fn content_type(&self) -> ContentType {
-        parse_content_type(&self.headers)
+    pub fn request(&self) -> Result<http::Request<BytesBody>, http::Error> {
+        self.request_builder().body(create_http_body(
+            self.body.clone(),
+            self.encoding.clone(),
+            self.trailers.clone(),
+        ))
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ContentType {
-    Bmp,
-    Csv,
-    Tsv,
-    Gif,
-    Html,
-    Jpeg,
-    Json,
-    Md,
-    Png,
-    Text,
-    Toml,
-    Unknown,
-    Webp,
-    XIcon,
-    Xml,
-    Yaml,
+pub struct InterceptedResponse {
+    pub timestamp: DateTime<Utc>,
+    pub status: StatusCode,
+    pub version: http::Version,
+    pub headers: HeaderMap,
+    pub encoding: Option<Vec<Encodings>>,
+    pub body: bytes::Bytes,
+    pub trailers: Option<HeaderMap>,
 }
 
-pub fn parse_content_type(headers: &HashMap<String, String>) -> ContentType {
-    let content_type = headers
-        .get("Content-Type")
-        .or_else(|| headers.get("content-type"))
-        .map(|s| s.to_ascii_lowercase())
-        .unwrap_or_default();
+impl InterceptedResponse {
+    pub fn from_http(
+        parts: http::response::Parts,
+        body_bytes: bytes::Bytes,
+        trailers: Option<HeaderMap>,
+    ) -> Self {
+        let encoding = get_content_encoding(&parts.headers);
+        let body = match &encoding {
+            Some(enc) => match decode_body(&body_bytes, enc) {
+                Ok(body) => body,
+                Err(e) => {
+                    warn!("Failed to decode body encoding err: '{e}'");
+                    body_bytes
+                }
+            },
+            None => body_bytes,
+        };
 
-    if content_type.contains("json") {
-        ContentType::Json
-    } else if content_type.contains("bmp") {
-        ContentType::Bmp
-    } else if content_type.contains("xml") {
-        ContentType::Xml
-    } else if content_type.contains("csv") {
-        ContentType::Csv
-    } else if content_type.contains("tab-separated-values") {
-        ContentType::Tsv
-    } else if content_type.contains("markdown") {
-        ContentType::Md
-    } else if content_type.contains("html") {
-        ContentType::Html
-    } else if content_type.contains("toml") {
-        ContentType::Toml
-    } else if content_type.contains("x-yaml") {
-        ContentType::Yaml
-    } else if content_type.contains("png") {
-        ContentType::Png
-    } else if content_type.contains("jpeg") {
-        ContentType::Webp
-    } else if content_type.contains("gif") {
-        ContentType::Gif
-    } else if content_type.contains("webp") {
-        ContentType::Jpeg
-    } else if content_type.contains("x-icon") {
-        ContentType::XIcon
-    } else if content_type.contains("text") || content_type.starts_with("text/") {
-        ContentType::Text
-    } else {
-        ContentType::Unknown
+        let mut headers = parts.headers;
+        headers.remove(CONTENT_LENGTH);
+        headers.remove(TRANSFER_ENCODING);
+
+        InterceptedResponse {
+            timestamp: Utc::now(),
+            status: parts.status,
+            version: parts.version,
+            headers,
+            encoding,
+            body,
+            trailers,
+        }
+    }
+
+    pub fn request_line(&self) -> String {
+        format!("{:?} {}", self.version, self.status)
+    }
+
+    pub fn response_builder(&self) -> http::response::Builder {
+        let mut builder = http::Response::builder()
+            .status(self.status)
+            .version(self.version);
+
+        for (key, value) in self.headers.iter() {
+            builder = builder.header(key, value)
+        }
+        builder
+    }
+
+    pub fn response(&self) -> Result<http::Response<BytesBody>, http::Error> {
+        let builder = self.response_builder();
+
+        builder.body(create_http_body(
+            self.body.clone(),
+            self.encoding.clone(),
+            self.trailers.clone(),
+        ))
     }
 }

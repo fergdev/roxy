@@ -36,14 +36,14 @@ static INIT_TRACING: Once = Once::new();
 pub fn initialize_logging() -> Result<()> {
     initialize_logging_with_layer(None)
 }
+#[allow(clippy::expect_used)]
 pub fn initialize_logging_with_layer(layer: Option<UiLogLayer>) -> Result<()> {
     INIT_TRACING.call_once(|| {
         println!("Initializing logging for {}", env!("CARGO_PKG_NAME"));
         let directory = get_data_dir();
-        std::fs::create_dir_all(directory.clone()).unwrap();
+        std::fs::create_dir_all(directory.clone()).expect("Could not create logging dir");
         let log_path = directory.join(LOG_FILE.clone());
-        println!("log {}", log_path.to_string_lossy());
-        let log_file = std::fs::File::create(log_path).unwrap();
+        let log_file = std::fs::File::create(log_path).expect("Could not create log file");
         unsafe {
             std::env::set_var(
                 "RUST_LOG",

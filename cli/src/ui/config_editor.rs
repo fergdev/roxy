@@ -9,7 +9,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Cell, Clear, Row, TableState},
+    widgets::{Cell, Clear, Paragraph, Row, TableState},
 };
 
 use crate::{
@@ -53,7 +53,7 @@ impl ConfigTab {
         let all_tabs = Self::all();
         let index = self.index();
         if index == 0 {
-            all_tabs.last().unwrap().to_owned()
+            Self::Theme // TODO: not great, but doesn't unwrap
         } else {
             all_tabs[index - 1]
         }
@@ -63,7 +63,7 @@ impl ConfigTab {
         let all_tabs = Self::all();
         let index = self.index();
         if index == all_tabs.len() - 1 {
-            all_tabs.first().unwrap().to_owned()
+            Self::App // TODO: not great, but doesn't unwrap
         } else {
             all_tabs[index + 1]
         }
@@ -128,10 +128,6 @@ impl ConfigEditor {
         }
     }
 
-    fn curr_fields(&mut self) -> &mut Vec<EditableConfigField> {
-        self.fields.get_mut(&self.curr_tab).unwrap()
-    }
-
     fn on_up(&mut self) {
         if self.is_editing() {
             return;
@@ -152,7 +148,12 @@ impl ConfigEditor {
             return;
         };
         let new_val = self.input_buffer.trim().to_string(); // only immutable
-        let fields = self.curr_fields();
+        let fields = match self.fields.get_mut(&self.curr_tab) {
+            Some(f) => f,
+            None => {
+                return;
+            }
+        };
 
         let field = &mut fields[selected];
         field.editing = !field.editing;
@@ -273,11 +274,13 @@ impl From<&RoxyConfig> for HashMap<ConfigTab, Vec<EditableConfigField>> {
         let mut keybinds_fields = Vec::new();
         cfg.keybindings.iter().for_each(|(_section, binds)| {
             for (key, action) in binds {
-                keybinds_fields.push(EditableConfigField {
-                    key: action.to_string(), // TODO: yep should be vec
-                    value: ConfigValue::String(key_event_to_string(key.first().unwrap())), // TODO: yep should be vec
-                    editing: false,
-                });
+                if let Some(key) = key.first() {
+                    keybinds_fields.push(EditableConfigField {
+                        key: action.to_string(), // TODO: yep should be vec
+                        value: ConfigValue::String(key_event_to_string(key)), // TODO: yep should be vec
+                        editing: false,
+                    });
+                }
             }
         });
         fields.insert(ConfigTab::KeyBinds, keybinds_fields);
@@ -500,63 +503,73 @@ impl Component for ConfigEditor {
         frame.render_widget(Clear, popup_area);
 
         let current_tab = self.curr_tab;
-        let visible_fields = self.fields.get(&current_tab).unwrap();
 
         let tab_titles: Vec<Line> = ConfigTab::all()
             .iter()
             .map(|t| Line::raw(t.title()))
             .collect();
 
-        let tabs = themed_tabs("Config", tab_titles, current_tab.index(), true);
+        let tabs = themed_tabs(Some("Config"), tab_titles, current_tab.index(), true);
 
         let chunks =
             Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(popup_area);
 
         frame.render_widget(tabs, chunks[0]);
-        let rows: Vec<Row> = visible_fields
-            .iter()
-            .map(|field| {
-                let key = field.key.clone();
 
-                let value = if field.editing {
-                    format!("(editing) {}", self.input_buffer)
-                } else {
-                    match &field.value {
-                        ConfigValue::Color(c) => format!("{c}"),
-                        ConfigValue::String(s) => s.clone(),
-                        ConfigValue::U16(n) => n.to_string(),
-                        ConfigValue::Bool(b) => b.to_string(),
-                        ConfigValue::Path(p) => p.display().to_string(),
-                    }
-                };
+        match self.fields.get(&current_tab) {
+            Some(fields) => {
+                let rows: Vec<Row> = fields
+                    .iter()
+                    .map(|field| {
+                        let key = field.key.clone();
 
-                let value_span = match &field.value {
-                    ConfigValue::Color(color) => Span::styled(value, Style::default().fg(*color)),
-                    ConfigValue::String(s) => Span::raw(s.clone()),
-                    _ => Span::raw(value),
-                };
+                        let value = if field.editing {
+                            format!("(editing) {}", self.input_buffer)
+                        } else {
+                            match &field.value {
+                                ConfigValue::Color(c) => format!("{c}"),
+                                ConfigValue::String(s) => s.clone(),
+                                ConfigValue::U16(n) => n.to_string(),
+                                ConfigValue::Bool(b) => b.to_string(),
+                                ConfigValue::Path(p) => p.display().to_string(),
+                            }
+                        };
 
-                let colors = with_theme(|t| t.colors.clone());
-                Row::new(vec![Cell::from(Span::raw(key)), Cell::from(value_span)]).style(
-                    if field.editing {
-                        Style::default()
-                            .bg(colors.surface)
-                            .fg(colors.primary)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().bg(colors.surface).fg(colors.on_surface)
-                    },
-                )
-            })
-            .collect();
+                        let value_span = match &field.value {
+                            ConfigValue::Color(color) => {
+                                Span::styled(value, Style::default().fg(*color))
+                            }
+                            ConfigValue::String(s) => Span::raw(s.clone()),
+                            _ => Span::raw(value),
+                        };
 
-        let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
+                        let colors = with_theme(|t| t.colors.clone());
+                        Row::new(vec![Cell::from(Span::raw(key)), Cell::from(value_span)]).style(
+                            if field.editing {
+                                Style::default()
+                                    .bg(colors.surface)
+                                    .fg(colors.primary)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().bg(colors.surface).fg(colors.on_surface)
+                            },
+                        )
+                    })
+                    .collect();
 
-        frame.render_stateful_widget(
-            themed_table(rows, widths, None, true),
-            chunks[1],
-            &mut self.table_state,
-        );
+                let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
+
+                frame.render_stateful_widget(
+                    themed_table(rows, widths, None, true),
+                    chunks[1],
+                    &mut self.table_state,
+                );
+            }
+            None => {
+                let empty_paragrah = Paragraph::new("No fields");
+                frame.render_widget(empty_paragrah, area);
+            }
+        }
 
         Ok(())
     }

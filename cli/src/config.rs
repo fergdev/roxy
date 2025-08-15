@@ -1,8 +1,11 @@
 use clap::Parser;
+use config::ConfigError;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
 use serde::ser::SerializeMap;
 use std::env;
+use std::error::Error;
+use std::fmt::Display;
 use std::{collections::HashMap, path::PathBuf};
 use tokio::sync::watch;
 use tracing::{debug, error, info};
@@ -130,8 +133,39 @@ pub struct ConfigManager {
     pub rx: watch::Receiver<RoxyConfig>,
 }
 
+#[derive(Debug)]
+pub enum RoxyConfigError {
+    ReadError,
+    WriteError,
+    ConfigError,
+    Deserialize,
+    InvalidFormat,
+}
+
+impl From<ConfigError> for RoxyConfigError {
+    fn from(_value: ConfigError) -> Self {
+        RoxyConfigError::ConfigError
+    }
+}
+
+impl Error for RoxyConfigError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+
+    fn cause(&self) -> Option<&dyn Error> {
+        self.source()
+    }
+}
+
+impl Display for RoxyConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 impl ConfigManager {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Result<Self, RoxyConfigError> {
         info!("Initializing ConfigManager with default config");
         info!("Initializing ConfigManager {}", CONFIG);
         let args = RoxyArgs::parse();
@@ -158,7 +192,7 @@ impl ConfigManager {
         Ok(manager)
     }
 
-    fn read_from_disk() -> anyhow::Result<RoxyConfig> {
+    fn read_from_disk() -> Result<RoxyConfig, ConfigError> {
         let rc = RoxyConfig::new()?;
         Ok(rc)
     }
@@ -183,17 +217,18 @@ impl ConfigManager {
         // });
     }
 
-    pub fn persist(&self, updated: &RoxyConfig) -> anyhow::Result<()> {
+    pub fn persist(&self, updated: &RoxyConfig) -> Result<(), RoxyConfigError> {
         debug!("Persisting updated config: {:?}", updated);
         write_config(&updated).map_err(|e| {
             error!("Failed to write config: {}", e);
-            anyhow::anyhow!("Failed to write config: {}", e)
+
+            RoxyConfigError::WriteError
         })?;
 
         Ok(())
     }
 
-    pub fn update(&self, new_config: RoxyConfig) -> anyhow::Result<()> {
+    pub fn update(&self, new_config: RoxyConfig) -> Result<(), RoxyConfigError> {
         self.tx.send_replace(new_config.clone());
         self.persist(&new_config)?;
         Ok(())
@@ -208,7 +243,6 @@ fn get_config_file_path() -> (PathBuf, config::FileFormat) {
         ("config.json", config::FileFormat::Json),
     ];
 
-    // Reuse existing file if found
     let target = config_files
         .iter()
         .map(|(name, format)| (config_dir.join(name), format))
@@ -217,30 +251,33 @@ fn get_config_file_path() -> (PathBuf, config::FileFormat) {
     match target {
         Some((p, f)) => (p.clone(), *f),
         None => {
-            // fallback: use TOML
             let fallback_path = config_dir.join("config.json");
             (fallback_path, config::FileFormat::Json)
         }
     }
 }
 
-fn write_config<T: serde::Serialize>(config: &T) -> std::io::Result<()> {
+fn write_config<T: serde::Serialize>(config: &T) -> Result<(), RoxyConfigError> {
     let (path, format) = get_config_file_path();
 
     debug!("Writing config to: {:?}", path);
     debug!("Using format: {:?}", format);
     // Create parent directories
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).map_err(|_| RoxyConfigError::WriteError)?;
     }
 
     let serialized = match format {
-        config::FileFormat::Toml => toml::to_string_pretty(config).unwrap(),
-        config::FileFormat::Json => serde_json::to_string_pretty(config).unwrap(),
-        _ => panic!("Unsupported config format"),
+        config::FileFormat::Toml => {
+            toml::to_string_pretty(config).map_err(|_| RoxyConfigError::Deserialize)?
+        }
+        config::FileFormat::Json => {
+            serde_json::to_string_pretty(config).map_err(|_| RoxyConfigError::Deserialize)?
+        }
+        _ => return Err(RoxyConfigError::InvalidFormat),
     };
 
-    std::fs::write(&path, serialized)?;
+    std::fs::write(&path, serialized).map_err(|_| RoxyConfigError::WriteError)?;
     Ok(())
 }
 
@@ -258,8 +295,8 @@ impl RoxyConfig {
                     .separator("_")
                     .list_separator(" "),
             )
-            .set_default("data_dir", data_dir.to_str().unwrap())?
-            .set_default("config_dir", config_dir.to_str().unwrap())?;
+            .set_default("data_dir", data_dir.to_str())?
+            .set_default("config_dir", config_dir.to_str())?;
 
         let config_files = [
             ("config.toml", config::FileFormat::Toml),
@@ -441,11 +478,14 @@ fn parse_key_code_with_modifiers(
         "minus" => KeyCode::Char('-'),
         "tab" => KeyCode::Tab,
         c if c.len() == 1 => {
-            let mut c = c.chars().next().unwrap();
-            if modifiers.contains(KeyModifiers::SHIFT) {
-                c = c.to_ascii_uppercase();
+            if let Some(mut c) = c.chars().next() {
+                if modifiers.contains(KeyModifiers::SHIFT) {
+                    c = c.to_ascii_uppercase();
+                }
+                KeyCode::Char(c)
+            } else {
+                return Err(format!("Unable to parse {raw}"));
             }
-            KeyCode::Char(c)
         }
         _ => return Err(format!("Unable to parse {raw}")),
     };

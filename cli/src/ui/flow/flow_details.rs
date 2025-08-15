@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use color_eyre::Result;
 use rat_focus::HasFocus;
 use ratatui::{
@@ -8,7 +7,7 @@ use ratatui::{
 };
 
 use roxy_proxy::flow::{
-    FlowKind, FlowStore, InterceptedRequest, InterceptedResponse, Timing, WsMessage,
+    FlowCerts, FlowStore, InterceptedRequest, InterceptedResponse, Timing, WsMessage,
 };
 use strum::EnumIter;
 use tokio::{
@@ -70,7 +69,7 @@ impl Tab {
         let all_tabs = Self::all();
         let index = self.index();
         if index == 0 {
-            *all_tabs.last().unwrap()
+            *all_tabs.first().unwrap_or(&Self::Ws)
         } else {
             all_tabs[index - 1]
         }
@@ -80,7 +79,7 @@ impl Tab {
         let all_tabs = Self::all();
         let index = self.index();
         if index == all_tabs.len() - 1 {
-            *all_tabs.first().unwrap()
+            *all_tabs.first().unwrap_or(&Self::Request)
         } else {
             all_tabs[index + 1]
         }
@@ -112,9 +111,10 @@ impl FlowDetails {
     pub fn new(flow_store: FlowStore) -> Self {
         let (tx, rx) = watch::channel(None::<i64>);
 
+        // TODO: 64 might be a bit high
         let (req_tx, req_rx) = mpsc::channel::<Option<InterceptedRequest>>(64);
         let (resp_tx, resp_rx) = mpsc::channel::<Option<InterceptedResponse>>(64);
-        let (cert_tx, cert_rx) = mpsc::channel::<Option<Vec<Bytes>>>(64);
+        let (cert_tx, cert_rx) = mpsc::channel::<FlowCerts>(64);
         let (timing_tx, timing_rx) = mpsc::channel::<Timing>(64);
         let (ws_tx, ws_rx) = mpsc::channel::<Vec<WsMessage>>(64);
 
@@ -185,7 +185,7 @@ async fn update_flow_view(
     req_tx: &mpsc::Sender<Option<InterceptedRequest>>,
     resp_tx: &mpsc::Sender<Option<InterceptedResponse>>,
     ws_tx: &mpsc::Sender<Vec<WsMessage>>,
-    cert_tx: &mpsc::Sender<Option<Vec<Bytes>>>,
+    cert_tx: &mpsc::Sender<FlowCerts>,
     timing_tx: &mpsc::Sender<Timing>,
 ) {
     if let Some(flow_id) = flow_id_opt {
@@ -193,87 +193,25 @@ async fn update_flow_view(
 
         if let Some(entry) = maybe_entry {
             let flow = entry.read().await;
-            match &flow.kind {
-                FlowKind::Https(flow_data) => {
-                    req_tx
-                        .send(Some(flow_data.request.clone()))
-                        .await
-                        .unwrap_or_else(|e| {
-                            error!("Failed to send request: {}", e);
-                        });
+            req_tx.send(flow.request.clone()).await.unwrap_or_else(|e| {
+                error!("Failed to send request: {}", e);
+            });
 
-                    resp_tx
-                        .send(flow_data.response.clone())
-                        .await
-                        .unwrap_or_else(|e| {
-                            error!("Failed to send response: {}", e);
-                        });
+            resp_tx
+                .send(flow.response.clone())
+                .await
+                .unwrap_or_else(|e| {
+                    error!("Failed to send response: {}", e);
+                });
 
-                    let mut certs = flow_data.cert_info.clone();
-                    if let Some(leaf) = &flow.leaf {
-                        certs.push(leaf.clone());
-                    }
-                    cert_tx.send(Some(certs)).await.unwrap_or_else(|e| {
-                        error!("Failed to send certs: {}", e);
-                    });
-                }
-                FlowKind::Http(flow) => {
-                    req_tx
-                        .send(Some(flow.request.clone()))
-                        .await
-                        .unwrap_or_else(|e| {
-                            error!("Failed to send request: {}", e);
-                        });
+            let certs = flow.certs.clone();
 
-                    resp_tx
-                        .send(flow.response.clone())
-                        .await
-                        .unwrap_or_else(|e| {
-                            error!("Failed to send response: {}", e);
-                        });
-
-                    // cert_tx.send(flow.cert_info.clone()).await.unwrap_or_else(
-                    //     |e| {
-                    //         error!("Failed to send certs: {}", e);
-                    //     },
-                    // );
-                }
-                FlowKind::Ws(flow) => {
-                    ws_tx.send(flow.messages.clone()).await.unwrap_or_else(|e| {
-                        error!("Failed to send WebSocket messages: {}", e);
-                    });
-                }
-                FlowKind::Wss(flow) => {
-                    ws_tx.send(flow.messages.clone()).await.unwrap_or_else(|e| {
-                        error!("Failed to send WebSocket messages: {}", e);
-                    });
-                }
-                FlowKind::Http2(flow) => {
-                    req_tx
-                        .send(Some(flow.request.clone()))
-                        .await
-                        .unwrap_or_else(|e| {
-                            error!("Failed to send request: {}", e);
-                        });
-
-                    resp_tx
-                        .send(flow.response.clone())
-                        .await
-                        .unwrap_or_else(|e| {
-                            error!("Failed to send response: {}", e);
-                        });
-                    cert_tx
-                        .send(Some(flow.cert_info.clone()))
-                        .await
-                        .unwrap_or_else(|e| {
-                            error!("Failed to send certs: {}", e);
-                        });
-                }
-                FlowKind::Unknown => {
-                    // Nothing
-                }
-            }
-
+            cert_tx.send(certs).await.unwrap_or_else(|e| {
+                error!("Failed to send certs: {}", e);
+            });
+            ws_tx.send(flow.messages.clone()).await.unwrap_or_else(|e| {
+                error!("Failed to send WebSocket messages: {}", e);
+            });
             timing_tx
                 .send(flow.timing.clone())
                 .await
@@ -377,7 +315,12 @@ impl Component for FlowDetails {
         let tab_titles: Vec<Line> = Tab::all().iter().map(|t| Line::raw(t.title())).collect();
         let tab_index = self.tab.index();
 
-        let tabs = themed_tabs("Details", tab_titles, tab_index, self.tabs.focus.get());
+        let tabs = themed_tabs(
+            Some("Flow details"),
+            tab_titles,
+            tab_index,
+            self.tabs.focus.get(),
+        );
         f.render_widget(tabs, layout[0]);
 
         match self.tab {

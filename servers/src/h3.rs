@@ -1,39 +1,53 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    error::Error,
+    io,
+    net::{SocketAddr, UdpSocket},
+    sync::Arc,
+};
 
-use bytes::Bytes;
+use bytes::{Buf, Bytes, BytesMut};
 use h3::server::RequestResolver;
-use quinn::crypto::rustls::QuicServerConfig;
-use roxy_shared::RoxyCA;
-use rustls::{ServerConfig as RustlsServerConfig, pki_types::PrivateKeyDer};
+use http::Response;
+use http_body_util::BodyExt;
+use quinn::{EndpointConfig, crypto::rustls::QuicServerConfig, default_runtime};
+use roxy_shared::{RoxyCA, alpn::alp_h3, io::local_udp_socket, tls::TlsConfig};
 use tokio::task::JoinHandle;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
-pub async fn default_h3(port: u16, roxy_ca: &RoxyCA) -> JoinHandle<()> {
-    let (cert, signing_key) = roxy_ca
-        .sign_leaf_mult(
-            "localhost",
-            vec!["localhost".to_string(), "127.0.0.1".to_string()],
-        )
-        .unwrap();
-    tokio::spawn(async move {
-        info!("H3 server Spawn {port}");
-        let mut server_crypto = RustlsServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(
-                vec![cert.der().clone()],
-                PrivateKeyDer::try_from(signing_key.serialize_der()).unwrap(),
-            )
-            .unwrap();
+use crate::serve::serve_internal;
+use crate::{HttpServers, local_tls_config};
 
-        server_crypto.alpn_protocols = vec![b"h3".to_vec()];
+pub async fn h3_server(
+    server: HttpServers,
+    roxy_ca: &RoxyCA,
+    tls_config: &TlsConfig,
+) -> Result<(SocketAddr, JoinHandle<()>), Box<dyn Error>> {
+    let udp_socket = local_udp_socket(None)?;
+    h3_server_socket(udp_socket, roxy_ca, server, tls_config).await
+}
 
-        let opt = SocketAddr::from(([127, 0, 0, 1], port));
-        let server_config = quinn::ServerConfig::with_crypto(Arc::new(
-            QuicServerConfig::try_from(server_crypto).unwrap(),
-        ));
-        let endpoint = quinn::Endpoint::server(server_config, opt).unwrap();
+pub async fn h3_server_socket(
+    udp_socket: UdpSocket,
+    roxy_ca: &RoxyCA,
+    server: HttpServers,
+    tls_config: &TlsConfig,
+) -> Result<(SocketAddr, JoinHandle<()>), Box<dyn Error>> {
+    let addr = udp_socket.local_addr()?;
+    let server_crypto = local_tls_config(roxy_ca, tls_config, alp_h3())?;
+    let server_config =
+        quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(server_crypto)?));
 
-        info!("H3 server awaiting connections");
+    let runtime = default_runtime().ok_or_else(|| io::Error::other("no async runtime found"))?;
+    let socket = runtime.wrap_udp_socket(udp_socket)?;
+    let endpoint = quinn::Endpoint::new_with_abstract_socket(
+        EndpointConfig::default(),
+        Some(server_config),
+        socket,
+        runtime,
+    )?;
+
+    let handle = tokio::spawn(async move {
+        info!("{server} server awaiting connections {addr}");
         while let Some(new_conn) = endpoint.accept().await {
             info!("New connection being attempted");
 
@@ -41,17 +55,23 @@ pub async fn default_h3(port: u16, roxy_ca: &RoxyCA) -> JoinHandle<()> {
                 match new_conn.await {
                     Ok(conn) => {
                         info!("new connection established");
-
-                        let mut h3_conn =
-                            h3::server::Connection::new(h3_quinn::Connection::new(conn))
-                                .await
-                                .unwrap();
+                        let mut h3_conn = match h3::server::Connection::new(
+                            h3_quinn::Connection::new(conn),
+                        )
+                        .await
+                        {
+                            Ok(c) => c,
+                            Err(e) => {
+                                error!("Error {e}");
+                                return;
+                            }
+                        };
 
                         loop {
                             match h3_conn.accept().await {
                                 Ok(Some(resolver)) => {
-                                    tokio::spawn(async {
-                                        if let Err(e) = handle_request(resolver).await {
+                                    tokio::spawn(async move {
+                                        if let Err(e) = handle_request(resolver, server).await {
                                             error!("handling request failed: {}", e);
                                         }
                                     });
@@ -61,7 +81,7 @@ pub async fn default_h3(port: u16, roxy_ca: &RoxyCA) -> JoinHandle<()> {
                                     break;
                                 }
                                 Err(err) => {
-                                    error!("error on accept {}", err);
+                                    warn!("error on accept {}", err);
                                     break;
                                 }
                             }
@@ -71,39 +91,47 @@ pub async fn default_h3(port: u16, roxy_ca: &RoxyCA) -> JoinHandle<()> {
                         error!("accepting connection failed: {:?}", err);
                     }
                 }
+                info!("Connection closed");
             });
         }
-        error!("HTTP/3 server stopped accepting connections");
-    })
+        warn!("{server} stopped");
+    });
+
+    Ok((addr, handle))
 }
 
 async fn handle_request<C>(
     resolver: RequestResolver<C, Bytes>,
+    server: HttpServers,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     C: h3::quic::Connection<Bytes>,
 {
     let (req, mut stream) = resolver.resolve_request().await?;
-    let path = req.uri().path();
-
-    info!("H3 Server path {path}");
-    if path == "/" {
-        let response = http::Response::builder()
-            .status(http::StatusCode::OK)
-            .header("content-type", "text/plain")
-            .body(())
-            .unwrap();
-
-        stream.send_response(response).await?;
-        stream.send_data(Bytes::from_static(b"hello")).await?;
-    } else {
-        let response = http::Response::builder()
-            .status(http::StatusCode::NOT_FOUND)
-            .header("content-type", "text/plain")
-            .body(())
-            .unwrap();
-
-        stream.send_response(response).await?;
+    let (parts, _) = req.into_parts();
+    let mut buf = BytesMut::new();
+    while let Some(chunk) = stream.recv_data().await? {
+        buf.extend_from_slice(chunk.chunk());
     }
+    let body = buf.freeze();
+    let trailers = stream.recv_trailers().await?;
+
+    let resp = serve_internal(parts, body, trailers, server).await?;
+
+    info!("Resp: {server} {resp:?}");
+    let (parts, mut body) = resp.into_parts();
+
+    let resp = Response::from_parts(parts, ());
+    stream.send_response(resp).await?;
+
+    while let Some(Ok(a)) = body.frame().await {
+        if let Some(data) = a.data_ref() {
+            stream.send_data(data.clone()).await?; // TODO: this is bad, no clone here
+        } else if let Ok(trailer) = a.into_trailers() {
+            stream.send_trailers(trailer).await?;
+        }
+    }
+
+    stream.finish().await?;
     Ok(())
 }
