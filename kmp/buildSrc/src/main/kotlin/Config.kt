@@ -15,8 +15,8 @@ public object Config {
 
     const val name = "Roxy"
 
-    const val majorRelease = 0
-    const val minorRelease = 1
+    const val majorRelease = 1
+    const val minorRelease = 0
     const val patch = 0
     const val postfix = "-alpha01"
     const val versionCode = 1

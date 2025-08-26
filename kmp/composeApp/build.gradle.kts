@@ -1,7 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 
 plugins {
@@ -16,7 +15,7 @@ kotlin {
     androidTarget {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(Config.jvmTarget)
         }
     }
     
@@ -80,15 +79,15 @@ kotlin {
 }
 
 android {
-    namespace = "io.fergdev.roxy"
+    namespace = Config.artifactId
     compileSdk = Config.Android.compileSdk
 
     defaultConfig {
-        applicationId = "io.fergdev.roxy"
+        applicationId = Config.artifactId
         minSdk = Config.Android.minSdk
         targetSdk = Config.Android.targetSdk
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = Config.versionCode
+        versionName = Config.versionName
     }
     packaging {
         resources {
@@ -97,12 +96,12 @@ android {
     }
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            isMinifyEnabled = Config.Android.isMinifyEnabledRelease
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = Config.javaVersion
+        targetCompatibility = Config.javaVersion
     }
 }
 
@@ -112,12 +111,12 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "io.fergdev.roxy.MainKt"
+        mainClass = "${Config.artifactId}.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "io.fergdev.roxy"
-            packageVersion = "1.0.0"
+            packageName = Config.artifactId
+            packageVersion = Config.majorVersionName
         }
     }
 }

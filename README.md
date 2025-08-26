@@ -6,11 +6,7 @@ This is currently a hack fest, but it works and is fun to use. It is a work in p
 
 ## Demo
 
-
-https://github.com/user-attachments/assets/a98a5a57-775d-424c-ab91-97d7a17793ea
-
-
-
+<https://github.com/user-attachments/assets/a98a5a57-775d-424c-ab91-97d7a17793ea>
 
 ## Features
 
@@ -75,6 +71,16 @@ I would genuinely enjoy collaborating on this with others — whether you’re e
 - [ ] timing info
 - [ ] use http_proxy and https_proxy env vars, add UI to turn them on/off
 - [ ] Panic handling
+
+## Dev ENV
+
+```bash
+ANDROID_NDK_ROOT="$ANDROID_SDK_HOME/ndk"
+
+rustup target add aarch64-apple-ios-sim
+rustup target add x86_64-apple-ios
+rustup target add aarch64-apple-ios-sim
+```
 
 ## License
 
