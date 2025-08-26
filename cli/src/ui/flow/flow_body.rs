@@ -262,17 +262,17 @@ impl ImageCache {
     }
 
     fn render(&mut self, f: &mut Frame, area: Rect, id: &i64) -> Result<()> {
-        if let Ok(guard) = self.inner.lock() {
-            if let Some(proto_arc) = guard.cache.get(id) {
-                match proto_arc.lock() {
-                    Ok(mut proto) => {
-                        let image = StatefulImage::default().resize(Resize::default());
-                        f.render_stateful_widget(image, area, &mut *proto);
-                        return Ok(());
-                    }
-                    Err(_) => {
-                        eprintln!("Failed to lock image protocol for rendering");
-                    }
+        if let Ok(guard) = self.inner.lock()
+            && let Some(proto_arc) = guard.cache.get(id)
+        {
+            match proto_arc.lock() {
+                Ok(mut proto) => {
+                    let image = StatefulImage::default().resize(Resize::default());
+                    f.render_stateful_widget(image, area, &mut *proto);
+                    return Ok(());
+                }
+                Err(_) => {
+                    eprintln!("Failed to lock image protocol for rendering");
                 }
             }
         }

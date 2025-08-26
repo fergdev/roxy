@@ -8,13 +8,10 @@ chrono = "0.4.41"
 dirs = "6.0.0"
 once_cell = "1.19"
 p12-keystore = "0.2.0"
-rcgen = { version = "0.14.1", features = [
-  "crypto",
-  "aws_lc_rs",
-  "pem",
-  "x509-parser",
-] }
-rustls = { version = "0.23", features = ["tls12", "aws-lc-rs"] }
+
+rustls = { workspace = true }
+rcgen = { workspace = true }
+
 tracing = "0.1.37"
 tracing-subscriber = "0.3"
 time = "0.3.41"
@@ -29,42 +26,28 @@ bytes = "1.10.1"
 futures = "0.3.31"
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
-tokio-rustls = "0.26.2"
+tokio-rustls = { workspace = true }
 futures-util = "0.3"
 
 webpki-roots = "1.0.2"
 tokio-native-tls = { version = "0.3.1" }
 native-tls = { version = "0.2", features = ["alpn"] }
+openssl = { version = "0.10", features = ["vendored"] }
 
-# Experitmental WT repo
-h3 = { git = "https://github.com/fergdev/h3-wt-client", branch = "wt-client" }
-h3-quinn = { git = "https://github.com/fergdev/h3-wt-client", branch = "wt-client" }
-h3-datagram = { git = "https://github.com/fergdev/h3-wt-client", branch = "wt-client" }
-h3-webtransport = { git = "https://github.com/fergdev/h3-wt-client", branch = "wt-client" }
-
-# h3 = { path = "../../h3-wt-client/h3/" }
-# h3-quinn = { path = "../../h3-wt-client/h3-quinn/" }
-# h3-datagram = { path = "../../h3-wt-client/h3-datagram/" }
-# h3-webtransport = { path = "../../h3-wt-client/h3-webtransport/" }
-
-# h3 = "0.0.8"
-# h3-quinn = "0.0.10"
-# h3-datagram = "0.0.2"
-# h3-webtransport = "0.1.2"
+h3 = { workspace = true }
+h3-quinn = { workspace = true }
+h3-datagram = { workspace = true }
+h3-webtransport = { workspace = true }
+quinn = { workspace = true }
+web-transport-quinn = { workspace = true }
 
 # Compression
 flate2 = "1.0"
 brotli = "8.0.1"
 zstd = "0.13"
 
-quinn = { version = "0.11", default-features = false, features = [
-  "runtime-tokio",
-  "rustls",
-  "ring",
-] }
 
 # lru_time_cache = "0.11.11" # TODO: look into this
-webtransport-quinn = "0.10.0"
 
 strum = "0.27"
 strum_macros = "0.27"

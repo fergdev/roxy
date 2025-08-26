@@ -5,6 +5,14 @@ description = "CLI proxy tool written in rust aka roxy (rust proxy)."
 license = "MIT"
 edition = "2024"
 
+[lib]
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
 [dependencies]
 itertools = { version = "0.14", default-features = false, features = [
   "use_alloc",
@@ -12,17 +20,13 @@ itertools = { version = "0.14", default-features = false, features = [
 # TODO: is this required
 chrono = "0.4.41"
 futures = "0.3.31"
-rcgen = { version = "0.14.2", features = [
-  "crypto",
-  "ring",
-  "pem",
-  "x509-parser",
-] }
+
+rcgen = { workspace = true }
 rs-snowflake = "0.6.0"
-rustls = { version = "0.23", features = ["tls12"] }
+rustls = { workspace = true }
 
 tokio = { version = "1.40.0", features = ["full"] }
-tokio-rustls = "0.26.2"
+tokio-rustls = { workspace = true }
 tokio-tungstenite = { version = "0.27.0", features = ["__rustls-tls"] }
 tracing = "0.1.41"
 tracing-error = "0.2.1"
@@ -49,11 +53,7 @@ roxy-shared = { path = "../shared" }
 
 h3 = "0.0.8"
 h3-quinn = "0.0.10"
-quinn = { version = "0.11", default-features = false, features = [
-  "runtime-tokio",
-  "rustls",
-  "ring",
-] }
+quinn = { workspace = true }
 rustls-native-certs = "0.8"
 flate2 = "1.0"
 

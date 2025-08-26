@@ -1,0 +1,9 @@
+language = "C"
+include_guard = "ROXY_FFI_H"
+sys_includes = []
+
+[export]
+include = ["RoxyProxyHandle"]
+
+[fn]
+rename_args = "None"

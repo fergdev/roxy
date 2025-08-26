@@ -1,6 +1,6 @@
 use async_watcher::{
     AsyncDebouncer,
-    notify::{FsEventWatcher, RecursiveMode},
+    notify::{NullWatcher, RecursiveMode},
 };
 use bytes::Bytes;
 use chrono::Utc;
@@ -28,7 +28,7 @@ use crate::flow::{InterceptedRequest, InterceptedResponse};
 #[derive(Clone)]
 pub struct ScriptEngine {
     inner: Arc<Mutex<Inner>>,
-    debouncer: Option<Arc<Mutex<AsyncDebouncer<FsEventWatcher>>>>,
+    debouncer: Option<Arc<Mutex<AsyncDebouncer<NullWatcher>>>>,
     watcher: Option<Arc<JoinHandle<()>>>,
     script_path: Arc<Mutex<Option<PathBuf>>>,
 }
@@ -72,6 +72,18 @@ impl ScriptEngine {
         ScriptEngine::new_inner(None).await
     }
 
+    pub fn new_no_watch() -> Self {
+        Self {
+            debouncer: None,
+            watcher: None,
+            script_path: Arc::new(Mutex::new(None)),
+            inner: Arc::new(Mutex::new(Inner {
+                lua: None,
+                notify_tx: None,
+            })),
+        }
+    }
+
     pub async fn new_notify(
         notify_tx: mpsc::Sender<FlowNotify>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -85,7 +97,7 @@ impl ScriptEngine {
             AsyncDebouncer::new_with_channel(Duration::from_millis(10), None).await?;
 
         let mut out = Self {
-            debouncer: Some(Arc::new(Mutex::new(debouncer))),
+            debouncer: None,
             watcher: None,
             script_path: Arc::new(Mutex::new(None)),
             inner: Arc::new(Mutex::new(Inner {
@@ -153,13 +165,13 @@ impl ScriptEngine {
         if let Some(path) = path {
             let script = tokio::fs::read_to_string(&path).await?;
             let mut guard = self.inner.lock().map_err(|_| Error::InterceptedRequest)?;
-            if let Some(n) = &guard.notify_tx {
-                if let Err(err) = n.try_send(FlowNotify {
+            if let Some(n) = &guard.notify_tx
+                && let Err(err) = n.try_send(FlowNotify {
                     level: 0,
                     msg: "Udpate".to_string(),
-                }) {
-                    error!("Error sending notification {err}");
-                }
+                })
+            {
+                error!("Error sending notification {err}");
             }
             guard.set_script(&script)
         } else {
@@ -189,14 +201,12 @@ impl ScriptEngine {
                 None
             }
         };
-        if let Some(p) = path {
-            if let Some(debouncer) = &self.debouncer {
-                if let Ok(mut guard) = debouncer.lock() {
-                    if let Err(err) = guard.watcher().unwatch(&p) {
-                        error!("Failed to stop watcher {err}");
-                    }
-                }
-            }
+        if let Some(p) = path
+            && let Some(debouncer) = &self.debouncer
+            && let Ok(mut guard) = debouncer.lock()
+            && let Err(err) = guard.watcher().unwatch(&p)
+        {
+            error!("Failed to stop watcher {err}");
         }
     }
 

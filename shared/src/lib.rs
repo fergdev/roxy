@@ -57,7 +57,7 @@ struct LocalLeaf {
 }
 
 impl RoxyCA {
-    fn new(
+    pub fn new(
         issuer: Issuer<'static, KeyPair>,
         roots: RootCertStore,
         ca_der: Vec<u8>,
@@ -146,10 +146,10 @@ fn load_native_certs(extra: Option<CertificateDer<'static>>) -> RootCertStore {
         }
     }
 
-    if let Some(extra) = extra {
-        if let Err(err) = roots.add(extra) {
-            warn!("Error adding extra cert {err}");
-        }
+    if let Some(extra) = extra
+        && let Err(err) = roots.add(extra)
+    {
+        warn!("Error adding extra cert {err}");
     }
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 

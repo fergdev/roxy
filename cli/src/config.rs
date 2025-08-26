@@ -606,13 +606,13 @@ pub fn parse_color(s: &str) -> Result<Color, String> {
     }
 
     // #rrggbb
-    if let Some(hex) = s.strip_prefix('#') {
-        if hex.len() == 6 {
-            let r = u8::from_str_radix(&hex[0..2], 16).map_err(|_| "bad hex")?;
-            let g = u8::from_str_radix(&hex[2..4], 16).map_err(|_| "bad hex")?;
-            let b = u8::from_str_radix(&hex[4..6], 16).map_err(|_| "bad hex")?;
-            return Ok(Color::Rgb(r, g, b));
-        }
+    if let Some(hex) = s.strip_prefix('#')
+        && hex.len() == 6
+    {
+        let r = u8::from_str_radix(&hex[0..2], 16).map_err(|_| "bad hex")?;
+        let g = u8::from_str_radix(&hex[2..4], 16).map_err(|_| "bad hex")?;
+        let b = u8::from_str_radix(&hex[4..6], 16).map_err(|_| "bad hex")?;
+        return Ok(Color::Rgb(r, g, b));
     }
 
     Ok(Color::Magenta)

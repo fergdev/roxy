@@ -1,3 +1,48 @@
 [workspace]
 resolver = "3"
 members = ["proxy", "cli", "servers", "shared", "rurl"]
+
+[workspace.dependencies]
+rcgen = { version = "0.14.1", default-features = false, features = [
+  "crypto",
+  "ring",
+  "pem",
+  "x509-parser",
+] }
+rustls = { version = "0.23", default-features = false, features = [
+  "tls12",
+  "ring",
+] }
+
+quinn = { version = "0.11", default-features = false, features = [
+  "runtime-tokio",
+  "rustls",
+  "ring",
+] }
+quinn-proto = { version = "0.11", default-features = false, features = [
+  "runtime-tokio",
+  "rustls",
+  "ring",
+] }
+
+tokio-rustls = { version = "0.26.2", default-features = false, features = [
+  "ring",
+] }
+web-transport-quinn = { version = "0.7.3", default-features = false, features = [
+  "ring",
+] }
+
+h3 = { git = "https://github.com/fergdev/h3-wt-client", branch = "wt-client" }
+h3-quinn = { git = "https://github.com/fergdev/h3-wt-client", branch = "wt-client" }
+h3-datagram = { git = "https://github.com/fergdev/h3-wt-client", branch = "wt-client" }
+h3-webtransport = { git = "https://github.com/fergdev/h3-wt-client", branch = "wt-client" }
+
+# h3 = { path = "../../h3-wt-client/h3/" }
+# h3-quinn = { path = "../../h3-wt-client/h3-quinn/" }
+# h3-datagram = { path = "../../h3-wt-client/h3-datagram/" }
+# h3-webtransport = { path = "../../h3-wt-client/h3-webtransport/" }
+
+# h3 = "0.0.8"
+# h3-quinn = "0.0.10"
+# h3-datagram = "0.0.2"
+# h3-webtransport = "0.1.2"

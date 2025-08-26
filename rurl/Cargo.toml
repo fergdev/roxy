@@ -10,18 +10,13 @@ futures-util = "0.3"
 h3 = "0.0.8"
 h3-quinn = "0.0.10"
 http = "1"
-quinn = "0.11"
-rcgen = { version = "0.14", features = [
-  "crypto",
-  "ring",
-  "pem",
-  "x509-parser",
-] }
+quinn = { workspace = true }
+rcgen = { workspace = true }
 roxy-servers = { path = "../servers" }
 roxy-shared = { path = "../shared" }
-rustls = { version = "0.23", features = ["tls12"] }
+rustls = { workspace = true }
 tokio = { version = "1", features = ["full"] }
-tokio-rustls = "0.26.2"
+tokio-rustls = { workspace = true }
 tokio-tungstenite = "0.27.0"
 tracing = "0.1"
 tracing-error = "0.2.1"
