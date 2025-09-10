@@ -4259,6 +4259,7 @@ dependencies = [
  "clap",
  "color-eyre",
  "config",
+ "cow-utils",
  "crossterm 0.29.0",
  "csv",
  "dashmap",

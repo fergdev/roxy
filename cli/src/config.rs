@@ -262,7 +262,6 @@ fn write_config<T: serde::Serialize>(config: &T) -> Result<(), RoxyConfigError> 
 
     debug!("Writing config to: {:?}", path);
     debug!("Using format: {:?}", format);
-    // Create parent directories
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|_| RoxyConfigError::WriteError)?;
     }
@@ -358,11 +357,9 @@ impl Serialize for KeyBindings {
     where
         S: Serializer,
     {
-        // Create a map serializer
         let mut map = serializer.serialize_map(Some(self.0.len()))?;
-
         for (mode, bindings) in &self.0 {
-            let mode_key = format!("{mode:?}"); // convert Mode to string key
+            let mode_key = format!("{mode:?}");
             let mut inner = HashMap::new();
 
             for (key_seq, action) in bindings {
@@ -378,7 +375,7 @@ impl Serialize for KeyBindings {
 
 fn format_key_sequence(seq: &[KeyEvent]) -> String {
     seq.iter()
-        .map(key_event_to_string) // your existing function
+        .map(key_event_to_string)
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -432,7 +429,7 @@ fn extract_modifiers(raw: &str) -> (&str, KeyModifiers) {
                 modifiers.insert(KeyModifiers::SHIFT);
                 current = &rest[6..];
             }
-            _ => break, // break out of the loop if no known prefix is detected
+            _ => break,
         };
     }
 
