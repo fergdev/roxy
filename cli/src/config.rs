@@ -9,7 +9,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::{collections::HashMap, path::PathBuf};
 use tokio::sync::watch;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use color_eyre::Result;
 use derive_deref::{Deref, DerefMut};
@@ -167,8 +167,6 @@ impl Display for RoxyConfigError {
 
 impl ConfigManager {
     pub fn new() -> Result<Self, RoxyConfigError> {
-        info!("Initializing ConfigManager with default config");
-        info!("Initializing ConfigManager {}", CONFIG);
         let args = RoxyArgs::parse();
         let mut config = Self::read_from_disk()?;
 
@@ -587,12 +585,10 @@ where
 pub fn parse_color(s: &str) -> Result<Color, String> {
     let s = s.trim();
 
-    // Named color
     if let Ok(c) = parse_named_color(s) {
         return Ok(c);
     }
 
-    // Rgb(255, 255, 255)
     if let Some(rgb) = s.strip_prefix("Rgb(").and_then(|s| s.strip_suffix(")")) {
         let parts: Vec<_> = rgb.split(',').map(|s| s.trim()).collect();
         if parts.len() == 3 {
@@ -603,7 +599,6 @@ pub fn parse_color(s: &str) -> Result<Color, String> {
         }
     }
 
-    // #rrggbb
     if let Some(hex) = s.strip_prefix('#')
         && hex.len() == 6
     {

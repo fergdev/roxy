@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use http::header::{HeaderMap, HeaderName, HeaderValue};
 use mlua::prelude::*;
 
-use crate::interceptor::lua::util::lua_val_to_str;
+use crate::interceptor::lua::util::{KEY_NEW, lua_val_to_str};
 
 fn to_header_name_lc(name: &str) -> LuaResult<HeaderName> {
     HeaderName::from_bytes(name.as_bytes()).map_err(|e| LuaError::external(e.to_string()))
@@ -165,7 +165,7 @@ impl LuaUserData for LuaHeaders {
 pub(crate) fn register_headers(lua: &Lua) -> LuaResult<LuaTable> {
     let tbl = lua.create_table()?;
     let new = lua.create_function(|_, pairs: LuaTable| LuaHeaders::from_pairs(pairs))?;
-    tbl.set("new", new)?;
+    tbl.set(KEY_NEW, new)?;
     lua.globals().set("Headers", tbl.clone())?;
     Ok(tbl)
 }

@@ -7,13 +7,13 @@ edition = "2024"
 
 [dependencies]
 # Async
-futures = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 async-trait = "0.1.89"
+futures-util = { workspace = true }
 
 # Script
-mlua = { version = "0.11", features = ["lua54", "vendored", "send"] }
+mlua = { version = "0.11.3", features = ["lua54", "vendored", "send"] }
 
 boa_engine = { version = "0.20.0" }
 boa_runtime = { version = "0.20.0" }
@@ -37,13 +37,10 @@ tokio-tungstenite = { workspace = true }
 roxy-shared = { path = "../shared" }
 
 # TLS
-pkcs12 = "0.1.0"
+pkcs12 = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }
-rustls-native-certs = "0.8"
 tokio-rustls = { workspace = true }
-webpki-roots = "1.0.1"
-x509-parser = { version = "0.18" }
 
 # Tracing
 tracing = { workspace = true }
@@ -52,17 +49,13 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Util
 bytes = { workspace = true }
-chrono = { workspace = true }
 dashmap = "6.1.0"
-derive_deref = "1.1.1"
 itertools = { workspace = true }
 once_cell = { workspace = true }
 rs-snowflake = "0.6.0"
-signal-hook = "0.3.17"
 strum = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 cow-utils = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["async_tokio"] }

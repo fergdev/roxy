@@ -1,7 +1,5 @@
 use bytes::Bytes;
-use chrono::Utc;
-use futures::stream::FuturesUnordered;
-use futures::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use http::header::{
     ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, DATE, HOST, SET_COOKIE, TE,
     TRANSFER_ENCODING,
@@ -35,6 +33,7 @@ use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 use std::time::Duration;
 use strum::VariantArray;
+use time::OffsetDateTime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
@@ -407,137 +406,64 @@ async fn test_http_get_asset() {
     }
 }
 
-// fn permutate(provider: CryptoProvider) -> Vec<CryptoProvider> {
-//     let mut out = vec![];
-//     for cs in &provider.cipher_suites {
-//         for kx_group in &provider.kx_groups {
-//             // for sva in provider.signature_verification_algorithms { // TODO: permutate
-//             out.push({
-//                 CryptoProvider {
-//                     cipher_suites: vec![*cs],
-//                     kx_groups: vec![*kx_group],
-//                     signature_verification_algorithms: provider.signature_verification_algorithms,
-//                     secure_random: provider.secure_random,
-//                     key_provider: provider.key_provider,
-//                 }
-//             });
-//             // }
-//         }
-//     }
-//     out
-// }
-
+// TODO: investigate stress testing
 // #[tokio::test]
-// async fn test_tls_permutations() {
-//     roxy_proxy::init_test_logging();
-//     init_crypto();
-//     let crypto_provider = permutate(default_provider());
+// async fn test_http_proxy_request_async() {
+//     let cxt = TestContext::new().await;
+//     let servers = HttpServers::start_all(&cxt.roxy_ca, &cxt.tls_config)
+//         .await
+//         .unwrap();
 //
-//     for cp in crypto_provider {
-//         let tls_config = TlsConfig::from_provider(cp.clone());
-//         let cxt = TestContext::new_with_tls(Some(tls_config.clone())).await;
-//
-//         let mut set = HashSet::new();
-//         // set.insert(HttpServers::H10S);
-//         set.insert(HttpServers::H11S);
-//         set.insert(HttpServers::H2);
-//
-//         let servers = HttpServers::start_set(set, &cxt.roxy_ca, &tls_config)
-//             .await
-//             .unwrap();
-//
+//     let handles = FuturesUnordered::new();
+//     for _i in 0..10 {
 //         for s in &servers {
-//             let req = http::Request::builder()
-//                 .method(Method::GET)
-//                 .version(s.server.version())
-//                 .uri(s.target.clone())
-//                 .header(HOST, s.target.host())
-//                 .body(BoxBody::new(Empty::new()))
-//                 .unwrap();
+//             let proxy_addr = cxt.proxy_addr.clone();
+//             let server = s.server;
+//             let target = s.target.clone();
+//             let ca = cxt.roxy_ca.clone();
 //
-//             let client = ClientContext::builder()
-//                 .with_proxy(cxt.proxy_addr.clone())
-//                 .with_roxy_ca(cxt.roxy_ca.clone())
-//                 .with_tls_config(tls_config.clone())
-//                 .with_alpns(vec![s.server.alpn()])
-//                 .build();
+//             let h = tokio::spawn(async move {
+//                 let req = http::Request::builder()
+//                     .method(Method::GET)
+//                     .version(server.version())
+//                     .uri(target)
+//                     .body(BoxBody::new(Empty::new()))
+//                     .unwrap();
 //
-//             let HttpResponse {
-//                 parts,
-//                 body,
-//                 trailers,
-//             } = timeout(Duration::from_millis(TIMEOUT), client.request(req))
-//                 .await
-//                 .unwrap()
-//                 .unwrap();
+//                 let client = ClientContext::builder()
+//                     .with_proxy(proxy_addr)
+//                     .with_roxy_ca(ca)
+//                     .build();
 //
-//             debug!("{parts:?}");
-//             assert_eq!(parts.status, 200);
-//             assert_eq!(parts.version, s.server.version());
-//             assert_eq!(body, format!("Hello, {}", s.server.marker()));
-//             assert!(trailers.is_none());
+//                 let HttpResponse {
+//                     parts,
+//                     body,
+//                     trailers,
+//                 } = timeout(Duration::from_millis(TIMEOUT), client.request(req))
+//                     .await
+//                     .unwrap()
+//                     .unwrap();
+//
+//                 assert_eq!(parts.version, server.version());
+//                 assert_eq!(parts.status, 200);
+//                 assert_eq!(parts.extensions.len(), 0);
+//
+//                 if server.version() != Version::HTTP_3 {
+//                     assert_eq!(parts.headers.len(), 2);
+//                     assert!(parts.headers.get(DATE).is_some());
+//                     assert!(parts.headers.get(CONTENT_LENGTH).is_some());
+//                 } else {
+//                     assert_eq!(parts.headers.len(), 0);
+//                 }
+//
+//                 assert_eq!(body, format!("Hello, {}", server.marker()));
+//                 assert!(trailers.is_none());
+//             });
+//             handles.push(h);
 //         }
-//
 //     }
+//     handles.for_each(|_| async {}).await;
 // }
-
-#[tokio::test]
-async fn test_http_proxy_request_async() {
-    let cxt = TestContext::new().await;
-    let servers = HttpServers::start_all(&cxt.roxy_ca, &cxt.tls_config)
-        .await
-        .unwrap();
-
-    let handles = FuturesUnordered::new();
-    for _i in 0..10 {
-        for s in &servers {
-            let proxy_addr = cxt.proxy_addr.clone();
-            let server = s.server;
-            let target = s.target.clone();
-            let ca = cxt.roxy_ca.clone();
-
-            let h = tokio::spawn(async move {
-                let req = http::Request::builder()
-                    .method(Method::GET)
-                    .version(server.version())
-                    .uri(target)
-                    .body(BoxBody::new(Empty::new()))
-                    .unwrap();
-
-                let client = ClientContext::builder()
-                    .with_proxy(proxy_addr)
-                    .with_roxy_ca(ca)
-                    .build();
-
-                let HttpResponse {
-                    parts,
-                    body,
-                    trailers,
-                } = timeout(Duration::from_millis(TIMEOUT), client.request(req))
-                    .await
-                    .unwrap()
-                    .unwrap();
-
-                assert_eq!(parts.version, server.version());
-                assert_eq!(parts.status, 200);
-                assert_eq!(parts.extensions.len(), 0);
-
-                if server.version() != Version::HTTP_3 {
-                    assert_eq!(parts.headers.len(), 2);
-                    assert!(parts.headers.get(DATE).is_some());
-                    assert!(parts.headers.get(CONTENT_LENGTH).is_some());
-                } else {
-                    assert_eq!(parts.headers.len(), 0);
-                }
-
-                assert_eq!(body, format!("Hello, {}", server.marker()));
-                assert!(trailers.is_none());
-            });
-            handles.push(h);
-        }
-    }
-    handles.for_each(|_| async {}).await;
-}
 
 #[tokio::test]
 async fn test_http_proxy_request_multiple_cookies() {
@@ -713,7 +639,7 @@ async fn test_intercept_http_proxy_request_query() {
 }
 
 fn rnd_string() -> String {
-    Utc::now().to_string()
+    OffsetDateTime::now_utc().to_string()
 }
 
 #[tokio::test]
@@ -736,7 +662,7 @@ async fn test_http_proxy_request_compress() {
             let pq = http::uri::PathAndQuery::from_static("/compress");
             parts.path_and_query = Some(pq);
 
-            let body_str = Utc::now().to_string();
+            let body_str = OffsetDateTime::now_utc().to_string();
             let rnd = Bytes::from(body_str.clone());
             let body = encode_body(&rnd, &enc).unwrap();
             let body = BoxBody::new(Full::new(body));
@@ -795,7 +721,7 @@ async fn test_http_proxy_chunked() {
         let pq = http::uri::PathAndQuery::from_static("/chunked");
         parts.path_and_query = Some(pq);
 
-        let body_str = Utc::now().to_string();
+        let body_str = OffsetDateTime::now_utc().to_string();
         let rnd = Bytes::from(body_str.clone());
         let body = BoxBody::new(Full::new(rnd));
 

@@ -13,7 +13,7 @@ use crossterm::{
     },
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use futures::{FutureExt, StreamExt};
+use futures_util::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
@@ -130,7 +130,7 @@ impl Tui {
                         CrosstermEvent::FocusLost => Event::FocusLost,
                         CrosstermEvent::FocusGained => Event::FocusGained,
                         CrosstermEvent::Paste(s) => Event::Paste(s),
-                        _ => continue, // ignore other events
+                        _ => continue,
                     }
                     Some(Err(_)) => Event::Error,
                     None => break,

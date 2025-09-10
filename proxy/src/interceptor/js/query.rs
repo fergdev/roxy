@@ -49,6 +49,7 @@ impl UrlSearchParams {
         })
     }
 }
+
 js_class! {
     class UrlSearchParams as "URLSearchParams" {
         constructor() {
@@ -99,8 +100,5 @@ js_class! {
             for (k, v) in this.borrow().read_pairs()? { s.append_pair(&k, &v); }
             Ok(JsString::from(s.finish()))
         }
-
-        // TODO: implement iterator protocol [Symbol.iterator]() → entries()
-        // and `.keys()`, `.values()`, `.entries()` if your engine supports it.
     }
 }

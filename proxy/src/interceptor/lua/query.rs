@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use url::Url;
 use url::form_urlencoded::{Serializer, parse as parse_qs};
 
-use crate::interceptor::lua::util::lua_val_to_str;
+use crate::interceptor::lua::util::{KEY_NEW, lua_val_to_str};
 
 pub(crate) struct LuaQueryView {
     pub(crate) uri: Arc<Mutex<Url>>,
@@ -213,7 +213,7 @@ pub fn register_query(lua: &Lua) -> LuaResult<LuaTable> {
         lua.create_userdata(view)
     })?;
 
-    tbl.set("new", new)?;
+    tbl.set(KEY_NEW, new)?;
     lua.globals().set("Query", tbl.clone())?;
     Ok(tbl)
 }

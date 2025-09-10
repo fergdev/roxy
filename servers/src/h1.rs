@@ -53,8 +53,7 @@ pub async fn h1s_server_listener(
 pub async fn h1_server(
     http_server: HttpServers,
 ) -> Result<(SocketAddr, JoinHandle<()>), Box<dyn Error>> {
-    let tcp_listener = local_tcp_listener(None).await?;
-    h1_server_listener(tcp_listener, http_server).await
+    h1_server_listener(local_tcp_listener(None).await?, http_server).await
 }
 
 pub async fn h1_server_listener(

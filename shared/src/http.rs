@@ -18,7 +18,6 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::error::Elapsed;
 use tokio::time::timeout;
-use tracing::debug;
 use tracing::warn;
 
 use tokio::net::TcpStream;
@@ -30,7 +29,6 @@ use crate::cert::ClientVerificationCapture;
 use crate::cert::ServerTlsConnectionData;
 use crate::cert::ServerVerificationCapture;
 use crate::uri::RUri;
-use crate::util::report;
 type H1ClientBuilder = hyper::client::conn::http1::Builder;
 
 #[derive(Debug)]
@@ -157,7 +155,6 @@ pub async fn connect_proxy(
     proxy_uri: &RUri,
     host_uri: &Uri,
 ) -> Result<WithHyperIo<TcpStream>, HttpError> {
-    debug!("CONNECT to {proxy_uri}, {host_uri}");
     let addr = proxy_uri.host_port();
     let io = WithHyperIo::new(TcpStream::connect(addr).await?);
     let (mut sender, conn) = H1ClientBuilder::new()
@@ -214,7 +211,6 @@ pub async fn uptstream_http(
     request: Request<BytesBody>,
     emitter: &dyn HttpEmitter,
 ) -> Result<HttpResponse, HttpError> {
-    debug!("uptstream_http");
     let connect_host = format!(
         "{}:{:?}",
         request.uri().host().unwrap_or("localhost"),
@@ -230,7 +226,6 @@ pub async fn uptstream_http_with_proxy(
     request: Request<BytesBody>,
     emitter: &dyn HttpEmitter,
 ) -> Result<HttpResponse, HttpError> {
-    debug!("uptstream_http_with_proxy");
     let io = WithHyperIo::new(TcpStream::connect(proxy_uri.host_port()).await?);
     uptstream_http_connected(request, io, emitter).await
 }
@@ -252,10 +247,8 @@ where
 
     emitter.emit(HttpEvent::ClientHttpHandshakeComplete);
 
-    debug!("HS upstream connection established");
     tokio::spawn(async move {
         if let Err(e) = upstream_conn.await {
-            report(&e);
             error!("Upstream HS connection error: {}", e);
         }
     });
@@ -270,14 +263,11 @@ pub async fn upstream_h2<S>(
 where
     S: Read + Write + Unpin + Send + 'static,
 {
-    debug!("H2 upstream");
-
     emitter.emit(HttpEvent::ClientHttpHandshakeStart);
     let (mut upstream_sender, upstream_conn) =
         hyper::client::conn::http2::handshake(TokioExecutor::new(), tls).await?;
 
     emitter.emit(HttpEvent::ClientHttpHandshakeComplete);
-    debug!("H2 upstream connection established");
     tokio::spawn(async move {
         if let Err(e) = upstream_conn.await {
             error!("{e}");

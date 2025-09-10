@@ -126,7 +126,7 @@ where
 
     while let Some(Ok(a)) = body.frame().await {
         if let Some(data) = a.data_ref() {
-            stream.send_data(data.clone()).await?; // TODO: this is bad, no clone here
+            stream.send_data(data.clone()).await?;
         } else if let Ok(trailer) = a.into_trailers() {
             stream.send_trailers(trailer).await?;
         }

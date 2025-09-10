@@ -20,7 +20,7 @@ use roxy_shared::{
 };
 use rustls::ServerConfig;
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::{
     flow::{FlowEvent, InterceptedRequest, InterceptedResponse},
@@ -95,7 +95,7 @@ async fn do_conn(new_conn: quinn::Incoming, cxt: ProxyContext) -> Result<(), Box
     match new_conn.await {
         Ok(conn) => {
             let addr = conn.remote_address();
-            info!("H3 conn {addr}");
+            trace!("H3 conn {addr}");
             let mut h3_conn = h3::server::Connection::new(h3_quinn::Connection::new(conn)).await?;
 
             let resolver = match h3_conn.accept().await? {

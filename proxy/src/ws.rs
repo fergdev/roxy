@@ -1,6 +1,6 @@
 use std::{io::Error, sync::Arc};
 
-use futures::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use roxy_shared::tls::RustlsClientConfig;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -10,7 +10,7 @@ use tokio_tungstenite::{
     Connector, WebSocketStream, accept_async, connect_async_tls_with_config,
     tungstenite::client::IntoClientRequest,
 };
-use tracing::info;
+use tracing::trace;
 
 use crate::{
     flow::{FlowConnection, FlowEvent, WsMessage},
@@ -24,7 +24,7 @@ pub async fn handle_ws<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    info!("Handing WS {:?}", flow_cxt.target_uri);
+    trace!("Handing WS {:?}", flow_cxt.target_uri);
 
     let flow_id = flow_cxt
         .proxy_cxt
@@ -34,11 +34,11 @@ where
         })
         .await;
 
-    info!("Client accept");
+    trace!("Client accept");
     let ws_client = accept_async(stream).await.map_err(Error::other)?;
     let server_stream = TcpStream::connect(&flow_cxt.target_uri.host_port()).await?;
 
-    info!("ws server connect");
+    trace!("ws server connect");
     let ws_server = tokio_tungstenite::client_async("ws://fake", server_stream)
         .await
         .map(|(ws, _resp)| ws)

@@ -29,10 +29,10 @@ tracing-subscriber = { workspace = true }
 tokio-rustls = { workspace = true }
 rustls = { workspace = true }
 rcgen = { workspace = true }
-rustls-native-certs = "0.8"
+rustls-native-certs = { workspace = true }
 
 # Util
-iter_tools = "0.37"
+itertools = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 bytes = { workspace = true }

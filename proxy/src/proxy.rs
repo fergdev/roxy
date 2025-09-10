@@ -155,7 +155,6 @@ pub struct FlowContext {
     pub certs: FlowCerts,
 }
 
-// Write a cool cxt object that "wants" things as we descend
 impl FlowContext {
     pub fn new(client_addr: SocketAddr, target_uri: RUri, proxy_cxt: ProxyContext) -> Self {
         FlowContext {

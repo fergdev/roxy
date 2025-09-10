@@ -20,7 +20,6 @@ use http::uri::Scheme;
 use hyper_util::rt::tokio::WithHyperIo;
 use rustls::pki_types::ServerName;
 use tokio::net::TcpStream;
-use tracing::trace;
 use tracing::warn;
 
 use crate::h3_client::h3_with_proxy;
@@ -104,7 +103,6 @@ impl ClientContext {
     }
 
     pub async fn request(&self, request: Request<BytesBody>) -> Result<HttpResponse, HttpError> {
-        trace!("Do client {:?}", request);
         if request.version() == Version::HTTP_3 {
             self.h3_client_call(request).await
         } else if request.uri().scheme() == Some(&Scheme::HTTPS) {

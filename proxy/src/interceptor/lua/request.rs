@@ -9,7 +9,7 @@ use crate::{
     flow::InterceptedRequest,
     interceptor::{
         KEY_BODY, KEY_HEADERS, KEY_METHOD, KEY_TRAILERS, KEY_URL, KEY_VERSION,
-        lua::{body::LuaBody, headers::LuaHeaders, url::LuaUrl},
+        lua::{body::LuaBody, headers::LuaHeaders, url::LuaUrl, util::KEY_NEW},
     },
 };
 
@@ -156,7 +156,7 @@ pub fn register_request(lua: &Lua) -> LuaResult<LuaTable> {
         let inner = InterceptedRequest::default();
         Ok(LuaRequest::from_parts(Arc::new(Mutex::new(inner))))
     })?;
-    tbl.set("new", new)?;
+    tbl.set(KEY_NEW, new)?;
     lua.globals().set("Request", tbl.clone())?;
     Ok(tbl)
 }

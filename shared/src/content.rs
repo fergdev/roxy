@@ -18,7 +18,6 @@ use http::{
     header::{ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_TYPE},
 };
 use strum::VariantArray;
-use tracing::trace;
 
 #[derive(Debug, Clone, PartialEq, Eq, VariantArray)]
 pub enum ContentType {
@@ -188,11 +187,6 @@ pub enum Encodings {
     Deflate,
     Brotli,
     Zstd,
-    // TODO:
-    // Content-Encoding: compress
-    // Content-Encoding: dcb
-    // Content-Encoding: dcz
-    // har
 }
 
 const GZIP: &str = "gzip";
@@ -250,10 +244,6 @@ pub fn decode_body(body: &Bytes, encoding: &[Encodings]) -> Result<Bytes, Box<dy
     }
 
     let mut body = body.clone();
-    trace!(
-        "decode body {:?}",
-        encoding.iter().rev().collect::<Vec<_>>()
-    );
 
     for enc in encoding.iter().rev() {
         match enc {
@@ -298,7 +288,6 @@ pub fn encode_body(body: &Bytes, encoding: &[Encodings]) -> Result<Bytes, Box<dy
     }
 
     let mut body = body.clone();
-    trace!("Encoding body {encoding:?}");
 
     for enc in encoding {
         match enc {

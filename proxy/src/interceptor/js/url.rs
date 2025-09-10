@@ -67,16 +67,6 @@ js_class! {
             }
         }
 
-        property hostname {
-            fn get(this: JsClass<Url>) -> JsString {
-                JsString::from(url::quirks::hostname(&this.borrow().0.borrow()))
-            }
-
-            fn set(this: JsClass<Url>, value: Convert<String>) {
-                let _ = url::quirks::set_hostname(&mut this.borrow_mut().0.borrow_mut(), &value.0);
-            }
-        }
-
         property host {
             fn get(this: JsClass<Url>) -> JsString {
                 JsString::from(url::quirks::host(&this.borrow().0.borrow()))
@@ -114,7 +104,7 @@ js_class! {
             }
         }
 
-        property pathname {
+        property path {
             fn get(this: JsClass<Url>) -> JsString {
                 JsString::from(url::quirks::pathname(&this.borrow().0.borrow()))
             }

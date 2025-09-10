@@ -13,7 +13,6 @@ use rustls::{
     ClientConnection, ProtocolVersion, RootCertStore, ServerConnection, SignatureScheme,
     SupportedCipherSuite, pki_types::*,
 };
-use tracing::trace;
 
 #[derive(Debug, Default, Clone)]
 pub struct ServerVerificationCapture {
@@ -134,9 +133,7 @@ impl LoggingClientVerifier {
     }
 
     pub fn with_inner(root_store: Arc<RootCertStore>) -> Self {
-        // let provider = rustls::crypto::aws_lc_rs::default_provider();
-        let provider = rustls::crypto::ring::default_provider();
-
+        let provider = rustls::crypto::aws_lc_rs::default_provider();
         let inner = WebPkiClientVerifier::builder_with_provider(root_store, Arc::new(provider))
             .build()
             .map(Some)
@@ -215,7 +212,6 @@ impl ClientCertVerifier for LoggingClientVerifier {
         cert: &CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        trace!("verify_tls13_signature");
         let verification_result = self
             .inner
             .as_ref()
@@ -297,8 +293,6 @@ impl ServerCertVerifier for LoggingServerVerifier {
         ocsp_response: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
-        trace!("Verifying server certificate for: {:?}", server_name);
-
         let res = self
             .inner
             .as_ref()

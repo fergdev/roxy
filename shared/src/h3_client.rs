@@ -17,7 +17,7 @@ use http::{
     header::{HOST, TE, TRAILER},
 };
 use rustls::RootCertStore;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, trace};
 
 use h3_quinn::{BidiStream, quinn};
 
@@ -110,7 +110,6 @@ async fn h3_with_proxy_inner(
     let req = Request::from_parts(parts, ());
     let mut stream = send_request.send_request(req).await?;
 
-    debug!("REQUEST waiting ...");
     while let Some(Ok(frame)) = body.frame().await {
         if let Some(data) = frame.data_ref() {
             stream.send_data(data.clone()).await?; // TODO: this is bad, no clone here
@@ -121,9 +120,6 @@ async fn h3_with_proxy_inner(
 
     stream.finish().await?;
     let resp = stream.recv_response().await?;
-    trace!("REQUEST response: {:?} {}", resp.version(), resp.status());
-    trace!("REQUEST headers: {:#?}", resp.headers());
-
     let mut buf = BytesMut::new();
     while let Some(chunk) = stream.recv_data().await? {
         buf.extend_from_slice(chunk.chunk());
@@ -137,8 +133,6 @@ async fn h3_with_proxy_inner(
     } else {
         None
     };
-    trace!("REQUEST trailers {:?}", trailers);
-    trace!("REQUEST shutting down");
 
     drive.abort();
 
@@ -201,8 +195,7 @@ pub async fn client_h3_wt(
         .body(())
     {
         Ok(req) => req,
-        Err(e) => {
-            error!("oooops {e}");
+        Err(_) => {
             return Err(Box::new(StreamError::RemoteClosing));
         }
     };
@@ -211,26 +204,18 @@ pub async fn client_h3_wt(
         send_request.send_request(req).await?;
     stream.finish().await?;
 
-    trace!("receiving response ...");
     let resp = stream.recv_response().await?;
-    trace!("response: {:?} {}", resp.version(), resp.status());
-    trace!("headers: {:#?}", resp.headers());
-
     if resp.status() != 200 {
         return Err(Box::new(io::Error::other("Connect refused")));
     }
 
     let (mut wt_tx, mut wt_rx) = conn.accept_bi().await?;
     let _ = wt_rx.read_to_end(66546).await?;
-    trace!("Recv data");
-    wt_tx.write(b"hey back").await?;
     wt_tx.finish()?;
 
     conn.send_datagram_wait(Bytes::from_static(b"heloooooooooo"))
         .await?;
-    let data = conn.read_datagram().await?;
-
-    info!("datagram {:?}", data);
+    let _ = conn.read_datagram().await?;
 
     conn.close(VarInt::from_u32(0), &[]);
     Ok(())

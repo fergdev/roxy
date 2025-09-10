@@ -4,7 +4,7 @@ use mlua::prelude::*;
 
 use crate::interceptor::{
     KEY_REQUEST, KEY_RESPONSE,
-    lua::{request::LuaRequest, response::LuaResponse},
+    lua::{request::LuaRequest, response::LuaResponse, util::KEY_NEW},
 };
 
 #[derive(Clone, Debug, Default)]
@@ -62,7 +62,7 @@ pub(crate) fn register_flow(lua: &Lua) -> LuaResult<LuaTable> {
         let flow = LuaFlow::default();
         lua.create_userdata(flow)
     })?;
-    tbl.set("new", new)?;
+    tbl.set(KEY_NEW, new)?;
     lua.globals().set("Flow", tbl.clone())?;
     Ok(tbl)
 }

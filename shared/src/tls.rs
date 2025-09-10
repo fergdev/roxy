@@ -31,8 +31,7 @@ pub struct TlsConfig {
 impl Default for TlsConfig {
     fn default() -> Self {
         init_crypto();
-        //let provider = rustls::crypto::aws_lc_rs::default_provider();
-        let provider = rustls::crypto::ring::default_provider();
+        let provider = rustls::crypto::aws_lc_rs::default_provider();
         TlsConfig::from_provider(provider)
     }
 }
@@ -100,7 +99,6 @@ impl TlsConfig {
         let resolver = Arc::new(LoggingResolvesServerCert::new(certified_key));
         let server_config = ServerConfig::builder_with_provider(self.crypto_provider.clone())
             .with_protocol_versions(versions.as_slice())?
-            // .with_safe_default_protocol_versions()?
             .with_no_client_auth()
             .with_cert_resolver(resolver.clone());
 

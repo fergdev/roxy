@@ -1,6 +1,5 @@
 # Summary
 
-- [Introduction](./intro.md)
 - [Getting Started](./getting-started.md)
 - [Scripting Reference](./scripting/README.md)
   - [Flows](./scripting/flows.md)

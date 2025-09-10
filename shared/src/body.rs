@@ -1,6 +1,5 @@
 use bytes::{Buf, Bytes};
 
-use futures::Future;
 use http::HeaderMap;
 use http_body_util::Full;
 use http_body_util::combinators::BoxBody;
