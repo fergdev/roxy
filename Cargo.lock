@@ -4301,7 +4301,7 @@ dependencies = [
  "unicode-truncate 2.0.0",
  "unicode-width 0.2.0",
  "webpki-roots",
- "x509-parser 0.17.0",
+ "x509-parser 0.18.0",
  "xmltree",
 ]
 

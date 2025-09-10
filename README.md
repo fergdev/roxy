@@ -85,7 +85,6 @@ I would genuinely enjoy collaborating on this with others — whether you’re e
 - [ ] body size
 - [ ] timing info
 - [ ] use http_proxy and https_proxy env vars, add UI to turn them on/off
-- [ ] Panic handling
 
 ## License
 

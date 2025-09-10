@@ -1,5 +1,6 @@
 use clap::Parser;
 use config::ConfigError;
+use cow_utils::CowUtils;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
 use serde::ser::SerializeMap;
@@ -22,7 +23,7 @@ use crate::notify_error;
 const CONFIG: &str = include_str!("../../.config/config.json");
 
 lazy_static! {
-    pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
+    pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").cow_to_uppercase().to_string();
     pub static ref DATA_FOLDER: Option<PathBuf> =
         env::var(format!("{}_DATA", PROJECT_NAME.clone()))
             .ok()
@@ -406,7 +407,7 @@ pub fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
 }
 
 pub fn parse_key_event(raw: &str) -> Result<KeyEvent, String> {
-    let raw_lower = raw.to_ascii_lowercase();
+    let raw_lower = raw.cow_to_ascii_lowercase();
     let (remaining, modifiers) = extract_modifiers(&raw_lower);
     parse_key_code_with_modifiers(remaining, modifiers)
 }
@@ -617,7 +618,7 @@ pub fn parse_color(s: &str) -> Result<Color, String> {
 
 fn parse_named_color(name: &str) -> Result<Color, ()> {
     use Color::*;
-    Ok(match name.to_lowercase().as_str() {
+    Ok(match name.cow_to_lowercase().as_ref() {
         "black" => Black,
         "red" => Red,
         "green" => Green,
