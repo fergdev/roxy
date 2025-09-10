@@ -1,5 +1,4 @@
 use bytes::Bytes;
-use chrono::Utc;
 use http::{HeaderMap, Method, StatusCode};
 use roxy_proxy::{
     flow::{InterceptedRequest, InterceptedResponse},
@@ -8,6 +7,7 @@ use roxy_proxy::{
 };
 use roxy_shared::alpn::AlpnProtocol;
 use strum::IntoEnumIterator;
+use time::OffsetDateTime;
 use tokio::sync::mpsc;
 
 const SCRIPT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/script_engine");
@@ -23,7 +23,7 @@ impl TestContext {
         init_test_logging();
 
         let expect_req = InterceptedRequest {
-            timestamp: Utc::now(),
+            timestamp: OffsetDateTime::now_utc(),
             uri: "http://localhost".parse().unwrap(),
             alpn: AlpnProtocol::None,
             encoding: None,
@@ -36,7 +36,7 @@ impl TestContext {
 
         let expect_resp = InterceptedResponse {
             status: StatusCode::OK,
-            timestamp: Utc::now(),
+            timestamp: OffsetDateTime::now_utc(),
             version: http::Version::HTTP_11.into(),
             encoding: None,
             headers: HeaderMap::new(),

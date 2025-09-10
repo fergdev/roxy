@@ -1,5 +1,4 @@
 use bytes::Bytes;
-use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use http::header::{
     ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, DATE, HOST, SET_COOKIE, TE,
@@ -34,6 +33,7 @@ use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 use std::time::Duration;
 use strum::VariantArray;
+use time::OffsetDateTime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
@@ -639,7 +639,7 @@ async fn test_intercept_http_proxy_request_query() {
 }
 
 fn rnd_string() -> String {
-    Utc::now().to_string()
+    OffsetDateTime::now_utc().to_string()
 }
 
 #[tokio::test]
@@ -662,7 +662,7 @@ async fn test_http_proxy_request_compress() {
             let pq = http::uri::PathAndQuery::from_static("/compress");
             parts.path_and_query = Some(pq);
 
-            let body_str = Utc::now().to_string();
+            let body_str = OffsetDateTime::now_utc().to_string();
             let rnd = Bytes::from(body_str.clone());
             let body = encode_body(&rnd, &enc).unwrap();
             let body = BoxBody::new(Full::new(body));
@@ -721,7 +721,7 @@ async fn test_http_proxy_chunked() {
         let pq = http::uri::PathAndQuery::from_static("/chunked");
         parts.path_and_query = Some(pq);
 
-        let body_str = Utc::now().to_string();
+        let body_str = OffsetDateTime::now_utc().to_string();
         let rnd = Bytes::from(body_str.clone());
         let body = BoxBody::new(Full::new(rnd));
 

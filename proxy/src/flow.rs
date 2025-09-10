@@ -1,10 +1,9 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 
-use http::StatusCode;
 use http::header::{CONTENT_LENGTH, TRANSFER_ENCODING};
+use http::{StatusCode, Version};
 use roxy_shared::alpn::AlpnProtocol;
 
 use roxy_shared::body::create_http_body;
@@ -25,6 +24,7 @@ use once_cell::sync::Lazy;
 use roxy_shared::body::BytesBody;
 use roxy_shared::version::HttpVersion;
 use snowflake::SnowflakeIdGenerator;
+use time::OffsetDateTime;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{Mutex, RwLock, watch};
@@ -129,16 +129,19 @@ impl FlowStore {
                     FlowEvent::HttpEvent(inner) => match inner {
                         HttpEvent::TcpConnect(addr) => {
                             guard.server_connection = Some(FlowConnection { addr });
-                            guard.timing.server_conn_tcp_handshake = Some(Utc::now());
+                            guard.timing.server_conn_tcp_handshake =
+                                Some(OffsetDateTime::now_utc());
                         }
                         HttpEvent::ClientHttpHandshakeStart => {
-                            guard.timing.server_conn_http_handshake = Some(Utc::now());
+                            guard.timing.server_conn_http_handshake =
+                                Some(OffsetDateTime::now_utc());
                         }
                         HttpEvent::ClientHttpHandshakeComplete => {}
                         HttpEvent::ClientTlsConn(tls_conn_data, server_verification) => {
                             guard.certs.server_tls = Some(tls_conn_data);
                             guard.certs.server_verification = Some(server_verification);
-                            guard.timing.server_conn_tls_handshake = Some(Utc::now());
+                            guard.timing.server_conn_tls_handshake =
+                                Some(OffsetDateTime::now_utc());
                         }
                         HttpEvent::ServerTlsConn(_server_tls_conn, _client_verification) => {
                             // TODO: this is captured earlier in the flow
@@ -146,10 +149,11 @@ impl FlowStore {
                             // guard.certs.client_verification = Some(client_verification);
                         }
                         HttpEvent::ServerTlsConnInitiated => {
-                            guard.timing.server_conn_tls_initiated = Some(Utc::now())
+                            guard.timing.server_conn_tls_initiated = Some(OffsetDateTime::now_utc())
                         }
                         HttpEvent::ClientTlsHandshake => {
-                            guard.timing.client_conn_tls_handshake = Some(Utc::now());
+                            guard.timing.client_conn_tls_handshake =
+                                Some(OffsetDateTime::now_utc());
                         }
                     },
                     FlowEvent::Response(resp) => {
@@ -257,7 +261,7 @@ impl Flow {
 pub struct WsMessage {
     pub message: Message,
     pub direction: WsDirection,
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: OffsetDateTime,
 }
 
 impl WsMessage {
@@ -265,14 +269,14 @@ impl WsMessage {
         Self {
             message,
             direction: WsDirection::Client,
-            timestamp: Utc::now(),
+            timestamp: OffsetDateTime::now_utc(),
         }
     }
     pub fn server(message: Message) -> Self {
         Self {
             message,
             direction: WsDirection::Server,
-            timestamp: Utc::now(),
+            timestamp: OffsetDateTime::now_utc().into(),
         }
     }
 }
@@ -292,30 +296,30 @@ pub struct TlsMetadata {
 
 #[derive(Debug, Default, Clone)]
 pub struct Timing {
-    pub client_conn_established: Option<DateTime<Utc>>,
-    pub client_conn_tls_handshake: Option<DateTime<Utc>>,
+    pub client_conn_established: Option<OffsetDateTime>,
+    pub client_conn_tls_handshake: Option<OffsetDateTime>,
 
-    pub server_conn_initiated: Option<DateTime<Utc>>,
-    pub server_conn_tcp_handshake: Option<DateTime<Utc>>,
+    pub server_conn_initiated: Option<OffsetDateTime>,
+    pub server_conn_tcp_handshake: Option<OffsetDateTime>,
 
-    pub server_conn_tls_initiated: Option<DateTime<Utc>>,
-    pub server_conn_tls_handshake: Option<DateTime<Utc>>,
+    pub server_conn_tls_initiated: Option<OffsetDateTime>,
+    pub server_conn_tls_handshake: Option<OffsetDateTime>,
 
-    pub server_conn_http_handshake: Option<DateTime<Utc>>,
+    pub server_conn_http_handshake: Option<OffsetDateTime>,
 
-    pub first_request_bytes: Option<DateTime<Utc>>,
-    pub request_complete: Option<DateTime<Utc>>,
+    pub first_request_bytes: Option<OffsetDateTime>,
+    pub request_complete: Option<OffsetDateTime>,
 
-    pub first_response_bytes: Option<DateTime<Utc>>,
-    pub response_complete: Option<DateTime<Utc>>,
+    pub first_response_bytes: Option<OffsetDateTime>,
+    pub response_complete: Option<OffsetDateTime>,
 
-    pub client_conn_closed: Option<DateTime<Utc>>,
-    pub server_conn_closed: Option<DateTime<Utc>>,
+    pub client_conn_closed: Option<OffsetDateTime>,
+    pub server_conn_closed: Option<OffsetDateTime>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterceptedRequest {
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: OffsetDateTime,
     pub uri: RUri,
     pub encoding: Option<Vec<Encodings>>,
     pub alpn: AlpnProtocol,
@@ -324,6 +328,22 @@ pub struct InterceptedRequest {
     pub headers: HeaderMap,
     pub body: bytes::Bytes,
     pub trailers: Option<HeaderMap>,
+}
+
+impl Default for InterceptedRequest {
+    fn default() -> Self {
+        Self {
+            timestamp: OffsetDateTime::now_utc(),
+            uri: RUri::default(),
+            encoding: None,
+            alpn: AlpnProtocol::None,
+            method: http::Method::GET,
+            version: HttpVersion(Version::HTTP_11),
+            headers: HeaderMap::new(),
+            body: bytes::Bytes::new(),
+            trailers: None,
+        }
+    }
 }
 
 impl InterceptedRequest {
@@ -351,7 +371,7 @@ impl InterceptedRequest {
         headers.remove(TRANSFER_ENCODING);
 
         InterceptedRequest {
-            timestamp: Utc::now(),
+            timestamp: OffsetDateTime::now_utc(),
             uri: uri.clone(),
             encoding,
             alpn,
@@ -407,15 +427,29 @@ impl InterceptedRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterceptedResponse {
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: OffsetDateTime,
     pub status: StatusCode,
     pub version: HttpVersion,
     pub headers: HeaderMap,
     pub encoding: Option<Vec<Encodings>>,
     pub body: bytes::Bytes,
     pub trailers: Option<HeaderMap>,
+}
+
+impl Default for InterceptedResponse {
+    fn default() -> Self {
+        Self {
+            timestamp: OffsetDateTime::now_utc(),
+            status: StatusCode::OK,
+            version: HttpVersion(Version::HTTP_11),
+            headers: HeaderMap::new(),
+            encoding: None,
+            body: bytes::Bytes::new(),
+            trailers: None,
+        }
+    }
 }
 
 impl InterceptedResponse {
@@ -441,7 +475,7 @@ impl InterceptedResponse {
         headers.remove(TRANSFER_ENCODING);
 
         InterceptedResponse {
-            timestamp: Utc::now(),
+            timestamp: OffsetDateTime::now_utc(),
             status: parts.status,
             version: parts.version.into(),
             headers,

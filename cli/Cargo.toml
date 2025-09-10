@@ -48,7 +48,7 @@ strum = { workspace = true }
 signal-hook = "0.3.17"
 async-watcher = "0.3.0"
 bytes = { workspace = true }
-chrono = { workspace = true }
+time = { workspace = true }
 clap = { version = "4.5.40", features = ["derive"] }
 directories = "6.0.0"
 lazy_static = "1.5.0"                                # TODO: Can I just use once_cell?

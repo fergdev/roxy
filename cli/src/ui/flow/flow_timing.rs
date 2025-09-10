@@ -1,7 +1,7 @@
-use chrono::{DateTime, Utc};
 use rat_focus::HasFocus;
 use ratatui::{Frame, layout::Rect, widgets::Paragraph};
 use roxy_proxy::flow::Timing;
+use time::OffsetDateTime;
 use tokio::sync::{mpsc, watch};
 
 use crate::ui::framework::{component::Component, theme::themed_block};
@@ -58,7 +58,7 @@ impl FlowTiming {
     }
 }
 
-fn timing_line(time: &Option<DateTime<Utc>>, key: &str) -> String {
+fn timing_line(time: &Option<OffsetDateTime>, key: &str) -> String {
     format!(
         "{}: {}",
         key,
