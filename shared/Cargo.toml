@@ -15,8 +15,8 @@ rcgen = { workspace = true }
 tokio-rustls = { workspace = true }
 webpki-roots = "1.0.2"
 rustls-native-certs = { workspace = true }
-tokio-native-tls = { version = "0.3.1" }
-native-tls = { version = "0.2", features = ["alpn"] }
+tokio-native-tls = "0.3.1"
+native-tls = { version = "0.2.14", features = ["alpn"] }
 aws-lc-rs = { workspace = true }
 
 # Http
@@ -32,16 +32,16 @@ quinn = { workspace = true }
 web-transport-quinn = { workspace = true }
 
 # Compression
-flate2 = "1.0"
-brotli = "8.0.1"
-zstd = "0.13"
+flate2 = "1.1.2"
+brotli = "8.0.2"
+zstd = "0.13.3"
 
 # Util
 pin-project-lite = "0.2.16"
 bytes = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-time = "0.3.41"                     # Required for rcgen
+time = "0.3.43"                     # Required for rcgen
 dirs = { workspace = true }
 once_cell = { workspace = true }
 cow-utils = { workspace = true }

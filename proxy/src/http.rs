@@ -29,14 +29,14 @@ use crate::flow::InterceptedRequest;
 use crate::flow::InterceptedResponse;
 use crate::proxy::FlowContext;
 
-pub async fn handle_http(
+pub(crate) async fn handle_http(
     flow_cxt: FlowContext,
     client_request: Request<hyper::body::Incoming>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, HttpError> {
     proxy(flow_cxt, AlpnProtocol::None, Scheme::HTTP, client_request).await
 }
 
-pub async fn handle_https<S>(
+pub(crate) async fn handle_https<S>(
     flow_cxt: FlowContext,
     client_stream: S,
 ) -> Result<(), Box<dyn std::error::Error>>
@@ -55,7 +55,7 @@ where
     Ok(())
 }
 
-pub async fn handle_h2<S>(
+pub(crate) async fn handle_h2<S>(
     flow_cxt: FlowContext,
     client_stream: S,
 ) -> Result<(), Box<dyn std::error::Error>>
