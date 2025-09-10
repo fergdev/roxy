@@ -77,7 +77,6 @@ fn walk_node(node: &NodeRef, depth: usize, out: &mut Vec<Line>) {
         walk_node(&child, depth + 1, out);
     }
 
-    // Close tag
     if let NodeData::Element(element_data) = &node.data() {
         out.push(Line::from(vec![
             Span::styled(

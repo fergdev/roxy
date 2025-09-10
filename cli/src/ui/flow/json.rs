@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use cow_utils::CowUtils;
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
@@ -20,7 +21,7 @@ pub fn highlight_json(raw: Bytes) -> Vec<Line<'static>> {
             notify_error!("Json {}", err);
             let s = String::from_utf8_lossy(&raw).to_string();
             error!("Invalid json {}\n{}", err, s);
-            s.replace(":", ":\n")
+            s.cow_replace(":", ":\n")
                 .lines()
                 .map(|l| Line::from(l.to_string()))
                 .collect()

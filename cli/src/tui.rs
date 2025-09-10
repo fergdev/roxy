@@ -133,11 +133,10 @@ impl Tui {
                         _ => continue, // ignore other events
                     }
                     Some(Err(_)) => Event::Error,
-                    None => break, // the event stream has stopped and will not produce any more events
+                    None => break,
                 },
             };
             if event_tx.send(event).is_err() {
-                // the receiver has been dropped, so there's no point in continuing the loop
                 break;
             }
         }
