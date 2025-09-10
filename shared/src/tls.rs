@@ -31,8 +31,7 @@ pub struct TlsConfig {
 impl Default for TlsConfig {
     fn default() -> Self {
         init_crypto();
-        //let provider = rustls::crypto::aws_lc_rs::default_provider();
-        let provider = rustls::crypto::ring::default_provider();
+        let provider = rustls::crypto::aws_lc_rs::default_provider();
         TlsConfig::from_provider(provider)
     }
 }

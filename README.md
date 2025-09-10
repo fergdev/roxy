@@ -1,26 +1,21 @@
-# roxy
+# Roxy
 
 CLI MITM proxy written in Rust.
 
-This is currently a hack fest, but it works and is fun to use. It is a work in progress, so expect changes and improvements over time.
+[![GitHub Pages](https://img.shields.io/badge/docs-GitHub%20Pages-blue?logo=github)](https://fergdev.github.io/roxy/)
+
+## Status
+
+Currently in a stabilization phase and looking to solidify the core features.
 
 ## Demo
 
 <https://github.com/user-attachments/assets/a98a5a57-775d-424c-ab91-97d7a17793ea>
 
-## Features
+## 📖 Documentation
 
-- [x] HTTP
-- [x] HTTPS
-- [x] Cert generation
-- [x] Scripting using LUA
-
-## Build environment
-
-```bash
-rustup target add x86_64-apple-darwin
-cargo install --force --locked bindgen-cli
-```
+Full docs are available here:  
+[Getting Started with Roxy](https://fergdev.github.io/roxy/)
 
 ## Testing
 
@@ -74,17 +69,6 @@ This project is in its early stages, and contributions of all kinds are welcome 
 The goal is to build a fast, flexible proxy with scriptable interception and inspection. If that sounds interesting to you, feel free to explore the codebase, open an issue, or start a pull request.
 
 I would genuinely enjoy collaborating on this with others — whether you’re experimenting, learning, or building something serious. Almost any improvement is helpful right now. If you’re not sure where to begin, reach out.
-
-## TODO
-
-- [ ] web-ui
-- [ ] http2
-- [ ] http3
-- [ ] websocket
-- [ ] github pages
-- [ ] body size
-- [ ] timing info
-- [ ] use http_proxy and https_proxy env vars, add UI to turn them on/off
 
 ## License
 

@@ -20,7 +20,6 @@ use roxy_proxy::{
 };
 use roxy_shared::tls::TlsConfig;
 use tokio::sync::mpsc;
-use tracing::info;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
@@ -53,7 +52,6 @@ async fn main() -> color_eyre::Result<()> {
     let flow_store = FlowStore::new();
     let cfg = config_manager.rx.borrow();
 
-    // let debouncer: Option<Arc<Mutex<AsyncDebouncer<NullWatcher>>>>;
     let (notify_tx, mut notify_rx) = mpsc::channel::<interceptor::FlowNotify>(16);
 
     let notify_handle = tokio::spawn(async move {
@@ -70,7 +68,6 @@ async fn main() -> color_eyre::Result<()> {
     let mut script_engine = ScriptEngine::new_notify(notify_tx);
 
     if let Some(path) = cfg.app.proxy.script_path.clone() {
-        info!("Setting script!");
         let script = tokio::fs::read_to_string(&path).await?;
         if let Err(e) = script_engine
             .set_script(&script, interceptor::ScriptType::Lua)

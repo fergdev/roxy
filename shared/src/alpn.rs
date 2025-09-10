@@ -52,10 +52,10 @@ impl AlpnProtocol {
 }
 
 pub fn alp_h2_h1() -> Vec<Vec<u8>> {
-    vec![ALPN_H2.to_vec(), ALPN_H11.to_vec()] // TODO: make this configurable
+    vec![ALPN_H2.to_vec(), ALPN_H11.to_vec()]
 }
 pub fn alp_h1_h2() -> Vec<Vec<u8>> {
-    vec![ALPN_H11.to_vec(), ALPN_H2.to_vec()] // TODO: make this configurable
+    vec![ALPN_H11.to_vec(), ALPN_H2.to_vec()]
 }
 pub fn alp_h1() -> Vec<Vec<u8>> {
     vec![ALPN_H11.to_vec()]

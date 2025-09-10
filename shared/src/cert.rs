@@ -134,9 +134,7 @@ impl LoggingClientVerifier {
     }
 
     pub fn with_inner(root_store: Arc<RootCertStore>) -> Self {
-        // let provider = rustls::crypto::aws_lc_rs::default_provider();
-        let provider = rustls::crypto::ring::default_provider();
-
+        let provider = rustls::crypto::aws_lc_rs::default_provider();
         let inner = WebPkiClientVerifier::builder_with_provider(root_store, Arc::new(provider))
             .build()
             .map(Some)

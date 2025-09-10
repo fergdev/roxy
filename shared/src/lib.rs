@@ -153,8 +153,6 @@ fn load_native_certs(extra: Option<CertificateDer<'static>>) -> RootCertStore {
     }
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-    trace!("Cert store size {}", roots.len());
-
     roots
 }
 

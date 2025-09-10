@@ -188,11 +188,6 @@ pub enum Encodings {
     Deflate,
     Brotli,
     Zstd,
-    // TODO:
-    // Content-Encoding: compress
-    // Content-Encoding: dcb
-    // Content-Encoding: dcz
-    // har
 }
 
 const GZIP: &str = "gzip";
