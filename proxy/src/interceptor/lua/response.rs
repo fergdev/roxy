@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use crate::flow::InterceptedResponse;
 use crate::interceptor::lua::body::LuaBody;
 use crate::interceptor::lua::headers::LuaHeaders;
+use crate::interceptor::lua::util::KEY_NEW;
 use crate::interceptor::{KEY_BODY, KEY_HEADERS, KEY_STATUS, KEY_TRAILERS, KEY_VERSION};
 
 #[derive(Clone, Debug)]
@@ -160,7 +161,7 @@ pub fn register_response(lua: &Lua) -> LuaResult<LuaTable> {
         }
         Ok(LuaResponse::from_parts(Arc::new(Mutex::new(inner))))
     })?;
-    tbl.set("new", new)?;
+    tbl.set(KEY_NEW, new)?;
     lua.globals().set("Response", tbl.clone())?;
     Ok(tbl)
 }

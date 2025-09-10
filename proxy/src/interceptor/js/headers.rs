@@ -8,7 +8,7 @@ use boa_gc::{Finalize, Trace};
 use boa_interop::{JsClass, js_class};
 use http::{HeaderMap, HeaderName, HeaderValue};
 
-fn to_header_name(name: &str) -> Result<HeaderName, JsError> {
+fn to_header_name(name: &str) -> JsResult<HeaderName> {
     HeaderName::from_bytes(name.as_bytes())
         .map_err(|e| js_error!(TypeError: "Invalid header name: {}", e))
 }

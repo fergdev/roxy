@@ -822,12 +822,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
-name = "clone_dyn_types"
-version = "0.38.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec3ea6a6cad557cf4394aecff2bda6266914123ad9c46a9cb1c576b10f80438f"
-
-[[package]]
 name = "cmake"
 version = "0.1.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2537,25 +2531,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7943c866cc5cd64cbc25b2e01621d07fa8eb2a1a23160ee81ce38704e97b8ecf"
 
 [[package]]
-name = "iter_tools"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e68442ead22fbfa506eaa0b613826a373594f86e1e5be6db2d2d1dc1189420e8"
-dependencies = [
- "clone_dyn_types",
- "itertools 0.11.0",
-]
-
-[[package]]
-name = "itertools"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itertools"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4256,7 +4231,7 @@ dependencies = [
  "derive_deref",
  "directories",
  "dirs",
- "futures",
+ "futures-util",
  "hyper",
  "image",
  "json5",
@@ -4310,7 +4285,7 @@ dependencies = [
  "criterion",
  "dashmap",
  "derive_deref",
- "futures",
+ "futures-util",
  "h3",
  "h3-quinn",
  "http",
@@ -4361,7 +4336,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "iter_tools",
+ "itertools 0.14.0",
  "quinn",
  "rcgen",
  "roxy-shared",
@@ -4387,7 +4362,6 @@ dependencies = [
  "cow-utils",
  "dirs",
  "flate2",
- "futures",
  "futures-util",
  "h3",
  "h3-datagram",

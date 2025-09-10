@@ -7,7 +7,7 @@ use http::{
     request::Parts,
 };
 use http_body_util::{BodyExt, Empty, Full, combinators::BoxBody};
-use iter_tools::Itertools;
+use itertools::Itertools;
 use roxy_shared::{
     body::BufferedBody,
     content::{

@@ -4,6 +4,8 @@ use bytes::Bytes;
 use mlua::prelude::*;
 use tracing::error;
 
+use crate::interceptor::lua::util::KEY_NEW;
+
 #[derive(Clone, Debug)]
 pub(crate) struct LuaBody {
     pub(crate) inner: Arc<Mutex<Bytes>>,
@@ -144,7 +146,7 @@ pub fn register_body(lua: &Lua) -> LuaResult<LuaTable> {
             .unwrap_or_default();
         Ok(LuaBody::from_bytes(bytes))
     })?;
-    tbl.set("new", new)?;
+    tbl.set(KEY_NEW, new)?;
     lua.globals().set("Body", tbl.clone())?;
     Ok(tbl)
 }

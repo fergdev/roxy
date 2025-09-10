@@ -29,7 +29,6 @@ use crate::cert::ClientVerificationCapture;
 use crate::cert::ServerTlsConnectionData;
 use crate::cert::ServerVerificationCapture;
 use crate::uri::RUri;
-use crate::util::report;
 type H1ClientBuilder = hyper::client::conn::http1::Builder;
 
 #[derive(Debug)]
@@ -250,7 +249,6 @@ where
 
     tokio::spawn(async move {
         if let Err(e) = upstream_conn.await {
-            report(&e);
             error!("Upstream HS connection error: {}", e);
         }
     });

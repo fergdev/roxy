@@ -11,7 +11,6 @@ pub mod http;
 pub mod io;
 pub mod tls;
 pub mod uri;
-pub mod util;
 pub mod version;
 
 use p12_keystore::{KeyStore, KeyStoreEntry, PrivateKeyChain};

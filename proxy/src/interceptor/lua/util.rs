@@ -1,5 +1,7 @@
 use mlua::prelude::*;
 
+pub(crate) const KEY_NEW: &str = "new";
+
 pub(crate) fn lua_val_to_str(val: LuaValue) -> LuaResult<String> {
     Ok(match val {
         LuaValue::String(s) => s.to_str()?.to_string(),

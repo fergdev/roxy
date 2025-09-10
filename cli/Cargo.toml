@@ -14,9 +14,9 @@ x509-parser = "0.18.0"
 webpki-roots = "1.0.1"
 
 # Async
-futures = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+futures-util = { workspace = true }
 
 # Tracing
 tracing = { workspace = true }

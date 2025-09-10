@@ -32,7 +32,7 @@ rcgen = { workspace = true }
 rustls-native-certs = "0.8"
 
 # Util
-iter_tools = "0.37"
+itertools = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 bytes = { workspace = true }

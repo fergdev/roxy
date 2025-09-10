@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 # Async
 tokio = { workspace = true }
-futures = { workspace = true }
 futures-util = { workspace = true }
 
 # Tls

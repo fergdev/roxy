@@ -14,6 +14,7 @@ use crate::interceptor::KEY_PORT;
 use crate::interceptor::KEY_SCHEME;
 use crate::interceptor::KEY_USERNAME;
 use crate::interceptor::lua::query::LuaQueryView;
+use crate::interceptor::lua::util::KEY_NEW;
 
 #[derive(Clone, Debug)]
 pub struct LuaUrl {
@@ -263,7 +264,7 @@ pub(crate) fn register_url(lua: &Lua) -> LuaResult<LuaTable> {
         Ok(LuaUrl::from_ruri(ruri))
     })?;
 
-    tbl.set("new", new)?;
+    tbl.set(KEY_NEW, new)?;
     lua.globals().set("Url", tbl.clone())?;
     Ok(tbl)
 }
