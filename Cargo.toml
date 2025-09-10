@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["proxy", "cli", "servers", "shared", "rurl"]
+members = ["proxy", "cli", "servers", "shared"]
 
 [workspace.dependencies]
 dirs = "6.0.0"

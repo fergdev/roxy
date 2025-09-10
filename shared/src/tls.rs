@@ -99,7 +99,6 @@ impl TlsConfig {
         let resolver = Arc::new(LoggingResolvesServerCert::new(certified_key));
         let server_config = ServerConfig::builder_with_provider(self.crypto_provider.clone())
             .with_protocol_versions(versions.as_slice())?
-            // .with_safe_default_protocol_versions()?
             .with_no_client_auth()
             .with_cert_resolver(resolver.clone());
 

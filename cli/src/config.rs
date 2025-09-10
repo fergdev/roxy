@@ -9,7 +9,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::{collections::HashMap, path::PathBuf};
 use tokio::sync::watch;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use color_eyre::Result;
 use derive_deref::{Deref, DerefMut};
@@ -167,8 +167,6 @@ impl Display for RoxyConfigError {
 
 impl ConfigManager {
     pub fn new() -> Result<Self, RoxyConfigError> {
-        info!("Initializing ConfigManager with default config");
-        info!("Initializing ConfigManager {}", CONFIG);
         let args = RoxyArgs::parse();
         let mut config = Self::read_from_disk()?;
 
