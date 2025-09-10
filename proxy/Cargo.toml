@@ -38,7 +38,7 @@ hyper-util = { version = "0.1", features = ["full"] }
 bytes = "1.10.1"
 http = "1"
 http-body = "1"
-x509-parser = { version = "0.17" }
+x509-parser = { version = "0.18" }
 dashmap = "6.1.0"
 derive_deref = "1.1.1"
 strum = { version = "0.27.1", features = ["derive"] }

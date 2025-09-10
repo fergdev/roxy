@@ -3022,7 +3022,7 @@ dependencies = [
  "sha1",
  "sha2",
  "thiserror 2.0.12",
- "x509-parser",
+ "x509-parser 0.17.0",
 ]
 
 [[package]]
@@ -3775,7 +3775,7 @@ dependencies = [
  "ring",
  "rustls-pki-types",
  "time",
- "x509-parser",
+ "x509-parser 0.17.0",
  "yasna",
 ]
 
@@ -3927,7 +3927,7 @@ dependencies = [
  "unicode-truncate 2.0.0",
  "unicode-width 0.2.0",
  "webpki-roots",
- "x509-parser",
+ "x509-parser 0.17.0",
  "xmltree",
 ]
 
@@ -3975,7 +3975,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "webpki-roots",
- "x509-parser",
+ "x509-parser 0.18.0",
 ]
 
 [[package]]
@@ -6084,6 +6084,23 @@ dependencies = [
  "nom",
  "oid-registry",
  "ring",
+ "rusticata-macros",
+ "thiserror 2.0.12",
+ "time",
+]
+
+[[package]]
+name = "x509-parser"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb3e137310115a65136898d2079f003ce33331a6c4b0d51f1531d1be082b6425"
+dependencies = [
+ "asn1-rs",
+ "data-encoding",
+ "der-parser",
+ "lazy_static",
+ "nom",
+ "oid-registry",
  "rusticata-macros",
  "thiserror 2.0.12",
  "time",

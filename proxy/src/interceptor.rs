@@ -1,6 +1,6 @@
 use async_watcher::{
     AsyncDebouncer,
-    notify::{FsEventWatcher, RecursiveMode},
+    notify::{RecommendedWatcher, RecursiveMode},
 };
 use bytes::Bytes;
 use chrono::Utc;
@@ -28,7 +28,7 @@ use crate::flow::{InterceptedRequest, InterceptedResponse};
 #[derive(Clone)]
 pub struct ScriptEngine {
     inner: Arc<Mutex<Inner>>,
-    debouncer: Option<Arc<Mutex<AsyncDebouncer<FsEventWatcher>>>>,
+    debouncer: Option<Arc<Mutex<AsyncDebouncer<RecommendedWatcher>>>>,
     watcher: Option<Arc<JoinHandle<()>>>,
     script_path: Arc<Mutex<Option<PathBuf>>>,
 }

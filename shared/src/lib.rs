@@ -145,12 +145,10 @@ fn load_native_certs(extra: Option<CertificateDer<'static>>) -> RootCertStore {
             warn!("failed to parse trust anchor: {}", e);
         }
     }
-
-    if let Some(extra) = extra {
-        if let Err(err) = roots.add(extra) {
-            warn!("Error adding extra cert {err}");
-        }
+    if let Some(Err(err)) = extra.map(|e| roots.add(e)) {
+        warn!("Error adding extra cert {err}");
     }
+
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
     trace!("Cert store size {}", roots.len());
