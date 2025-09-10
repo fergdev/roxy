@@ -71,6 +71,8 @@ jobs:
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - name: cargo test --locked
-        run: RUST_TEST_THREADS=1 cargo test --locked --all-features --all-targets
+        run: cargo test --locked --all-features --all-targets
+        env:
+          RUST_TEST_THREADS: 1
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
