@@ -69,6 +69,6 @@ criterion = { version = "0.7", features = ["async_tokio"] }
 tempfile = "3.11.0"
 roxy-servers = { path = "../servers" }
 
-[[bench]]
-name = "test_bench"
-harness = false
+# [[bench]]
+# name = "test_bench"
+# harness = false
