@@ -3,7 +3,7 @@ use std::{fmt::Display, net::SocketAddr, str::FromStr};
 use http::{Uri, uri::InvalidUri};
 use rustls::pki_types::{InvalidDnsNameError, ServerName};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RUri {
     pub inner: Uri,
 }
@@ -67,6 +67,10 @@ impl RUri {
         }
     }
 
+    pub fn port_or_none(&self) -> Option<u16> {
+        self.inner.port_u16()
+    }
+
     pub fn inner(&self) -> Uri {
         self.inner.clone()
     }
@@ -92,6 +96,17 @@ impl RUri {
         } else {
             Scheme::Http
         }
+    }
+
+    pub fn with_host(&self, s: &str) -> Result<RUri, http::Error> {
+        let uri = Uri::try_from(s)?;
+        self.and(
+            &uri,
+            self.inner
+                .scheme()
+                .cloned()
+                .unwrap_or(http::uri::Scheme::HTTP),
+        )
     }
 }
 

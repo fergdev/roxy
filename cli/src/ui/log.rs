@@ -59,13 +59,13 @@ where
 
         event.record(&mut line);
 
-        if line.message.is_some() {
-            if let Ok(mut logs) = self.logs.lock() {
-                if logs.len() > 1000 {
-                    logs.pop_front();
-                }
-                logs.push_back(line);
+        if line.message.is_some()
+            && let Ok(mut logs) = self.logs.lock()
+        {
+            if logs.len() > 1000 {
+                logs.pop_front();
             }
+            logs.push_back(line);
         }
     }
 }
@@ -123,10 +123,10 @@ impl Component for LogViewer {
                 ActionResult::Consumed
             }
             Action::Down => {
-                if let Ok(guard) = self.logs.lock() {
-                    if self.v_scroll_offset < guard.len().saturating_sub(1) {
-                        self.v_scroll_offset += 1;
-                    }
+                if let Ok(guard) = self.logs.lock()
+                    && self.v_scroll_offset < guard.len().saturating_sub(1)
+                {
+                    self.v_scroll_offset += 1;
                 }
                 ActionResult::Consumed
             }

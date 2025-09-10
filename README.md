@@ -6,11 +6,7 @@ This is currently a hack fest, but it works and is fun to use. It is a work in p
 
 ## Demo
 
-
-https://github.com/user-attachments/assets/a98a5a57-775d-424c-ab91-97d7a17793ea
-
-
-
+<https://github.com/user-attachments/assets/a98a5a57-775d-424c-ab91-97d7a17793ea>
 
 ## Features
 
@@ -18,6 +14,13 @@ https://github.com/user-attachments/assets/a98a5a57-775d-424c-ab91-97d7a17793ea
 - [x] HTTPS
 - [x] Cert generation
 - [x] Scripting using LUA
+
+## Build environment
+
+```bash
+rustup target add x86_64-apple-darwin
+cargo install --force --locked bindgen-cli
+```
 
 ## Testing
 
@@ -33,10 +36,18 @@ Or with debug logging:
 RUST_LOG=debug RUST_BACKTRACE=0 cargo run -- --port 6969 --script scripts/logger.lua
 ```
 
+```bash
+
 ### HTTP
 
 ```bash
 curl -v --proxy http://localhost:6969 http://example.com
+```
+
+Tests require single thread to prevent too many open files error.
+
+```bash
+RUST_TEST_THREADS=1 cargo test
 ```
 
 ### HTTPS

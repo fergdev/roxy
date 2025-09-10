@@ -4,44 +4,38 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bytes = "1.10"
-futures-util = "0.3"
-h3 = "0.0.8"
-h3-quinn = { version = "0.0.10", features = ["datagram", "tracing"] }
-h3-util = "0.0.4"
-h3-datagram = "0.0.2"
-http = "1"
-quinn = { version = "0.11", default-features = false, features = [
-  "runtime-tokio",
-  "rustls",
-  "ring",
-] }
+# Async
+futures-util = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
 
-tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = "0.27.0"
-tracing = "0.1"
-tracing-subscriber = "0.3"
+# Http
+h3 = { workspace = true }
+h3-quinn = { workspace = true }
+h3-datagram = { workspace = true }
+h3-webtransport = { workspace = true }
+quinn = { workspace = true }
+http = { workspace = true }
+url = { workspace = true }
+hyper = { workspace = true }
+http-body-util = { workspace = true }
+hyper-util = { workspace = true }
 
+# Tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
-tokio-rustls = "0.26.2"
-rcgen = { version = "0.14", features = [
-  "crypto",
-  "ring",
-  "pem",
-  "x509-parser",
-] }
-rustls = { version = "0.23", features = ["tls12"] }
+# TLS
+tokio-rustls = { workspace = true }
+rustls = { workspace = true }
+rcgen = { workspace = true }
 rustls-native-certs = "0.8"
 
+# Util
+iter_tools = "0.37"
+strum = { workspace = true }
+strum_macros = { workspace = true }
+bytes = { workspace = true }
+
+# Roxy
 roxy-shared = { path = "../shared" }
-hyper = { version = "1.6.0", features = ["full"] }
-http-body-util = "0.1"
-hyper-util = { version = "0.1", features = ["full"] }
-
-
-h3-webtransport = "0.1.2"
-
-url = "2.5.4"
-iter_tools = "0.30.0"
-strum = "0.27"
-strum_macros = "0.27"

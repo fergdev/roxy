@@ -1,0 +1,8 @@
+globalThis.Extensions = [{
+  request(flow) {
+    flow.request.body.text = flow.request.body.text.replace("replaceme", "gone");
+  },
+  response(flow) {
+    flow.response.body.text = flow.response.body.text.replace("to_go", "it_went");
+  }
+}];
