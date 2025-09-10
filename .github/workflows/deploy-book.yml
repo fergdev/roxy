@@ -27,7 +27,7 @@ jobs:
           mdbook-version: "latest"
 
       - name: Build book
-        working-directory: http-flow-book
+        working-directory: book
         run: mdbook build
 
       - name: Upload artifact
