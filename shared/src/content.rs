@@ -7,6 +7,7 @@ use std::{
 
 use brotli::enc::BrotliEncoderParams;
 use bytes::Bytes;
+use cow_utils::CowUtils;
 use flate2::{
     Compression, GzBuilder,
     bufread::{DeflateDecoder, DeflateEncoder},
@@ -150,8 +151,8 @@ pub fn content_type_ext(content_type: &ContentType) -> &'static str {
 }
 
 pub fn parse_content_type(content_type: &str) -> Option<ContentType> {
-    let ct = content_type.to_ascii_lowercase();
-    match ct.as_str() {
+    let ct = content_type.cow_to_ascii_lowercase();
+    match ct.as_ref() {
         MIME_APPLICATION_JSON => Some(ContentType::Json),
         MIME_IMAGE_BMP => Some(ContentType::Bmp),
         MIME_APPLICATION_XML => Some(ContentType::Xml),

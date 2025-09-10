@@ -5,14 +5,12 @@ use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},
     style::{Color, Style},
-    text::{Line, Span, Text},
-    widgets::{
-        Cell, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, TableState, Wrap,
-    },
+    text::{Line, Span},
+    widgets::{Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, TableState},
 };
 use roxy_proxy::flow::FlowStore;
 use tokio::{sync::watch, task::JoinHandle};
-use tracing::{error, info};
+use tracing::error;
 
 use crate::{
     app::ITEM_HEIGHT,
@@ -114,8 +112,7 @@ impl FlowList {
                                 let response = flow.response.as_ref()
                                     .map(|r| UiResponse{
                                     code: r.status.as_u16(),
-                                    content_type: r.headers.get(CONTENT_TYPE).map(|h| h.to_str().ok())
-                                        .flatten()
+                                    content_type: r.headers.get(CONTENT_TYPE).and_then(|h| h.to_str().ok())
                                         .unwrap_or("No content").to_string(),
                                     duration: 100
                                 });

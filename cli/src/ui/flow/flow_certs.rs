@@ -1,9 +1,8 @@
-use bytes::Bytes;
+// use bytes::Bytes;
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::{Color, Style},
-    text::{Line, Span},
+    text::Line,
     widgets::{Paragraph, Wrap},
 };
 use roxy_proxy::flow::FlowCerts;
@@ -17,7 +16,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::warn;
-use x509_parser::parse_x509_certificate;
+// use x509_parser::parse_x509_certificate;
 
 use crate::{
     event::Action,
@@ -30,62 +29,62 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug)]
-struct CertInfo {
-    version: u32,
-    serial: Vec<u8>,
-    signature_oid: String,
-    issuer_cn: Option<String>,
-    subject_cn: Option<String>,
-    san: Option<String>,
-    issuer: String,
-    subject: String,
-    not_before: String,
-    not_after: String,
-    public_key: Vec<u8>,
-    signature_value: Vec<u8>,
-}
+// #[derive(Clone, Debug)]
+// struct CertInfo {
+//     version: u32,
+//     serial: Vec<u8>,
+//     signature_oid: String,
+//     issuer_cn: Option<String>,
+//     subject_cn: Option<String>,
+//     san: Option<String>,
+//     issuer: String,
+//     subject: String,
+//     not_before: String,
+//     not_after: String,
+//     public_key: Vec<u8>,
+//     signature_value: Vec<u8>,
+// }
 
-impl CertInfo {
-    pub fn from_der(cert: Bytes) -> Option<Self> {
-        let (_, cert) = parse_x509_certificate(cert.as_ref()).ok()?;
-        let tbs = &cert.tbs_certificate;
-
-        let subject_cn = cert
-            .subject
-            .iter_common_name()
-            .next()
-            .and_then(|cn| cn.as_str().ok())
-            .map(|s| s.to_string());
-        let issuer_cn = cert
-            .issuer
-            .iter_common_name()
-            .next()
-            .and_then(|cn| cn.as_str().ok())
-            .map(|s| s.to_string());
-
-        let san = tbs
-            .subject_alternative_name()
-            .ok()
-            .flatten()
-            .map(|ext| format!("{:?}", ext.value));
-
-        Some(Self {
-            version: tbs.version.0,
-            serial: tbs.serial.to_bytes_be(),
-            signature_oid: tbs.signature.algorithm.to_id_string(),
-            subject_cn,
-            issuer_cn,
-            san,
-            issuer: tbs.issuer.to_string(),
-            subject: tbs.subject.to_string(),
-            not_before: tbs.validity.not_before.to_datetime().to_string(),
-            not_after: tbs.validity.not_after.to_datetime().to_string(),
-            public_key: tbs.subject_pki.subject_public_key.data.to_vec(),
-            signature_value: cert.signature_value.data.to_vec(),
-        })
-    }
-}
+// impl CertInfo {
+//     pub fn from_der(cert: Bytes) -> Option<Self> {
+//         let (_, cert) = parse_x509_certificate(cert.as_ref()).ok()?;
+//         let tbs = &cert.tbs_certificate;
+//
+//         let subject_cn = cert
+//             .subject
+//             .iter_common_name()
+//             .next()
+//             .and_then(|cn| cn.as_str().ok())
+//             .map(|s| s.to_string());
+//         let issuer_cn = cert
+//             .issuer
+//             .iter_common_name()
+//             .next()
+//             .and_then(|cn| cn.as_str().ok())
+//             .map(|s| s.to_string());
+//
+//         let san = tbs
+//             .subject_alternative_name()
+//             .ok()
+//             .flatten()
+//             .map(|ext| format!("{:?}", ext.value));
+//
+//         Some(Self {
+//             version: tbs.version.0,
+//             serial: tbs.serial.to_bytes_be(),
+//             signature_oid: tbs.signature.algorithm.to_id_string(),
+//             subject_cn,
+//             issuer_cn,
+//             san,
+//             issuer: tbs.issuer.to_string(),
+//             subject: tbs.subject.to_string(),
+//             not_before: tbs.validity.not_before.to_datetime().to_string(),
+//             not_after: tbs.validity.not_after.to_datetime().to_string(),
+//             public_key: tbs.subject_pki.subject_public_key.data.to_vec(),
+//             signature_value: cert.signature_value.data.to_vec(),
+//         })
+//     }
+// }
 
 pub struct FlowDetailsCerts {
     state: watch::Receiver<UiState>,
@@ -345,7 +344,7 @@ impl FlowDetailsCerts {
             Some(capture) => {
                 lines.push("Capture".into());
                 match &capture.cert {
-                    Some(cert) => {
+                    Some(_cert) => {
                         lines.push("End entity".into());
 
                         // let end = String::from_utf8_lossy(cert.end_endity.to_vec());
@@ -456,7 +455,7 @@ impl FlowDetailsCerts {
             Some(capture) => {
                 lines.push("Capture".into());
                 match &capture.cert {
-                    Some(cert) => {
+                    Some(_cert) => {
                         lines.push("End entity".into());
                         // let end = String::from_utf8_lossy(cert.end_endity.to_vec());
                         // lines.push(end.into());
@@ -504,74 +503,74 @@ impl FlowDetailsCerts {
     }
 }
 
-fn render_cert(cert: CertInfo) {
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("Version: ", Style::default().fg(Color::Yellow)),
-            Span::raw(cert.version.to_string()),
-        ]),
-        Line::from(vec![
-            Span::styled("Serial: ", Style::default().fg(Color::Yellow)),
-            Span::raw(
-                cert.serial
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<String>(),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Signature OID: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.signature_oid),
-        ]),
-        Line::from(vec![
-            Span::styled("Issuer: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.issuer),
-        ]),
-        Line::from(vec![
-            Span::styled("Subject: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.subject),
-        ]),
-        Line::from(vec![
-            Span::styled("Not Before: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.not_before),
-        ]),
-        Line::from(vec![
-            Span::styled("Not After: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.not_after),
-        ]),
-        Line::from(vec![
-            Span::styled("Public Key: ", Style::default().fg(Color::Yellow)),
-            Span::raw(format!("[{} bytes]", cert.public_key.len())),
-        ]),
-        Line::from(vec![
-            Span::styled("Signature: ", Style::default().fg(Color::Yellow)),
-            Span::raw(format!("[{} bytes]", cert.signature_value.len())),
-        ]),
-    ];
-
-    if let Some(san) = &cert.san {
-        lines.push(Line::from(vec![
-            Span::styled("SAN: ", Style::default().fg(Color::Yellow)),
-            Span::raw(san),
-        ]))
-    }
-    if let Some(issuer_cn) = &cert.issuer_cn {
-        lines.push(Line::from(vec![
-            Span::styled("Iussuer: ", Style::default().fg(Color::Yellow)),
-            Span::raw(issuer_cn),
-        ]))
-    }
-    if let Some(subject_cn) = &cert.subject_cn {
-        lines.push(Line::from(vec![
-            Span::styled("Iussuer: ", Style::default().fg(Color::Yellow)),
-            Span::raw(subject_cn),
-        ]))
-    }
-
-    // let paragraph = Paragraph::new(lines)
-    //     .block(themed_block(Some("Info"), self.focus.get()))
-    //     .wrap(Wrap { trim: false });
-}
+// fn render_cert(cert: CertInfo) {
+//     let mut lines = vec![
+//         Line::from(vec![
+//             Span::styled("Version: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(cert.version.to_string()),
+//         ]),
+//         Line::from(vec![
+//             Span::styled("Serial: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(
+//                 cert.serial
+//                     .iter()
+//                     .map(|b| format!("{b:02x}"))
+//                     .collect::<String>(),
+//             ),
+//         ]),
+//         Line::from(vec![
+//             Span::styled("Signature OID: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(&cert.signature_oid),
+//         ]),
+//         Line::from(vec![
+//             Span::styled("Issuer: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(&cert.issuer),
+//         ]),
+//         Line::from(vec![
+//             Span::styled("Subject: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(&cert.subject),
+//         ]),
+//         Line::from(vec![
+//             Span::styled("Not Before: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(&cert.not_before),
+//         ]),
+//         Line::from(vec![
+//             Span::styled("Not After: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(&cert.not_after),
+//         ]),
+//         Line::from(vec![
+//             Span::styled("Public Key: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(format!("[{} bytes]", cert.public_key.len())),
+//         ]),
+//         Line::from(vec![
+//             Span::styled("Signature: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(format!("[{} bytes]", cert.signature_value.len())),
+//         ]),
+//     ];
+//
+//     if let Some(san) = &cert.san {
+//         lines.push(Line::from(vec![
+//             Span::styled("SAN: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(san),
+//         ]))
+//     }
+//     if let Some(issuer_cn) = &cert.issuer_cn {
+//         lines.push(Line::from(vec![
+//             Span::styled("Iussuer: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(issuer_cn),
+//         ]))
+//     }
+//     if let Some(subject_cn) = &cert.subject_cn {
+//         lines.push(Line::from(vec![
+//             Span::styled("Iussuer: ", Style::default().fg(Color::Yellow)),
+//             Span::raw(subject_cn),
+//         ]))
+//     }
+//
+//     // let paragraph = Paragraph::new(lines)
+//     //     .block(themed_block(Some("Info"), self.focus.get()))
+//     //     .wrap(Wrap { trim: false });
+// }
 
 impl rat_focus::HasFocus for FlowDetailsCerts {
     fn build(&self, builder: &mut rat_focus::FocusBuilder) {

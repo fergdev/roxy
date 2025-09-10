@@ -54,7 +54,7 @@ pub struct ProxyManager {
     ca: RoxyCA,
     script_engine: ScriptEngine,
     tls_config: TlsConfig,
-    flow_store: FlowStore,
+    pub flow_store: FlowStore,
     http_handle: Option<Arc<JoinHandle<()>>>,
     h3_handle: Option<Arc<JoinHandle<()>>>,
 }
@@ -274,10 +274,10 @@ fn validate_connect_uri(version: Version, uri: &Uri, headers: &HeaderMap) -> boo
     if uri_authority.host() != header_authority.host() {
         return false;
     }
-    if let Some(port) = header_authority.port_u16() {
-        if uri_port != port {
-            return false;
-        }
+    if let Some(port) = header_authority.port_u16()
+        && uri_port != port
+    {
+        return false;
     }
 
     if !uri

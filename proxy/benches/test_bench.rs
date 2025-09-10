@@ -47,7 +47,7 @@ impl TestContext {
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_dir_path = temp_dir.path().to_path_buf();
 
-        let script_engine = interceptor::ScriptEngine::new().await.unwrap();
+        let script_engine = interceptor::ScriptEngine::new();
 
         let flow_store = FlowStore::new();
         let roxy_ca = generate_roxy_root_ca_with_path(Some(temp_dir_path.clone())).unwrap();

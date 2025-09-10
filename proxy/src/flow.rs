@@ -23,6 +23,7 @@ use roxy_shared::uri::Scheme;
 use http::HeaderMap;
 use once_cell::sync::Lazy;
 use roxy_shared::body::BytesBody;
+use roxy_shared::version::HttpVersion;
 use snowflake::SnowflakeIdGenerator;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::mpsc::UnboundedSender;
@@ -48,7 +49,7 @@ pub struct FlowStore {
     pub ordered_ids: Arc<RwLock<Vec<i64>>>,
     pub notifier: watch::Sender<()>,
     pub notifier_new_flow: watch::Sender<()>,
-    event_tx: UnboundedSender<(i64, FlowEvent)>,
+    pub event_tx: UnboundedSender<(i64, FlowEvent)>,
 }
 
 impl FlowStore {
@@ -312,14 +313,14 @@ pub struct Timing {
     pub server_conn_closed: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InterceptedRequest {
     pub timestamp: DateTime<Utc>,
     pub uri: RUri,
     pub encoding: Option<Vec<Encodings>>,
     pub alpn: AlpnProtocol,
     pub method: http::Method,
-    pub version: http::Version,
+    pub version: HttpVersion,
     pub headers: HeaderMap,
     pub body: bytes::Bytes,
     pub trailers: Option<HeaderMap>,
@@ -355,7 +356,7 @@ impl InterceptedRequest {
             encoding,
             alpn,
             method: parts.method,
-            version: parts.version,
+            version: parts.version.into(),
             headers,
             body,
             trailers,
@@ -389,7 +390,7 @@ impl InterceptedRequest {
         let mut builder = http::Request::builder()
             .method(self.method.clone())
             .uri(parts)
-            .version(self.version);
+            .version(self.version.0);
 
         for (key, value) in self.headers.iter() {
             builder = builder.header(key, value);
@@ -406,11 +407,11 @@ impl InterceptedRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InterceptedResponse {
     pub timestamp: DateTime<Utc>,
     pub status: StatusCode,
-    pub version: http::Version,
+    pub version: HttpVersion,
     pub headers: HeaderMap,
     pub encoding: Option<Vec<Encodings>>,
     pub body: bytes::Bytes,
@@ -442,7 +443,7 @@ impl InterceptedResponse {
         InterceptedResponse {
             timestamp: Utc::now(),
             status: parts.status,
-            version: parts.version,
+            version: parts.version.into(),
             headers,
             encoding,
             body,
@@ -457,7 +458,7 @@ impl InterceptedResponse {
     pub fn response_builder(&self) -> http::response::Builder {
         let mut builder = http::Response::builder()
             .status(self.status)
-            .version(self.version);
+            .version(self.version.0);
 
         for (key, value) in self.headers.iter() {
             builder = builder.header(key, value)

@@ -9,6 +9,7 @@ use roxy_shared::{
     content::{ContentType, content_type_ext},
     tls::{RustlsServerConfig, TlsConfig},
     uri::RUri,
+    version::HttpVersion,
 };
 use rustls::{ServerConfig, pki_types::PrivateKeyDer, sign::CertifiedKey};
 use strum::{EnumIter, IntoEnumIterator};
@@ -84,6 +85,11 @@ impl HttpServers {
             HttpServers::H3 => Version::HTTP_3,
         }
     }
+
+    pub fn http_version(&self) -> HttpVersion {
+        self.version().into()
+    }
+
     pub fn marker(&self) -> &str {
         match self {
             HttpServers::H09 => H09_BODY,

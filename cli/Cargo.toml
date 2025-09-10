@@ -6,62 +6,71 @@ license = "MIT"
 edition = "2024"
 
 [dependencies]
-bytes = "1.10.1"
-chrono = "0.4.41"
-clap = { version = "4.5.40", features = ["derive"] }
-color-eyre = "0.6.3"
-crossterm = { version = "0.29.0", features = ["event-stream"] }
-directories = "6.0.0"
-futures = "0.3.31"
-httparse = "1.10.1"
-lazy_static = "1.5.0"
+
+# HTTP
+rustls = { workspace = true }
+hyper = { workspace = true }
+x509-parser = "0.17.0"
+webpki-roots = "1.0.1"
+
+# Async
+futures = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+tracing-error = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Tui
 ratatui = { version = "0.29.0", features = [
   "serde",
   "macros",
   "unstable-widget-ref",
 ] }
-rs-snowflake = "0.6.0"
-rustls = { version = "0.23", features = ["tls12"] }
-tokio = { version = "1.40.0", features = ["full"] }
-tracing = "0.1.41"
-tracing-error = "0.2.1"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+color-eyre = "0.6.3"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
 unicode-segmentation = "1"
 unicode-truncate = { version = "2", default-features = false }
-webpki-roots = "1.0.1"
-
-unicode-width = "=0.2.0"                               # See <https://github.com/ratatui/ratatui/issues/1271> for information about why we pin unicode-width
-pkcs12 = "0.1.0"
-once_cell = "1.19"
-notify = "8.0.0"
-dirs = "6.0.0"
-dashmap = "6.1.0"
+unicode-width = "=0.2.0" # See <https://github.com/ratatui/ratatui/issues/1271> for information about why we pin unicode-width
 tui-big-text = "0.7.1"
-serde = { version = "1.0.211", features = ["derive"] }
+rat-focus = "1.0.2"
+
+# Util
+notify = "8.0.0"
+pkcs12 = "0.1.0"
+once_cell = { workspace = true }
+dirs = { workspace = true }
+dashmap = "6.1.0"
+derive_deref = "1.1.1"
+strum = { workspace = true }
+signal-hook = "0.3.17"
+async-watcher = "0.3.0"
+bytes = { workspace = true }
+chrono = { workspace = true }
+clap = { version = "4.5.40", features = ["derive"] }
+directories = "6.0.0"
+lazy_static = "1.5.0"                                # TODO: Can I just use once_cell?
+rs-snowflake = "0.6.0"
+
+# Serde
+serde = { workspace = true }
 config = "0.15.0"
 json5 = "0.4.1"
 toml = "0.9.1"
-derive_deref = "1.1.1"
-strum = { version = "0.27.1", features = ["derive"] }
-tokio-util = "0.7.12"
-signal-hook = "0.3.17"
-ring = "0.17"
-roxy-shared = { path = "../shared" }
-roxy-proxy = { path = "../proxy" }
-
-x509-parser = "0.17.0"
-
 kuchiki = "0.8"
 markup5ever = "0.35"
 serde_json = "1"
 ratatui-image = "8.0.1"
 image = "=0.25.6"
 base64 = "=0.22.1"
-rat-focus = "1.0.2"
 xmltree = "0.11.0"
-toml_edit = "0.23.0"    # do I need two of these?
+toml_edit = "0.23.0"         # do I need two of these?
 serde_yaml = "0.9.27"
 csv = "1.3"
 pulldown-cmark = "0.13"
 
-hyper = "1.6.0" # TODO: do I need this
+# Shared
+roxy-shared = { path = "../shared" }
+roxy-proxy = { path = "../proxy" }

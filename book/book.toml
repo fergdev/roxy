@@ -1,0 +1,22 @@
+[book]
+authors = ["fergdev"]
+language = "en"
+src = "src"
+title = "Roxy - Rust (mitm) Proxy"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://example.com/your/repo"
+edit-url-template = "https://example.com/your/repo/edit/main/http-flow-book/{path}"
+additional-css = ["theme/langtabs.css", "theme/tabs.css"]
+additional-js = ["theme/langtabs.js", "theme/tabs.js"]
+
+[preprocessor.toc]
+command = "mdbook-toc"
+renderer = ["html"]
+
+[preprocessor.tabs]
+
+[preprocessor.langtabs]
+command = "mdbook-langtabs"

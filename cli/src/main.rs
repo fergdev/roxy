@@ -12,6 +12,7 @@ use roxy_cli::{
     logging, notify_debug, notify_error, notify_info, notify_trace, notify_warn,
     ui::{framework::notify::Notifier, log::UiLogLayer},
 };
+
 use roxy_proxy::{
     flow::FlowStore,
     interceptor::{self, ScriptEngine},
@@ -52,6 +53,7 @@ async fn main() -> color_eyre::Result<()> {
     let flow_store = FlowStore::new();
     let cfg = config_manager.rx.borrow();
 
+    // let debouncer: Option<Arc<Mutex<AsyncDebouncer<NullWatcher>>>>;
     let (notify_tx, mut notify_rx) = mpsc::channel::<interceptor::FlowNotify>(16);
 
     let notify_handle = tokio::spawn(async move {
@@ -65,17 +67,15 @@ async fn main() -> color_eyre::Result<()> {
             }
         }
     });
-    let mut script_engine = match ScriptEngine::new_notify(notify_tx).await {
-        Ok(se) => se,
-        Err(err) => {
-            eprintln!("SE error {err}");
-            return Ok(());
-        }
-    };
+    let mut script_engine = ScriptEngine::new_notify(notify_tx);
 
-    if let Some(script) = cfg.app.proxy.script_path.clone() {
+    if let Some(path) = cfg.app.proxy.script_path.clone() {
         info!("Setting script!");
-        if let Err(e) = script_engine.load_script_path(script).await {
+        let script = tokio::fs::read_to_string(&path).await?;
+        if let Err(e) = script_engine
+            .set_script(&script, interceptor::ScriptType::Lua)
+            .await
+        {
             notify_error!("Failed to load script {e}");
         }
     }

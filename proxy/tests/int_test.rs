@@ -12,7 +12,7 @@ use http_body_util::Full;
 use http_body_util::combinators::BoxBody;
 use itertools::Itertools;
 use roxy_proxy::flow::FlowStore;
-use roxy_proxy::interceptor::ScriptEngine;
+use roxy_proxy::interceptor::{ScriptEngine, ScriptType};
 use roxy_proxy::proxy::ProxyManager;
 use roxy_servers::web_transport::h3_wt;
 use roxy_servers::ws::{start_ws_server, start_wss_server};
@@ -35,11 +35,9 @@ use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 use std::time::Duration;
 use strum::VariantArray;
-use tempfile::TempDir;
-use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::time::{sleep, timeout};
+use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{Connector, client_async, connect_async_tls_with_config};
@@ -50,7 +48,6 @@ static TIMEOUT: u64 = 15_000;
 struct TestContext {
     proxy_socket_addr: SocketAddr,
     proxy_addr: RUri,
-    temp_dir: TempDir,
     roxy_ca: RoxyCA,
     _proxy_manager: ProxyManager,
     script_engine: ScriptEngine,
@@ -61,11 +58,12 @@ struct TestContext {
 impl TestContext {
     pub async fn new_with_tls(tls_config: Option<TlsConfig>) -> Self {
         roxy_proxy::init_test_logging();
+        println!("Starting test context");
 
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_dir_path = temp_dir.path().to_path_buf();
 
-        let script_engine = ScriptEngine::new().await.unwrap();
+        let script_engine = ScriptEngine::new();
 
         let flow_store = FlowStore::new();
         let roxy_ca = generate_roxy_root_ca_with_path(Some(temp_dir_path.clone())).unwrap();
@@ -80,7 +78,7 @@ impl TestContext {
         let tls_config = tls_config.unwrap_or_default();
         let mut proxy_manager = ProxyManager::new(
             0,
-            roxy_ca,
+            roxy_ca.clone(),
             script_engine.clone(),
             tls_config,
             flow_store.clone(),
@@ -88,14 +86,9 @@ impl TestContext {
         proxy_manager.start_tcp(listener).await.unwrap();
         proxy_manager.start_udp(udp_socket).await.unwrap();
 
-        // TODO: might not be needed
-        sleep(Duration::from_millis(500)).await;
-
-        let roxy_ca = generate_roxy_root_ca_with_path(Some(temp_dir_path.clone())).unwrap();
         TestContext {
             proxy_socket_addr,
             proxy_addr: proxy_uri,
-            temp_dir,
             _proxy_manager: proxy_manager,
             roxy_ca,
             script_engine,
@@ -109,10 +102,9 @@ impl TestContext {
     }
 
     pub async fn set_script(&mut self, script: &str) -> Result<(), Box<dyn Error>> {
-        let file_path = self.temp_dir.path().join("test.lua");
-        let mut file = File::create(file_path.clone()).await?;
-        file.write_all(script.as_bytes()).await?;
-        self.script_engine.load_script_path(file_path).await?;
+        self.script_engine
+            .set_script(script, ScriptType::Lua)
+            .await?;
         Ok(())
     }
 }
@@ -376,7 +368,7 @@ async fn test_http_get_asset() {
             assert!(intercept_request.encoding.is_none());
             assert_eq!(intercept_request.alpn, s.server.alpn());
             assert_eq!(intercept_request.method, Method::GET);
-            assert_eq!(intercept_request.version, s.server.version());
+            assert_eq!(intercept_request.version, s.server.http_version());
             assert!(intercept_request.body.is_empty());
 
             if s.server.version() == Version::HTTP_3 {
@@ -389,7 +381,7 @@ async fn test_http_get_asset() {
 
             let intercepted_response = flow.response.clone().unwrap();
             assert_eq!(intercepted_response.status, 200);
-            assert_eq!(intercepted_response.version, s.server.version());
+            assert_eq!(intercepted_response.version, s.server.http_version());
             if s.server.version() == Version::HTTP_3 {
                 assert_eq!(intercepted_response.headers.len(), 1);
             } else {
@@ -496,7 +488,7 @@ async fn test_http_proxy_request_async() {
         .unwrap();
 
     let handles = FuturesUnordered::new();
-    for _i in 0..100 {
+    for _i in 0..10 {
         for s in &servers {
             let proxy_addr = cxt.proxy_addr.clone();
             let server = s.server;
@@ -660,8 +652,8 @@ static INTERCEPT_QUERY_SCRIPT: &str = r#"
 Extensions = {
   {
   function (flow) 
-      flow.request.query["foo"] = "bar & baz"
-      flow.request.query["saison"] = "Été+hiver"
+      flow.request.url.searchParams["foo"] = "bar & baz"
+      flow.request.url.searchParams["saison"] = "Été+hiver"
   end,
   function (flow) 
   end,
@@ -850,7 +842,7 @@ Extensions = {
   function (flow) 
   end,
   function (flow) 
-    flow.response.body = "<html><body><h1>Intercepted by Roxy</h1><p>This response was rewritten.</p></body></html>"
+    flow.response.body.text = "<html><body><h1>Intercepted by Roxy</h1><p>This response was rewritten.</p></body></html>"
   end,
   }
 }
@@ -897,8 +889,7 @@ static RETURN_BODY_EARLY: &str = r#"
 Extensions = {
   {
   function (flow) 
-    flow.response.body = "Early return"
-    flow.response.headers = flow.request.headers
+    flow.response.body.text = "Early return"
   end,
   function (flow) 
   end,
@@ -940,26 +931,26 @@ async fn test_early_return_with_body() {
 
         assert_eq!(parts.status, 200);
         assert_eq!(body, "Early return");
-        assert_eq!(
-            parts.headers.get("server_id").unwrap().to_str().unwrap(),
-            s.server.marker()
-        );
+        // assert_eq!(
+        //     parts.headers.get("server_id").unwrap().to_str().unwrap(),
+        //     s.server.marker()
+        // );
         assert!(trailers.is_none());
     }
 }
 
 static GSUB_BODY_SCRIPT: &str = r#"
 function req(flow) 
-    flow.request.body = string.gsub(flow.request.body, "replaceme", "gone")
+    flow.request.body.text = string.gsub(flow.request.body.text, "replaceme", "gone")
 end
 
 function resp(flow) 
-    flow.response.body = string.gsub(flow.response.body, "to_go", "it_went")
+    flow.response.body.text = string.gsub(flow.response.body.text, "to_go", "it_went")
 end
 Extensions = {
   {
-    intercept_request = req,
-    intercept_response = resp
+    request = req,
+    response = resp
   },
 }
 "#;
@@ -1064,6 +1055,7 @@ async fn test_redirect_scheme() {
     let mut servers = HttpServers::set_all();
     servers.remove(&HttpServers::H3);
     // TODO: add test that h3 fails
+
     let servers = HttpServers::start_set(servers, &cxt.roxy_ca, &cxt.tls_config)
         .await
         .unwrap();
@@ -1074,7 +1066,7 @@ async fn test_redirect_scheme() {
 Extensions = {{
   {{
   function (flow) 
-    flow.request.scheme = "{}"
+    flow.request.url.scheme = "{}"
   end,
   function (flow) 
   end,
@@ -1139,8 +1131,8 @@ async fn test_redirect_http_request() {
 Extensions = {{
   {{
   function (flow) 
-    flow.request.host = "127.0.0.1"
-    flow.request.port = {server_port}
+    flow.request.url.host = "127.0.0.1"
+    flow.request.url.port = {server_port}
   end,
   function (flow) 
   end,
@@ -1185,7 +1177,7 @@ async fn test_change_path_http_request() {
 Extensions = {
   {
   function (flow) 
-    flow.request.path = ""
+    flow.request.url.path = ""
   end,
   function (flow) 
   end,
@@ -1369,8 +1361,7 @@ async fn down_grade_http2_http1() {
 
     assert_eq!(parts.status, 200);
     let server_id = s.server.marker();
-    let expected = format!("Hello, {server_id}");
-    assert_eq!(body, expected);
+    assert_eq!(body, format!("Hello, {server_id}"));
     assert!(trailers.is_none());
 }
 

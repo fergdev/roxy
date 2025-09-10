@@ -12,6 +12,7 @@ pub mod io;
 pub mod tls;
 pub mod uri;
 pub mod util;
+pub mod version;
 
 use p12_keystore::{KeyStore, KeyStoreEntry, PrivateKeyChain};
 use rand::RngCore;
@@ -57,7 +58,7 @@ struct LocalLeaf {
 }
 
 impl RoxyCA {
-    fn new(
+    pub fn new(
         issuer: Issuer<'static, KeyPair>,
         roots: RootCertStore,
         ca_der: Vec<u8>,
@@ -131,7 +132,6 @@ impl RoxyCA {
 }
 
 fn load_native_certs(extra: Option<CertificateDer<'static>>) -> RootCertStore {
-    init_crypto();
     let mut roots = rustls::RootCertStore::empty();
 
     let cert_result = rustls_native_certs::load_native_certs();
@@ -146,10 +146,10 @@ fn load_native_certs(extra: Option<CertificateDer<'static>>) -> RootCertStore {
         }
     }
 
-    if let Some(extra) = extra {
-        if let Err(err) = roots.add(extra) {
-            warn!("Error adding extra cert {err}");
-        }
+    if let Some(extra) = extra
+        && let Err(err) = roots.add(extra)
+    {
+        warn!("Error adding extra cert {err}");
     }
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
@@ -240,6 +240,7 @@ pub fn generate_roxy_root_ca() -> Result<RoxyCA, CaError> {
 }
 
 pub fn generate_roxy_root_ca_with_path(path: Option<PathBuf>) -> Result<RoxyCA, CaError> {
+    init_crypto();
     let root_dir: PathBuf = match path {
         Some(p) => p,
         None => match dirs::home_dir() {

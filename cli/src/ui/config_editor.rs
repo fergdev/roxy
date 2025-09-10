@@ -450,12 +450,12 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                 ConfigTab::KeyBinds => {
                     let mut map = HashMap::new();
                     for field in fields {
-                        if let ConfigValue::String(s) = field.value.clone() {
-                            if let Ok(key_event) = parse_key_event(&s) {
-                                let action = Action::from_str(&field.key)
-                                    .map_err(|e| format!("Bad action: {e}"))?;
-                                map.insert(vec![key_event], action);
-                            }
+                        if let ConfigValue::String(s) = field.value.clone()
+                            && let Ok(key_event) = parse_key_event(&s)
+                        {
+                            let action = Action::from_str(&field.key)
+                                .map_err(|e| format!("Bad action: {e}"))?;
+                            map.insert(vec![key_event], action);
                         }
                     }
                     config.keybindings.insert(Mode::Normal, map);
