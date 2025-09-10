@@ -585,12 +585,10 @@ where
 pub fn parse_color(s: &str) -> Result<Color, String> {
     let s = s.trim();
 
-    // Named color
     if let Ok(c) = parse_named_color(s) {
         return Ok(c);
     }
 
-    // Rgb(255, 255, 255)
     if let Some(rgb) = s.strip_prefix("Rgb(").and_then(|s| s.strip_suffix(")")) {
         let parts: Vec<_> = rgb.split(',').map(|s| s.trim()).collect();
         if parts.len() == 3 {
@@ -601,7 +599,6 @@ pub fn parse_color(s: &str) -> Result<Color, String> {
         }
     }
 
-    // #rrggbb
     if let Some(hex) = s.strip_prefix('#')
         && hex.len() == 6
     {

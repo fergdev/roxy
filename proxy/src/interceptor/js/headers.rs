@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use boa_engine::{
-    Context, JsData, JsError, JsResult, JsValue, js_error, js_string, object::builtins::JsArray,
+    Context, JsData, JsResult, JsValue, js_error, js_string, object::builtins::JsArray,
     value::Convert,
 };
 use boa_gc::{Finalize, Trace};

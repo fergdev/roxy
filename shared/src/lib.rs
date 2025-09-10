@@ -12,9 +12,9 @@ pub mod io;
 pub mod tls;
 pub mod uri;
 pub mod version;
+use aws_lc_rs::rand;
 
 use p12_keystore::{KeyStore, KeyStoreEntry, PrivateKeyChain};
-use rand::RngCore;
 use rcgen::{
     Certificate, CertificateParams, DistinguishedName, DnType, IsCa, Issuer, KeyPair,
     KeyUsagePurpose, PKCS_RSA_SHA256,
@@ -29,7 +29,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use time::{Duration, OffsetDateTime};
+use time::OffsetDateTime;
 use tracing::{debug, trace, warn};
 
 use crate::{crypto::init_crypto, uri::RUri};
@@ -317,7 +317,7 @@ fn generate(
     ca_params.key_usages.push(KeyUsagePurpose::CrlSign);
 
     ca_params.not_before = OffsetDateTime::now_utc();
-    ca_params.not_after = OffsetDateTime::now_utc().saturating_add(Duration::days(365 * 10));
+    ca_params.not_after = OffsetDateTime::now_utc().saturating_add(time::Duration::days(365 * 10));
 
     let key_pair = KeyPair::generate_for(&PKCS_RSA_SHA256)?;
     let ca_cert = ca_params.self_signed(&key_pair)?;
@@ -336,7 +336,8 @@ fn generate(
     let certificate = p12_keystore::Certificate::from_der(ca_cert.der())?;
 
     let mut local_key_id = vec![0u8; 20];
-    rand::rng().fill_bytes(&mut local_key_id);
+    rand::fill(&mut local_key_id)
+        .map_err(|e| CaError::Io(std::io::Error::other(format!("rand fill error {e}"))))?;
 
     let key_chain =
         PrivateKeyChain::new(key_pair.serialized_der(), local_key_id, vec![certificate]);
@@ -352,7 +353,8 @@ fn generate(
     let mut key_store = KeyStore::new();
 
     let mut local_key_id = vec![0u8; 20];
-    rand::rng().fill_bytes(&mut local_key_id);
+    rand::fill(&mut local_key_id)
+        .map_err(|e| CaError::Io(std::io::Error::other(format!("rand fill error {e}"))))?;
 
     let certificate = p12_keystore::Certificate::from_der(ca_cert.der())?;
     let cert_entry = KeyStoreEntry::Certificate(certificate);

@@ -37,7 +37,7 @@ tokio-tungstenite = { workspace = true }
 roxy-shared = { path = "../shared" }
 
 # TLS
-pkcs12 = "0.1.0"
+pkcs12 = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }
 rustls-native-certs = "0.8"
@@ -54,7 +54,6 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 bytes = { workspace = true }
 chrono = { workspace = true }
 dashmap = "6.1.0"
-derive_deref = "1.1.1"
 itertools = { workspace = true }
 once_cell = { workspace = true }
 rs-snowflake = "0.6.0"

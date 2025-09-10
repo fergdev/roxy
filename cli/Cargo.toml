@@ -40,7 +40,7 @@ rat-focus = "1.0.2"
 # Util
 cow-utils = { workspace = true }
 notify = "8.0.0"
-pkcs12 = "0.1.0"
+pkcs12 = { workspace = true }
 once_cell = { workspace = true }
 dirs = { workspace = true }
 dashmap = "6.1.0"
