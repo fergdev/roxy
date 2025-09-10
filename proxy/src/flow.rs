@@ -276,7 +276,7 @@ impl WsMessage {
         Self {
             message,
             direction: WsDirection::Server,
-            timestamp: OffsetDateTime::now_utc().into(),
+            timestamp: OffsetDateTime::now_utc(),
         }
     }
 }
