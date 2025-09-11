@@ -25,19 +25,51 @@ use crate::{
 };
 use tokio::sync::{mpsc, oneshot};
 
-enum Cmd {
-    InterceptReq {
+struct ReqCmd {
+    req: InterceptedRequest,
+    resp: oneshot::Sender<Result<(InterceptedRequest, Option<InterceptedResponse>), Error>>,
+}
+
+impl ReqCmd {
+    fn new(
         req: InterceptedRequest,
         resp: oneshot::Sender<Result<(InterceptedRequest, Option<InterceptedResponse>), Error>>,
-    },
-    InterceptRes {
+    ) -> Box<Self> {
+        Box::new(ReqCmd { req, resp })
+    }
+}
+
+struct ResCmd {
+    req: InterceptedRequest,
+    res: InterceptedResponse,
+    resp: oneshot::Sender<Result<InterceptedResponse, Error>>,
+}
+
+impl ResCmd {
+    fn new(
+        req: InterceptedRequest,
         res: InterceptedResponse,
         resp: oneshot::Sender<Result<InterceptedResponse, Error>>,
-    },
-    SetScript {
-        script: String,
-        resp: oneshot::Sender<Result<(), Error>>,
-    },
+    ) -> Box<Self> {
+        Box::new(ResCmd { req, res, resp })
+    }
+}
+
+struct ScriptCmd {
+    script: String,
+    resp: oneshot::Sender<Result<(), Error>>,
+}
+
+impl ScriptCmd {
+    fn new(script: String, resp: oneshot::Sender<Result<(), Error>>) -> Box<Self> {
+        Box::new(ScriptCmd { script, resp })
+    }
+}
+
+enum Cmd {
+    InterceptReq { data: Box<ReqCmd> },
+    InterceptRes { data: Box<ResCmd> },
+    SetScript { data: Box<ScriptCmd> },
 }
 
 pub(crate) fn register_classes(ctx: &mut Context) -> JsResult<()> {
@@ -114,22 +146,24 @@ impl JsEngine {
                 rt.block_on(async move {
                     while let Some(cmd) = rx.recv().await {
                         match cmd {
-                            Cmd::InterceptReq { req, resp } => {
-                                let result = handle_intercept_req(&mut ctx, req).await;
-                                let _ = resp.send(result);
+                            Cmd::InterceptReq { data } => {
+                                let result = handle_intercept_req(&mut ctx, data.req).await;
+                                let _ = data.resp.send(result);
                             }
-                            Cmd::InterceptRes { res, resp } => {
-                                let result = handle_intercept_resp(&mut ctx, res).await;
-                                let _ = resp.send(result);
+                            Cmd::InterceptRes { data } => {
+                                let result =
+                                    handle_intercept_resp(&mut ctx, data.req, data.res).await;
+                                let _ = data.resp.send(result);
                             }
-                            Cmd::SetScript { script, resp } => {
+                            Cmd::SetScript { data } => {
                                 let _ = ctx.create_realm();
-                                let result = ctx.eval(Source::from_bytes(script.as_bytes()));
+                                let result = ctx.eval(Source::from_bytes(data.script.as_bytes()));
                                 if let Err(e) = &result {
                                     error!("Script error {e}");
-                                    error!("Script \n {script}");
                                 };
-                                let _ = resp.send(result.map(|_| ()).map_err(|_| Error::LoadError));
+                                let _ = data
+                                    .resp
+                                    .send(result.map(|_| ()).map_err(|_| Error::LoadError));
                             }
                         }
                     }
@@ -256,13 +290,14 @@ fn call_method_if_callable(
 
 async fn handle_intercept_resp(
     ctx: &mut Context,
+    req: InterceptedRequest,
     res: InterceptedResponse,
 ) -> Result<InterceptedResponse, Error> {
     trace!("handle_intercept_req");
     let header_cell = Rc::new(RefCell::new(res.headers.clone()));
     let body = JsBody::new(res.body.clone());
     let trailers_cell = Rc::new(RefCell::new(res.trailers.clone().unwrap_or_default()));
-    let req_cell = Rc::new(RefCell::new(InterceptedRequest::default()));
+    let req_cell = Rc::new(RefCell::new(req));
     let resp_cell = Rc::new(RefCell::new(Some(res)));
 
     let trailer_handle = Rc::clone(&trailers_cell);
@@ -334,8 +369,7 @@ impl RoxyEngine for JsEngine {
         let (txr, rxr) = oneshot::channel();
         self.tx
             .send(Cmd::InterceptReq {
-                req: req.clone(),
-                resp: txr,
+                data: ReqCmd::new(req.clone(), txr),
             })
             .await
             .map_err(|_| Error::InterceptedRequest)?;
@@ -352,12 +386,15 @@ impl RoxyEngine for JsEngine {
         }
     }
 
-    async fn intercept_response(&self, res: &mut InterceptedResponse) -> Result<(), Error> {
+    async fn intercept_response(
+        &self,
+        req: &InterceptedRequest,
+        res: &mut InterceptedResponse,
+    ) -> Result<(), Error> {
         let (txr, rxr) = oneshot::channel();
         self.tx
             .send(Cmd::InterceptRes {
-                res: res.clone(),
-                resp: txr,
+                data: ResCmd::new(req.clone(), res.clone(), txr),
             })
             .await
             .map_err(|_| Error::InterceptResponse)?;
@@ -375,8 +412,7 @@ impl RoxyEngine for JsEngine {
         let (txr, rxr) = oneshot::channel();
         self.tx
             .send(Cmd::SetScript {
-                script: script.to_string(),
-                resp: txr,
+                data: ScriptCmd::new(script.to_string(), txr),
             })
             .await
             .map_err(|_| Error::LoadError)?;

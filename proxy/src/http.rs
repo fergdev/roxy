@@ -97,7 +97,7 @@ async fn proxy(
         .intercept_request(&mut intercepted)
         .await
     {
-        Ok(req) => req,
+        Ok(resp) => resp,
         Err(err) => return internal_error(format!("Intercept request error: {err}")),
     };
 
@@ -105,7 +105,7 @@ async fn proxy(
     let flow_id = flow_cxt
         .proxy_cxt
         .flow_store
-        .new_flow_cxt(&flow_cxt, intercepted)
+        .new_flow_cxt(&flow_cxt, intercepted.clone())
         .await;
 
     if let Some(response) = response {
@@ -130,22 +130,22 @@ async fn proxy(
         Err(e) => return down_stream_error(e),
     };
 
-    let mut intercepted = InterceptedResponse::from_http(res.parts, res.body, res.trailers);
+    let mut intercepted_resp = InterceptedResponse::from_http(res.parts, res.body, res.trailers);
 
     if let Err(err) = flow_cxt
         .proxy_cxt
         .script_engine
-        .intercept_response(&mut intercepted)
+        .intercept_response(&intercepted, &mut intercepted_resp)
         .await
     {
         return internal_error(format!("Intercept response error: {err}"));
     }
 
-    let resp = intercepted.response()?;
+    let resp = intercepted_resp.response()?;
     flow_cxt
         .proxy_cxt
         .flow_store
-        .post_event(flow_id, FlowEvent::Response(intercepted));
+        .post_event(flow_id, FlowEvent::Response(intercepted_resp));
     Ok(resp)
 }
 

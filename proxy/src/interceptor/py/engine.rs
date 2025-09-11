@@ -96,10 +96,14 @@ impl RoxyEngine for PythonEngine {
         })
     }
 
-    async fn intercept_response(&self, res: &mut InterceptedResponse) -> Result<(), Error> {
+    async fn intercept_response(
+        &self,
+        req: &InterceptedRequest,
+        res: &mut InterceptedResponse,
+    ) -> Result<(), Error> {
         let addons = self.addons.lock().await;
         Python::attach(|py| {
-            let f = PyFlow::from_data(py, &InterceptedRequest::default(), &Some(res.clone()))?;
+            let f = PyFlow::from_data(py, req, &Some(res.clone()))?;
             let flow_obj = f.bind(py);
             for a in addons.iter() {
                 let obj = a.obj.bind(py);

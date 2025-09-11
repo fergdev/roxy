@@ -139,7 +139,7 @@ async fn do_conn(new_conn: quinn::Incoming, cxt: ProxyContext) -> Result<(), Box
                         let flow_id = flow_cxt
                             .proxy_cxt
                             .flow_store
-                            .new_flow_cxt(&flow_cxt, intercepted_request)
+                            .new_flow_cxt(&flow_cxt, intercepted_request.clone())
                             .await;
 
                         if let Some(response) = response {
@@ -169,7 +169,7 @@ async fn do_conn(new_conn: quinn::Incoming, cxt: ProxyContext) -> Result<(), Box
                         flow_cxt
                             .proxy_cxt
                             .script_engine
-                            .intercept_response(&mut intercepted_response)
+                            .intercept_response(&intercepted_request, &mut intercepted_response)
                             .await?;
 
                         let resp = intercepted_response.response_builder();

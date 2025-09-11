@@ -83,7 +83,7 @@ impl TestContext {
 
             let mut actual_res = init_res.clone();
             self.engine
-                .intercept_response(&mut actual_res)
+                .intercept_response(expect_req, &mut actual_res)
                 .await
                 .unwrap();
             assert_eq!(expect_res, &actual_res);
@@ -434,6 +434,31 @@ async fn test_req_set_host() {
     cxt.run_test("req_set_host", &init_req, &expect_req, &init_res, &init_res)
         .await;
 }
+#[tokio::test]
+async fn test_resp_set_body_based_on_req() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        uri: "http://example.com".parse().unwrap(),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = init_req.clone();
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = InterceptedResponse {
+        body: Bytes::from("intercepted"),
+        ..cxt.default_resp.clone()
+    };
+
+    cxt.run_test(
+        "resp_set_body_based_on_req",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
 
 #[tokio::test]
 async fn test_notify() {
@@ -470,7 +495,7 @@ async fn test_notify() {
 
         let mut actual_resp = cxt.default_resp.clone();
         cxt.engine
-            .intercept_response(&mut actual_resp)
+            .intercept_response(&expect_req, &mut actual_resp)
             .await
             .unwrap();
         assert_eq!(expect_resp, actual_resp);
