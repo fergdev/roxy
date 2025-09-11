@@ -88,7 +88,7 @@ impl Tui {
     }
 
     pub fn start(&mut self) {
-        self.cancel(); // Cancel any existing task
+        self.cancel();
         self.cancellation_token = CancellationToken::new();
         let event_loop = Self::event_loop(
             self.event_tx.clone(),

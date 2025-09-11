@@ -28,7 +28,7 @@ pub struct ClientVerificationCapture {
 
 #[derive(Debug, Clone)]
 pub struct VerifyClientCert {
-    pub end_endity: Bytes,
+    pub end_entity: Bytes,
     pub intermediates: Vec<Bytes>,
     pub now: UnixTime,
     pub error: Option<rustls::Error>,
@@ -170,7 +170,7 @@ impl ClientCertVerifier for LoggingClientVerifier {
             .map_err(|e| rustls::Error::General(format!("Failed to gain lock on certs {e}")))?;
 
         guard.cert = Some(VerifyClientCert {
-            end_endity: end_entity.to_vec().into(),
+            end_entity: end_entity.to_vec().into(),
             intermediates: intermediates.iter().map(|i| i.to_vec().into()).collect(),
             now,
             error: None,
