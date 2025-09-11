@@ -14,12 +14,27 @@ fn to_header_value(val: &str) -> PyResult<HeaderValue> {
 
 pub(crate) type HeaderList = Arc<Mutex<HeaderMap>>;
 
+#[derive(Debug, Clone)]
 #[pyclass]
 pub(crate) struct PyHeaders {
     pub(crate) inner: HeaderList,
 }
 
+impl Default for PyHeaders {
+    fn default() -> Self {
+        PyHeaders {
+            inner: Arc::new(Mutex::new(HeaderMap::new())),
+        }
+    }
+}
+
 impl PyHeaders {
+    pub(crate) fn from_headers(headers: HeaderMap) -> PyHeaders {
+        PyHeaders {
+            inner: Arc::new(Mutex::new(headers)),
+        }
+    }
+
     fn lock(&self) -> PyResult<MutexGuard<'_, HeaderMap>> {
         self.inner
             .lock()
@@ -29,6 +44,11 @@ impl PyHeaders {
 
 #[pymethods]
 impl PyHeaders {
+    #[new]
+    fn new_py() -> Self {
+        Self::default()
+    }
+
     fn append(&self, _py: Python<'_>, name: &str, value: &str) -> PyResult<()> {
         let name = to_header_name(name)?;
         let value = to_header_value(value)?;
@@ -45,9 +65,126 @@ impl PyHeaders {
         Ok(())
     }
 
+    fn delete(&self, _py: Python<'_>, name: &str) -> PyResult<()> {
+        let name = to_header_name(name)?;
+        let mut g = self.lock()?;
+        g.remove(name);
+        Ok(())
+    }
+
+    fn clear(&self, _py: Python<'_>) -> PyResult<()> {
+        let mut g = self.lock()?;
+        g.clear();
+        Ok(())
+    }
+
     fn get(&self, _py: Python<'_>, name: &str) -> PyResult<Option<String>> {
         let name = to_header_name(name)?;
         let g = self.lock()?;
         Ok(g.get(&name).map(|v| v.to_str().unwrap_or("").to_string()))
+    }
+
+    fn has(&self, _py: Python<'_>, name: &str) -> PyResult<bool> {
+        let name = to_header_name(name)?;
+        let g = self.lock()?;
+        Ok(g.contains_key(name))
+    }
+}
+
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[cfg(test)]
+mod tests {
+
+    use crate::interceptor::py::with_module;
+    #[test]
+    fn pyheaders_append_and_get() {
+        with_module(
+            r#"
+from roxy import PyHeaders
+h = PyHeaders()
+h.append("x-test", "v1")
+h.append("x-test-2", "v2")
+assert h.get("x-test") == "v1"
+assert h.get("x-test-2") == "v2"
+assert h.get("missing") is None
+"#,
+        );
+    }
+
+    #[test]
+    fn pyheaders_set_overwrites_previous_values() {
+        with_module(
+            r#"
+from roxy import PyHeaders
+h = PyHeaders()
+h.append("x", "a")
+h.set("x", "b")      # must overwrite
+assert h.get("x") == "b"
+"#,
+        );
+    }
+
+    #[test]
+    fn pyheaders_delete_and_has() {
+        with_module(
+            r#"
+from roxy import PyHeaders
+h = PyHeaders()
+h.set("x-del", "z")
+assert h.has("x-del") is True
+h.delete("x-del")
+assert h.has("x-del") is False
+assert h.get("x-del") is None
+"#,
+        );
+    }
+
+    #[test]
+    fn pyheaders_clear_empties_all() {
+        with_module(
+            r#"
+from roxy import PyHeaders
+h = PyHeaders()
+h.set("a", "1")
+h.set("b", "2")
+h.clear()
+assert h.get("a") is None
+assert h.get("b") is None
+assert h.has("a") is False
+assert h.has("b") is False
+"#,
+        );
+    }
+
+    #[test]
+    fn pyheaders_invalid_header_name_errors() {
+        with_module(
+            r#"
+from roxy import PyHeaders
+h = PyHeaders()
+threw = False
+try:
+    h.set("Bad Name", "x")     # space not allowed in header name
+except Exception as e:
+    threw = True
+assert threw, "expected invalid header name to raise"
+"#,
+        );
+    }
+
+    #[test]
+    fn pyheaders_invalid_header_value_errors() {
+        with_module(
+            r#"
+from roxy import PyHeaders
+h = PyHeaders()
+threw = False
+try:
+    h.set("X-Thing", "line1\r\nline2")   # CRLF forbidden
+except Exception as e:
+    threw = True
+assert threw, "expected invalid header value to raise"
+"#,
+        );
     }
 }

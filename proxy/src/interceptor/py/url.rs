@@ -7,9 +7,16 @@ use roxy_shared::uri::RUri;
 
 use crate::interceptor::py::query::PyURLSearchParams;
 
+#[derive(Debug, Clone)]
 #[pyclass(name = "URL")]
 pub struct PyUrl {
     pub(crate) uri: Arc<Mutex<RUri>>,
+}
+
+impl Default for PyUrl {
+    fn default() -> Self {
+        Self::from_ruri(RUri::default())
+    }
 }
 
 impl PyUrl {
@@ -103,6 +110,7 @@ impl PyUrl {
             Ok("".to_string())
         }
     }
+
     #[setter]
     fn set_username(&self, user: &str) -> PyResult<()> {
         self.with_parts_mut(|parts| {
@@ -111,9 +119,28 @@ impl PyUrl {
                 .as_ref()
                 .map(|a| (a.host().to_string(), a.port_u16()))
                 .unwrap_or((String::new(), None));
+
+            let existing_pass = parts
+                .authority
+                .as_ref()
+                .map(|a| {
+                    let s = a.as_str();
+                    let userinfo = s.rsplit_once('@').map(|(ui, _)| ui).unwrap_or("");
+                    userinfo
+                        .split_once(':')
+                        .map(|x| x.1)
+                        .unwrap_or("")
+                        .to_string()
+                })
+                .unwrap_or_default();
+
             let mut auth = String::new();
-            if !user.is_empty() {
+            if !user.is_empty() || !existing_pass.is_empty() {
                 auth.push_str(user);
+                if !existing_pass.is_empty() {
+                    auth.push(':');
+                    auth.push_str(&existing_pass);
+                }
                 auth.push('@');
             }
             auth.push_str(&host);
@@ -121,8 +148,9 @@ impl PyUrl {
                 auth.push(':');
                 auth.push_str(&p.to_string());
             }
+
             parts.authority = Some(
-                Authority::from_maybe_shared(auth)
+                http::uri::Authority::from_maybe_shared(auth)
                     .map_err(|e| PyTypeError::new_err(e.to_string()))?,
             );
             Ok(())
@@ -306,5 +334,173 @@ impl PyUrl {
 
     fn __str__(&self) -> PyResult<String> {
         self.href_get()
+    }
+}
+
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[cfg(test)]
+mod tests {
+    use crate::interceptor::py::with_module;
+
+    #[test]
+    fn pyurl_constructor_roundtrip() {
+        with_module(
+            r#"
+from roxy import URL
+u = URL("http://example.com:8080/path?x=1")
+assert str(u) == "http://example.com:8080/path?x=1"
+"#,
+        );
+    }
+
+    #[test]
+    fn pyurl_href_get_set_valid() {
+        with_module(
+            r#"
+from roxy import URL
+u = URL("http://a/")
+assert u.href == "http://a/"
+u.href = "https://example.org/zzz?q=1"
+assert u.href == "https://example.org/zzz?q=1"
+assert str(u) == "https://example.org/zzz?q=1"
+"#,
+        );
+    }
+
+    #[test]
+    fn pyurl_scheme_get_set() {
+        with_module(
+            r#"
+from roxy import URL
+u = URL("http://example.com/")
+assert u.scheme == "http"
+u.scheme = "https"
+assert u.scheme == "https"
+assert u.href.startswith("https://")
+"#,
+        );
+    }
+
+    #[test]
+    fn pyurl_username_password_get_set() {
+        with_module(
+            r#"
+from roxy import URL
+u = URL("http://example.com/")
+assert u.username == ""
+assert u.password == ""
+u.username = "user"
+assert u.username == "user"
+u.password = "pass"
+assert u.password == "pass"
+u.username = "newuser"
+assert u.username == "newuser"
+print(u.password)
+print("hihihihi")
+assert u.password == "pass"
+"#,
+        );
+    }
+
+    #[test]
+    fn pyurl_hostname_host_port_get_set() {
+        with_module(
+            r#"
+from roxy import URL
+u = URL("http://example.com/")
+# hostname/host/port getters
+assert u.hostname == "example.com"
+assert u.host == "example.com"
+assert u.port is None
+# Set port
+u.port = 8080
+assert u.port == 8080
+assert u.host == "example.com:8080"
+# Set hostname (preserves port)
+u.hostname = "example.org"
+assert u.hostname == "example.org"
+assert u.host == "example.org:8080"
+# Set host directly (overwrites both)
+u.host = "myhost:1234"
+assert u.hostname == "myhost"
+assert u.port == 1234
+assert u.host == "myhost:1234"
+"#,
+        );
+    }
+
+    #[test]
+    fn pyurl_path_get_set_preserves_query() {
+        with_module(
+            r#"
+from roxy import URL
+u = URL("http://example.com/a/b?x=1")
+assert u.path == "/a/b"
+u.path = "/z"
+assert u.path == "/z"
+# query preserved by path setter
+assert u.search == "?x=1"
+assert str(u).startswith("http://example.com/z?x=1")
+"#,
+        );
+    }
+
+    #[test]
+    fn pyurl_search_get_set_and_params() {
+        with_module(
+            r#"
+from roxy import URL
+u = URL("http://example.com/")
+assert u.search == ""
+u.search = "?a=1&b=2"
+assert u.search == "?a=1&b=2"
+
+sp = u.search_params
+assert sp.get("a") == "1"
+sp.set("a", "9")
+assert sp.get("a") == "9"
+sp.append("a", "10")
+vals = sp.get_all("a")
+assert vals == ["9", "10"]
+sp.delete("b")
+assert sp.has("b") is False
+
+# Roundtrip shows updated query
+assert str(u).endswith("?a=9&a=10")
+"#,
+        );
+    }
+
+    #[test]
+    fn pyurl_origin_is_readonly() {
+        with_module(
+            r#"
+from roxy import URL
+u = URL("http://example.com:1234/x")
+assert u.origin == "http://example.com:1234"
+threw = False
+try:
+    u.origin = "http://nope:1"  # no setter defined
+except AttributeError:
+    threw = True
+assert threw, "origin must be read-only"
+"#,
+        );
+    }
+
+    #[test]
+    fn pyurl_href_set_invalid_errors() {
+        with_module(
+            r#"
+from roxy import URL
+u = URL("http://ok/")
+threw = False
+try:
+    u.href = "http://exa mple.com/"  # space invalid
+except Exception:
+    threw = True
+assert threw, "invalid href should raise"
+"#,
+        );
     }
 }

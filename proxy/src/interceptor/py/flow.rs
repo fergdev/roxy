@@ -1,92 +1,135 @@
-use std::sync::{Arc, Mutex};
-
-use pyo3::{Py, PyResult, Python, pyclass};
+use pyo3::{Py, PyResult, Python, pyclass, pymethods};
 
 use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
-    interceptor::py::{
-        body::PyBody,
-        headers::{HeaderList, PyHeaders},
-        request::PyRequest,
-        response::PyResponse,
-        url::PyUrl,
-    },
+    interceptor::py::{request::PyRequest, response::PyResponse},
 };
 
+#[derive(Debug, Clone)]
 #[pyclass]
+#[derive(Default)]
 pub(crate) struct PyFlow {
     #[pyo3(get)]
-    pub(crate) request: Py<PyRequest>,
+    pub(crate) request: PyRequest,
     #[pyo3(get)]
-    pub(crate) response: Py<PyResponse>,
+    pub(crate) response: PyResponse,
 }
 
-pub(crate) fn build_flow<'py>(
-    py: Python<'py>,
-    req: &InterceptedRequest,
-    resp_opt: &Option<InterceptedResponse>,
-) -> PyResult<(Py<PyFlow>, HeaderList, HeaderList)> {
-    let req_headers: HeaderList = Arc::new(Mutex::new(req.headers.clone()));
-    let req_trailers: HeaderList = Arc::new(Mutex::new(req.trailers.clone().unwrap_or_default()));
+impl PyFlow {
+    pub(crate) fn from_data<'py>(
+        py: Python<'py>,
+        req: &InterceptedRequest,
+        resp_opt: &Option<InterceptedResponse>,
+    ) -> PyResult<Py<Self>> {
+        let resp = resp_opt
+            .as_ref()
+            .cloned()
+            .unwrap_or(InterceptedResponse::default());
+        let request = PyRequest::from_req(req);
+        let response = PyResponse::from_resp(&resp);
+        Py::new(py, PyFlow { request, response })
+    }
+}
 
-    let resp = resp_opt
-        .as_ref()
-        .cloned()
-        .unwrap_or(InterceptedResponse::default());
-    let resp_headers: HeaderList = Arc::new(Mutex::new(resp.headers.clone()));
-    let resp_trailers: HeaderList = Arc::new(Mutex::new(resp.trailers.clone().unwrap_or_default()));
+#[pymethods]
+impl PyFlow {
+    #[new]
+    fn new_py() -> Self {
+        Self::default()
+    }
+}
 
-    let py_req_headers = Py::new(
-        py,
-        PyHeaders {
-            inner: req_headers.clone(),
-        },
-    )?;
-    let py_res_headers = Py::new(
-        py,
-        PyHeaders {
-            inner: resp_headers.clone(),
-        },
-    )?;
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[cfg(test)]
+mod tests {
+    use crate::interceptor::py::with_module;
 
-    let py_req = Py::new(
-        py,
-        PyRequest {
-            inner: Arc::new(Mutex::new(req.clone())),
-            body: Py::new(py, PyBody::new(req.body.clone()))?,
-            url: Py::new(py, PyUrl::from_ruri(req.uri.clone()))?,
-            headers: py_req_headers,
-            trailers: Py::new(
-                py,
-                PyHeaders {
-                    inner: req_trailers.clone(),
-                },
-            )?,
-        },
-    )?;
-    let resp_body = Py::new(py, PyBody::new(resp.body.clone()))?;
-    let py_res = Py::new(
-        py,
-        PyResponse {
-            inner: Arc::new(Mutex::new(resp)),
-            body: resp_body,
-            headers: py_res_headers,
-            trailers: Py::new(
-                py,
-                PyHeaders {
-                    inner: resp_trailers.clone(),
-                },
-            )?,
-        },
-    )?;
+    #[test]
+    fn pyflow_constructor_defaults() {
+        with_module(
+            r#"
+from roxy import PyFlow
+f = PyFlow()
+# attributes exist
+assert hasattr(f, "request")
+assert hasattr(f, "response")
+# nested readable basics
+_ = f.request.method
+_ = f.request.version
+_ = f.response.status
+_ = f.response.version
+"#,
+        );
+    }
 
-    let py_flow = Py::new(
-        py,
-        PyFlow {
-            request: py_req,
-            response: py_res,
-        },
-    )?;
+    #[test]
+    fn pyflow_request_set_method_and_version() {
+        with_module(
+            r#"
+from roxy import PyFlow
+f = PyFlow()
+f.request.method = "POST"
+assert f.request.method == "POST"
+f.request.version = "HTTP/1.1"
+assert f.request.version == "HTTP/1.1"
+"#,
+        );
+    }
 
-    Ok((py_flow, req_headers, resp_headers))
+    #[test]
+    fn pyflow_response_set_status_and_version() {
+        with_module(
+            r#"
+from roxy import PyFlow
+f = PyFlow()
+f.response.status = 201
+assert f.response.status == 201
+f.response.version = "HTTP/2.0"
+assert f.response.version == "HTTP/2.0"
+"#,
+        );
+    }
+
+    #[test]
+    fn pyflow_body_roundtrip_on_response() {
+        with_module(
+            r#"
+from roxy import PyFlow
+f = PyFlow()
+# default body is empty
+assert f.response.body.is_empty()
+assert f.response.body.len() == 0
+# set text, read back raw and text
+f.response.body.text = "hello"
+assert f.response.body.text == "hello"
+assert f.response.body.len() == 5
+raw = f.response.body.raw
+assert isinstance(raw, (bytes, bytearray))
+assert raw == b"hello"
+# set raw, read text
+f.response.body.raw = b"abc\x00def"
+assert f.response.body.len() == 7
+# text decoding should succeed for valid prefix; we only assert type here
+assert isinstance(f.response.body.text, str)
+"#,
+        );
+    }
+
+    #[test]
+    fn pyflow_request_headers_and_url_present() {
+        with_module(
+            r#"
+from roxy import PyFlow
+f = PyFlow()
+# request sub-objects exist and are usable (minimal smoke)
+h = f.request.headers
+t = f.request.trailers
+u = f.request.url
+# basic API presence
+assert hasattr(h, "set")
+assert hasattr(t, "set")
+assert hasattr(u, "href")
+"#,
+        );
+    }
 }

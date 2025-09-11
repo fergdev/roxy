@@ -43,6 +43,12 @@ pub struct PyURLSearchParams {
     uri: Arc<Mutex<RUri>>,
 }
 
+impl Default for PyURLSearchParams {
+    fn default() -> Self {
+        Self::new(Arc::new(Mutex::new(RUri::default())))
+    }
+}
+
 impl PyURLSearchParams {
     pub fn new(uri: Arc<Mutex<RUri>>) -> Self {
         Self { uri }
@@ -72,6 +78,26 @@ impl PyURLSearchParams {
 
 #[pymethods]
 impl PyURLSearchParams {
+    #[new]
+    #[pyo3(signature = (value=None))]
+    fn new_with_str(value: Option<&str>) -> PyResult<Self> {
+        let uri = if let Some(s) = value {
+            let s = s.strip_prefix('?').unwrap_or(s);
+            let full = format!("http://dummy/?{s}");
+            match full.parse() {
+                Ok(uri) => RUri::new(uri),
+                Err(e) => {
+                    return Err(PyTypeError::new_err(format!(
+                        "failed to parse URLSearchParams from '{s}': {e}"
+                    )));
+                }
+            }
+        } else {
+            RUri::default()
+        };
+        Ok(Self::new(Arc::new(Mutex::new(uri))))
+    }
+
     fn set(&self, key: &str, value: &Bound<PyAny>) -> PyResult<()> {
         self.with_pairs_mut(|pairs| {
             pairs.retain(|(k, _)| k != key);
@@ -151,5 +177,111 @@ impl PyURLSearchParams {
 
     fn __str__(&self) -> PyResult<String> {
         self.to_string()
+    }
+}
+
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[cfg(test)]
+mod tests {
+    use crate::interceptor::py::with_module;
+
+    #[test]
+    fn p01_constructor_parses_initial_query() {
+        with_module(
+            r#"
+from roxy import URLSearchParams as P
+p1 = P("a=1&b=2")
+assert str(p1) == "a=1&b=2"
+p2 = P("?x=9&x=10")
+assert p2.get("x") == "9"
+assert p2.get_all("x") == ["9","10"]
+"#,
+        );
+    }
+
+    #[test]
+    fn p02_set_append_get_delete_has() {
+        with_module(
+            r#"
+from roxy import URLSearchParams as P
+p = P("foo=1&bar=2")
+assert p.get("foo") == "1"
+p.set("foo", "9")
+assert p.get("foo") == "9"
+p.append("foo", "10")
+assert p.get_all("foo") == ["9","10"]
+assert p.has("bar") is True
+p.delete("foo")
+assert p.get("foo") is None
+assert p.has("foo") is False
+"#,
+        );
+    }
+
+    #[test]
+    fn p03_clear_and_sort() {
+        with_module(
+            r#"
+from roxy import URLSearchParams as P
+p = P("z=3&b=2&a=1&b=1")
+p.sort()
+assert str(p) == "a=1&b=1&b=2&z=3"
+p.clear()
+assert str(p) == ""
+assert p.has("a") is False
+"#,
+        );
+    }
+
+    #[test]
+    fn p04_mapping_dunder_index_set_del() {
+        with_module(
+            r#"
+from roxy import URLSearchParams as P
+p = P("x=1")
+assert p["x"] == "1"
+p["x"] = "42"
+assert p.get("x") == "42"
+del p["x"]
+assert p.get("x") is None
+assert str(p) == ""
+"#,
+        );
+    }
+
+    #[test]
+    fn p05_to_string_and_str_match() {
+        with_module(
+            r#"
+from roxy import URLSearchParams as P
+p = P("a=1&b=2")
+assert p.to_string() == "a=1&b=2"
+assert str(p) == "a=1&b=2"
+"#,
+        );
+    }
+
+    #[test]
+    fn p06_value_coercion_via_pyany_str() {
+        with_module(
+            r#"
+from roxy import URLSearchParams as P
+p = P()
+p.set("n", 123)          # -> "123"
+p.append("n", True)      # -> "True"
+p.append("n", 4.5)       # -> "4.5"
+assert p.get_all("n") == ["123","True","4.5"]
+"#,
+        );
+    }
+
+    #[test]
+    fn p07_invalid_constructor_string_errors() {
+        with_module(
+            r#"
+from roxy import URLSearchParams as P
+_ = P("a=%GG")
+"#,
+        );
     }
 }
