@@ -25,10 +25,18 @@ pub(crate) struct JsHeaders {
     pub headers: HeaderList,
 }
 
+impl Default for JsHeaders {
+    fn default() -> Self {
+        Self {
+            headers: Rc::new(RefCell::new(HeaderMap::new())),
+        }
+    }
+}
+
 js_class! {
     class JsHeaders as "Headers" {
         constructor() {
-            Err(js_error!(TypeError: "Illegal constructor"))
+            Ok(Self::default())
         }
 
         init(_class: &mut ClassBuilder) -> JsResult<()> {
@@ -48,7 +56,7 @@ js_class! {
             })
         }
 
-        fn get_all(this: JsClass<JsHeaders>, name: Convert<String>, context: &mut Context) -> JsResult<JsValue> {
+        fn get_all as "getAll" (this: JsClass<JsHeaders>, name: Convert<String>, context: &mut Context) -> JsResult<JsValue> {
             let name = to_header_name(&name.0)?;
             let arr = JsArray::new(context);
             for (_, v) in this.borrow().headers.borrow().iter().filter(|(k, _)| name.eq(k)) {
@@ -93,5 +101,198 @@ js_class! {
                 .any(|(k, _)| k.eq(&name));
             Ok(has)
         }
+    }
+}
+
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use boa_engine::{Context, JsValue, Source};
+
+    fn setup() -> Context {
+        let mut ctx = Context::default();
+        ctx.eval(Source::from_bytes(
+            r#"
+            function must(cond, msg) { if (!cond) throw new Error(msg || "assert failed"); }
+            "#,
+        ))
+        .unwrap();
+        ctx.register_global_class::<JsHeaders>()
+            .expect("register Headers");
+        ctx
+    }
+
+    #[test]
+    fn headers_constructor_creates_empty_map() {
+        let mut ctx = setup();
+        let ok = ctx
+            .eval(Source::from_bytes(
+                r#"
+                const h = new Headers();
+                must(typeof h === "object", "Headers should construct an object");
+                // brand new: shouldn't have host
+                must(h.has("host") === false, "no host by default");
+                true
+                "#,
+            ))
+            .unwrap();
+        assert!(ok.is_boolean() && ok.as_boolean().unwrap());
+    }
+
+    #[test]
+    fn set_and_get_roundtrip() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const h = new Headers();
+            h.set("X-Trace", "abc123");
+            must(h.get("X-Trace") === "abc123", "set/get roundtrip");
+            must(h.has("X-Trace") === true, "has after set");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn append_and_get_all_multiple_values() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const h = new Headers();
+            h.append("set-cookie", "a=1");
+            h.append("set-cookie", "b=2");
+
+            const all = h.getAll("set-cookie");
+            must(Array.isArray(all), "getAll returns array");
+            must(all.length === 2, "two values");
+            // Order is insertion order for http::HeaderMap iteration, which is typically the order inserted.
+            must(all.includes("a=1"), "contains a=1");
+            must(all.includes("b=2"), "contains b=2");
+
+            // get() returns a single value (first)
+            const first = h.get("set-cookie");
+            must(first === "a=1" || first === "b=2", "get returns one of values");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn delete_removes_all_values() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const h = new Headers();
+            h.append("X-Foo", "1");
+            h.append("X-Foo", "2");
+            must(h.has("X-Foo") === true, "precondition: has X-Foo");
+            h.delete("X-Foo");
+            must(h.has("X-Foo") === false, "deleted all X-Foo");
+            must(h.get("X-Foo") === null, "get null after delete");
+            const all = h.getAll("X-Foo");
+            must(Array.isArray(all) && all.length === 0, "getAll empty after delete");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn case_insensitive_names() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const h = new Headers();
+            h.set("content-type", "text/plain");
+            must(h.has("Content-Type") === true, "has is case-insensitive");
+            must(h.get("CONTENT-TYPE") === "text/plain", "get is case-insensitive");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn value_coercion_to_string() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const h = new Headers();
+            h.set("X-Num", 123);
+            must(h.get("X-Num") === "123", "number coerces to string");
+
+            h.set("X-BoolTrue", true);
+            must(h.get("X-BoolTrue") === "true", "boolean true coerces");
+
+            h.set("X-BoolFalse", false);
+            must(h.get("X-BoolFalse") === "false", "boolean false coerces");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn invalid_header_name_throws_type_error() {
+        let mut ctx = setup();
+        let res = ctx.eval(Source::from_bytes(
+            r#"
+            try {
+                const h = new Headers();
+                h.set("Bad Name", "x"); // invalid due to space
+                must(false, "expected TypeError");
+            } catch (e) {
+                must(e instanceof TypeError, "TypeError for invalid header name");
+                true
+            }
+            "#,
+        ));
+        assert!(matches!(res, Ok(JsValue::Boolean(true))));
+    }
+
+    #[test]
+    fn invalid_header_value_throws_type_error() {
+        let mut ctx = setup();
+        let res = ctx.eval(Source::from_bytes(
+            r#"
+            try {
+                const h = new Headers();
+                h.set("X", "line1\r\nline2"); // CRLF not allowed
+                must(false, "expected TypeError");
+            } catch (e) {
+                must(e instanceof TypeError, "TypeError for invalid header value");
+                true
+            }
+            "#,
+        ));
+        assert!(matches!(res, Ok(JsValue::Boolean(true))));
+    }
+
+    #[test]
+    fn append_and_get_all_case_insensitive_name_matching() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const h = new Headers();
+            h.append("Set-Cookie", "a=1");
+            h.append("set-cookie", "b=2");
+            const all = h.getAll("SET-COOKIE");
+            must(Array.isArray(all) && all.length === 2, "both values under case-insensitive key");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn has_false_when_absent() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const h = new Headers();
+            must(h.has("Not-There") === false, "missing returns false");
+            must(h.get("Not-There") === null, "get null when missing");
+            const all = h.getAll("Not-There");
+            must(Array.isArray(all) && all.length === 0, "empty getAll when missing");
+            "#,
+        ))
+        .unwrap();
     }
 }

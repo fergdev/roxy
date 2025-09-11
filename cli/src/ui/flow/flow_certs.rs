@@ -296,7 +296,7 @@ impl FlowDetailsCerts {
         }
     }
 
-    fn render_client(&mut self, f: &mut Frame<'_>, area: Rect, client: &ClientState) {
+    fn render_client(&mut self, f: &mut Frame<'_>, area: Rect) {
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
 
         let tab_titles: Vec<Line> = ClientTab::all()
@@ -312,13 +312,14 @@ impl FlowDetailsCerts {
         );
         f.render_widget(tabs, layout[0]);
         match self.client_tab {
-            ClientTab::Hello => self.render_client_hello(f, layout[1], &client.hello),
-            ClientTab::Certs => self.render_client_cert(f, layout[1], &client.certs),
-            ClientTab::Tls => self.render_client_tls(f, layout[1], &client.tls),
+            ClientTab::Hello => self.render_client_hello(f, layout[1]),
+            ClientTab::Certs => self.render_client_cert(f, layout[1]),
+            ClientTab::Tls => self.render_client_tls(f, layout[1]),
         }
     }
 
-    fn render_client_hello(&mut self, f: &mut Frame<'_>, area: Rect, certs: &Option<String>) {
+    fn render_client_hello(&mut self, f: &mut Frame<'_>, area: Rect) {
+        let certs = &self.state.borrow().client.hello;
         let mut lines = vec![];
 
         match certs {
@@ -332,12 +333,8 @@ impl FlowDetailsCerts {
         f.render_widget(paragraph, area);
     }
 
-    fn render_client_cert(
-        &mut self,
-        f: &mut Frame<'_>,
-        area: Rect,
-        certs: &Option<ClientVerificationCapture>,
-    ) {
+    fn render_client_cert(&mut self, f: &mut Frame<'_>, area: Rect) {
+        let certs = &self.state.borrow().client.certs;
         let mut lines = vec![];
 
         match &certs {
@@ -372,12 +369,8 @@ impl FlowDetailsCerts {
         f.render_widget(paragraph, area);
     }
 
-    fn render_client_tls(
-        &mut self,
-        f: &mut Frame<'_>,
-        area: Rect,
-        client_tls: &Option<ServerTlsConnectionData>,
-    ) {
+    fn render_client_tls(&mut self, f: &mut Frame<'_>, area: Rect) {
+        let client_tls = &self.state.borrow().client.tls;
         let mut lines = vec![];
 
         match client_tls {
@@ -399,7 +392,7 @@ impl FlowDetailsCerts {
         f.render_widget(paragraph, area);
     }
 
-    fn render_server(&mut self, f: &mut Frame<'_>, area: Rect, server: &ServerState) {
+    fn render_server(&mut self, f: &mut Frame<'_>, area: Rect) {
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
         let tab_titles: Vec<Line> = ServerTab::all().iter().map(|v| v.title().into()).collect();
 
@@ -412,20 +405,14 @@ impl FlowDetailsCerts {
 
         f.render_widget(tabs, layout[0]);
         match self.server_tab {
-            ServerTab::ResolveClientCert => {
-                self.render_resolve_client_cert(f, layout[1], &server.resolve_client_cert)
-            }
-            ServerTab::Certs => self.render_server_cert(f, layout[1], &server.certs),
-            ServerTab::Tls => self.render_server_tls(f, layout[1], &server.tls),
+            ServerTab::ResolveClientCert => self.render_resolve_client_cert(f, layout[1]),
+            ServerTab::Certs => self.render_server_cert(f, layout[1]),
+            ServerTab::Tls => self.render_server_tls(f, layout[1]),
         }
     }
 
-    fn render_resolve_client_cert(
-        &mut self,
-        f: &mut Frame<'_>,
-        area: Rect,
-        certs: &Option<String>,
-    ) {
+    fn render_resolve_client_cert(&mut self, f: &mut Frame<'_>, area: Rect) {
+        let certs = &self.state.borrow().server.resolve_client_cert;
         let mut lines = vec![];
 
         match &certs {
@@ -443,12 +430,8 @@ impl FlowDetailsCerts {
         f.render_widget(paragraph, area);
     }
 
-    fn render_server_cert(
-        &mut self,
-        f: &mut Frame<'_>,
-        area: Rect,
-        certs: &Option<ServerVerificationCapture>,
-    ) {
+    fn render_server_cert(&mut self, f: &mut Frame<'_>, area: Rect) {
+        let certs = &self.state.borrow().server.certs;
         let mut lines = vec![];
 
         match certs {
@@ -475,12 +458,8 @@ impl FlowDetailsCerts {
             .wrap(Wrap { trim: false });
         f.render_widget(paragraph, area);
     }
-    fn render_server_tls(
-        &mut self,
-        f: &mut Frame<'_>,
-        area: Rect,
-        tls: &Option<ClientTlsConnectionData>,
-    ) {
+    fn render_server_tls(&mut self, f: &mut Frame<'_>, area: Rect) {
+        let tls = &self.state.borrow().server.tls;
         let mut lines = vec![];
 
         match tls {
@@ -656,7 +635,6 @@ impl Component for FlowDetailsCerts {
         f: &mut ratatui::Frame,
         area: ratatui::prelude::Rect,
     ) -> color_eyre::eyre::Result<()> {
-        let data = self.state.borrow_and_update().clone(); // TODO: not clone here
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
         let tab_titles: Vec<Line> = RootTab::all().iter().map(|v| v.title().into()).collect();
 
@@ -668,8 +646,8 @@ impl Component for FlowDetailsCerts {
         );
         f.render_widget(tabs, layout[0]);
         match self.root_tab {
-            RootTab::Client => self.render_client(f, layout[1], &data.client),
-            RootTab::Server => self.render_server(f, layout[1], &data.server),
+            RootTab::Client => self.render_client(f, layout[1]),
+            RootTab::Server => self.render_server(f, layout[1]),
         }
         Ok(())
     }

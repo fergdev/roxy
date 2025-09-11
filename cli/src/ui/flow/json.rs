@@ -9,9 +9,8 @@ use tracing::error;
 
 use crate::notify_error;
 
-// HACK:: need to find away around static here
-pub fn highlight_json(raw: Bytes) -> Vec<Line<'static>> {
-    match serde_json::from_str::<Value>(&String::from_utf8_lossy(&raw)) {
+pub fn highlight_json(raw: &Bytes) -> Vec<Line<'static>> {
+    match serde_json::from_str::<Value>(&String::from_utf8_lossy(raw)) {
         Ok(json) => {
             let mut lines: Vec<Line> = vec![];
             walk(&json, &mut lines, 0);
@@ -19,7 +18,7 @@ pub fn highlight_json(raw: Bytes) -> Vec<Line<'static>> {
         }
         Err(err) => {
             notify_error!("Json {}", err);
-            let s = String::from_utf8_lossy(&raw).to_string();
+            let s = String::from_utf8_lossy(raw).to_string();
             error!("Invalid json {}\n{}", err, s);
             s.cow_replace(":", ":\n")
                 .lines()
@@ -111,7 +110,6 @@ fn walk(v: &Value, lines: &mut Vec<Line>, indent: usize) {
                         ));
                     }
                     Value::Array(_) | Value::Object(_) => {
-                        // Complex values: start new line and recurse
                         lines.push(Line::from(spans));
                         walk(value, lines, indent + 2);
                         continue;

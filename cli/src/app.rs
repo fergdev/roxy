@@ -166,9 +166,8 @@ impl App {
     }
 
     fn render(&mut self, tui: &mut Tui) -> Result<()> {
-        // TODO: should not clone here
         let theme = self.config_manager.rx.borrow_and_update().theme.clone();
-        set_theme(theme.clone());
+        set_theme(theme);
         tui.draw(|frame| {
             if let Err(error) = self.home.render(frame, frame.area()) {
                 let _ = self

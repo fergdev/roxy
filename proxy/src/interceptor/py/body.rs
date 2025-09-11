@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex, MutexGuard};
+
 use bytes::Bytes;
 use pyo3::{
     Bound, PyResult, Python,
@@ -5,123 +7,150 @@ use pyo3::{
     pyclass, pymethods,
     types::{PyBytes, PyBytesMethods},
 };
+use tracing::info;
 
 #[pyclass]
 #[derive(Debug, Clone)]
 pub(crate) struct PyBody {
-    pub(crate) inner: Bytes,
+    pub(crate) inner: Arc<Mutex<Bytes>>,
+}
+
+impl Default for PyBody {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(Bytes::new())),
+        }
+    }
 }
 
 impl PyBody {
     pub(crate) fn new(data: Bytes) -> Self {
-        Self { inner: data }
+        Self {
+            inner: Arc::new(Mutex::new(data)),
+        }
+    }
+    fn lock(&self) -> PyResult<MutexGuard<'_, Bytes>> {
+        self.inner
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))
     }
 }
 
 #[pymethods]
 impl PyBody {
     #[new]
+    #[pyo3(signature = (value=None))]
     fn new_py(value: Option<&str>) -> Self {
         let bytes = value.unwrap_or("").as_bytes();
-        PyBody {
-            inner: Bytes::copy_from_slice(bytes),
-        }
+        Self::new(Bytes::copy_from_slice(bytes))
     }
     #[getter]
-    fn raw<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
-        PyBytes::new(py, &self.inner)
+    fn raw<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let g = self.lock()?;
+        Ok(PyBytes::new(py, &g.clone()))
     }
 
     #[setter]
-    fn set_raw(&mut self, value: Bound<PyBytes>) {
-        self.inner = Bytes::copy_from_slice(value.as_bytes());
+    fn set_raw(&mut self, value: Bound<PyBytes>) -> PyResult<()> {
+        let mut g = self.lock()?;
+        *g = Bytes::copy_from_slice(value.as_bytes());
+        Ok(())
     }
 
     #[getter]
     fn text(&self) -> PyResult<String> {
-        String::from_utf8(self.inner.to_vec())
+        let g = self.lock()?;
+        String::from_utf8(g.to_vec())
             .map_err(|e| PyTypeError::new_err(format!("invalid UTF-8: {e}")))
     }
 
     #[setter]
-    fn set_text(&mut self, value: &str) {
-        self.inner = Bytes::copy_from_slice(value.as_bytes());
+    fn set_text(&mut self, value: &str) -> PyResult<()> {
+        info!("set test {value:?}");
+        let mut g = self.lock()?;
+        *g = Bytes::copy_from_slice(value.as_bytes());
+        Ok(())
     }
 
-    fn len(&self) -> usize {
-        self.inner.len()
+    fn len(&self) -> PyResult<usize> {
+        let g = self.lock()?;
+        Ok(g.len())
     }
 
-    fn is_empty(&self) -> bool {
-        self.inner.is_empty()
+    fn is_empty(&self) -> PyResult<bool> {
+        let g = self.lock()?;
+        Ok(g.is_empty())
     }
 
-    fn __repr__(&self) -> String {
-        format!(
-            "PyBody(len={}, preview={:?})",
-            self.inner.len(),
-            &self.inner
-        )
+    fn __repr__(&self) -> PyResult<String> {
+        let g = self.lock()?;
+        Ok(format!("PyBody(len={}, preview={:?})", g.len(), &g))
     }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use std::ffi::CString;
-
-    use super::*;
-    use pyo3::{
-        PyResult, Python,
-        types::{PyAnyMethods, PyDict, PyModule, PyModuleMethods},
-    };
+    use crate::interceptor::py::with_module;
 
     #[test]
-    fn pybody_constructor_roundtrip() {
-        Python::initialize();
-        Python::attach(|py| -> PyResult<()> {
-            let m = PyModule::new(py, "test_mod")?;
-            m.add_class::<PyBody>()?;
-
-            let sys = py.import("sys").unwrap();
-            let binding = sys.getattr("modules").unwrap();
-            let modules: &Bound<PyDict> = binding.downcast().unwrap();
-            modules.set_item("test_mod", m).unwrap();
-
-            py.run(
-                &CString::new(
-                    r#"
-from test_mod import PyBody
+    fn pybody_constructor_and_basic_props() {
+        with_module(
+            r#"
+from roxy import PyBody
 # Construct with initial text
 b = PyBody("seed")
 assert b.text == "seed"
 assert b.len() == 4
 assert not b.is_empty()
 
-# Text -> raw roundtrip (includes NUL to check binary safety)
+# Default constructor: empty
+b2 = PyBody()
+assert b2.text == ""
+assert b2.len() == 0
+assert b2.is_empty()
+"#,
+        );
+    }
+
+    #[test]
+    fn pybody_text_to_raw_roundtrip() {
+        with_module(
+            r#"
+from roxy import PyBody
+b = PyBody()
+# Text -> raw, include NUL to ensure binary safety
 b.text = "abc\x00def"
 assert b.len() == 7
 raw = b.raw
 assert isinstance(raw, (bytes, bytearray))
 assert raw == b"abc\x00def"
+"#,
+        );
+    }
 
-# Raw -> text
+    #[test]
+    fn pybody_raw_to_text_roundtrip() {
+        with_module(
+            r#"
+from roxy import PyBody
+b = PyBody("x")
 b.raw = b"hi"
 assert b.text == "hi"
 assert b.len() == 2
+"#,
+        );
+    }
 
-# __repr__ should include len and a preview (don’t over-specify exact format)
+    #[test]
+    fn pybody_repr_contains_len_and_preview() {
+        with_module(
+            r#"
+from roxy import PyBody
+b = PyBody("hi")
 r = repr(b)
 assert "PyBody" in r and "len=2" in r
-                    "#,
-                )
-                .unwrap(),
-                None,
-                None,
-            )?;
-
-            Ok(())
-        })
-        .unwrap();
+"#,
+        );
     }
 }

@@ -4165,7 +4165,6 @@ dependencies = [
  "image",
  "json5",
  "kuchiki",
- "lazy_static",
  "markup5ever 0.35.0",
  "notify 8.1.0",
  "once_cell",

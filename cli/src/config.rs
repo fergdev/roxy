@@ -2,7 +2,6 @@ use clap::Parser;
 use config::ConfigError;
 use cow_utils::CowUtils;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use lazy_static::lazy_static;
 use serde::ser::SerializeMap;
 use std::env;
 use std::error::Error;
@@ -21,18 +20,6 @@ use crate::event::{Action, Mode};
 use crate::notify_error;
 
 const CONFIG: &str = include_str!("../../.config/config.json");
-
-lazy_static! {
-    pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").cow_to_uppercase().to_string();
-    pub static ref DATA_FOLDER: Option<PathBuf> =
-        env::var(format!("{}_DATA", PROJECT_NAME.clone()))
-            .ok()
-            .map(PathBuf::from);
-    pub static ref CONFIG_FOLDER: Option<PathBuf> =
-        env::var(format!("{}_CONFIG", PROJECT_NAME.clone()))
-            .ok()
-            .map(PathBuf::from);
-}
 
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about=None)]

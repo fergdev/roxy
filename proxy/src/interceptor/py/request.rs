@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use http::Method;
-use pyo3::{Py, PyResult, exceptions::PyTypeError, pyclass, pymethods};
+use pyo3::{PyResult, exceptions::PyTypeError, pyclass, pymethods};
 use roxy_shared::version::HttpVersion;
 
 use crate::{
@@ -9,20 +9,42 @@ use crate::{
     interceptor::py::{body::PyBody, headers::PyHeaders, url::PyUrl},
 };
 
+#[derive(Debug, Clone)]
 #[pyclass]
 pub(crate) struct PyRequest {
     pub(crate) inner: Arc<Mutex<InterceptedRequest>>,
     #[pyo3(get)]
-    pub(crate) body: Py<PyBody>,
+    pub(crate) body: PyBody,
     #[pyo3(get)]
-    pub(crate) url: Py<PyUrl>,
+    pub(crate) url: PyUrl,
     #[pyo3(get)]
-    pub(crate) headers: Py<PyHeaders>,
+    pub(crate) headers: PyHeaders,
     #[pyo3(get)]
-    pub(crate) trailers: Py<PyHeaders>,
+    pub(crate) trailers: PyHeaders,
+}
+
+impl Default for PyRequest {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(InterceptedRequest::default())),
+            body: PyBody::default(),
+            url: PyUrl::default(),
+            headers: PyHeaders::default(),
+            trailers: PyHeaders::default(),
+        }
+    }
 }
 
 impl PyRequest {
+    pub(crate) fn from_req(req: &InterceptedRequest) -> Self {
+        PyRequest {
+            inner: Arc::new(Mutex::new(req.clone())),
+            body: PyBody::new(req.body.clone()),
+            url: PyUrl::from_ruri(req.uri.clone()),
+            headers: PyHeaders::from_headers(req.headers.clone()),
+            trailers: PyHeaders::from_headers(req.trailers.clone().unwrap_or_default()),
+        }
+    }
     fn lock(&self) -> PyResult<MutexGuard<'_, InterceptedRequest>> {
         self.inner
             .lock()
@@ -32,6 +54,11 @@ impl PyRequest {
 
 #[pymethods]
 impl PyRequest {
+    #[new]
+    fn new_py() -> Self {
+        Self::default()
+    }
+
     #[getter]
     fn method(&self) -> PyResult<String> {
         let g = self.lock()?;
@@ -56,5 +83,82 @@ impl PyRequest {
         let mut g = self.lock()?;
         g.version = value;
         Ok(())
+    }
+}
+
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[cfg(test)]
+mod tests {
+    use crate::interceptor::py::with_module;
+
+    #[test]
+    fn pr01_constructor_exists() {
+        with_module(
+            r#"
+from roxy import PyRequest
+# Construct with defaults; just ensure it doesn't throw and exposes attributes
+r = PyRequest()
+assert hasattr(r, "method")
+assert hasattr(r, "version")
+"#,
+        );
+    }
+
+    #[test]
+    fn pr02_set_method_valid() {
+        with_module(
+            r#"
+from roxy import PyRequest
+r = PyRequest()
+r.method = "POST"
+assert r.method == "POST"
+"#,
+        );
+    }
+
+    #[test]
+    fn pr03_set_method_invalid_raises() {
+        with_module(
+            r#"
+from roxy import PyRequest
+r = PyRequest()
+threw = False
+try:
+    r.method = " NOPE "  # clearly invalid
+except Exception:
+    threw = True
+assert threw, "setting invalid HTTP method should raise"
+"#,
+        );
+    }
+
+    #[test]
+    fn pr04_set_version_valid_roundtrip() {
+        with_module(
+            r#"
+from roxy import PyRequest
+r = PyRequest()
+r.version = "HTTP/1.1"
+assert r.version == "HTTP/1.1"
+r.version = "HTTP/2.0"
+assert r.version == "HTTP/2.0"
+"#,
+        );
+    }
+
+    #[test]
+    fn pr05_set_version_invalid_raises() {
+        with_module(
+            r#"
+from roxy import PyRequest
+r = PyRequest()
+threw = False
+try:
+    r.version = "HTTP/9.9"
+except Exception:
+    threw = True
+assert threw, "invalid HTTP version must raise"
+"#,
+        );
     }
 }

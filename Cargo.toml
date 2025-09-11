@@ -86,4 +86,4 @@ strum_macros = "0.27"
 itertools = { version = "0.14", default-features = false, features = [
   "use_alloc",
 ] }
-time = "0.3.43" # Required for rcgen
+time = "0.3.43"

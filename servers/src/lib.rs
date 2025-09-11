@@ -220,10 +220,11 @@ pub fn local_tls_acceptor(
     )?)))
 }
 
+static ROOT_DIR: &str = env!("CARGO_MANIFEST_DIR");
+
 pub async fn load_asset(content_type: &ContentType) -> Result<Vec<u8>, std::io::Error> {
     let ext = content_type_ext(content_type);
-    let root = env!("CARGO_MANIFEST_DIR"); // TODO: not load this each time
-    let file = PathBuf::from(format!("{root}/assets/test.{ext}"));
+    let file = PathBuf::from(format!("{ROOT_DIR}/assets/test.{ext}"));
     debug!("Loading {file:?}");
     tokio::fs::read(&file).await
 }

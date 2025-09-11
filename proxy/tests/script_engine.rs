@@ -3,7 +3,7 @@ use http::{HeaderMap, Method, StatusCode};
 use roxy_proxy::{
     flow::{InterceptedRequest, InterceptedResponse},
     init_test_logging,
-    interceptor::{FlowNotify, ScriptEngine, ScriptType},
+    interceptor::{FlowNotify, FlowNotifyLevel, ScriptEngine, ScriptType},
 };
 use roxy_shared::alpn::AlpnProtocol;
 use strum::IntoEnumIterator;
@@ -483,7 +483,7 @@ async fn test_notify() {
         assert_eq!(
             notifications[0],
             FlowNotify {
-                level: 1,
+                level: FlowNotifyLevel::Warn,
                 msg: "hi".to_string()
             }
         );
@@ -491,7 +491,7 @@ async fn test_notify() {
         assert_eq!(
             notifications[1],
             FlowNotify {
-                level: 2,
+                level: FlowNotifyLevel::Error,
                 msg: "there".to_string()
             }
         );

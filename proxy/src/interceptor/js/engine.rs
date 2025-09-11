@@ -40,6 +40,19 @@ enum Cmd {
     },
 }
 
+pub(crate) fn register_classes(ctx: &mut Context) -> JsResult<()> {
+    let console = Console::init(ctx);
+    ctx.register_global_property(Console::NAME, console, Attribute::all())?;
+    ctx.register_global_class::<UrlSearchParams>()?;
+    ctx.register_global_class::<Url>()?;
+    ctx.register_global_class::<JsBody>()?;
+    ctx.register_global_class::<JsFlow>()?;
+    ctx.register_global_class::<JsRequest>()?;
+    ctx.register_global_class::<JsResponse>()?;
+    ctx.register_global_class::<JsHeaders>()?;
+    Ok(())
+}
+
 #[derive(Clone)]
 pub struct JsEngine {
     tx: mpsc::Sender<Cmd>,
@@ -56,32 +69,9 @@ impl JsEngine {
 
             let mut ctx = Context::default();
 
-            let console = Console::init(&mut ctx);
-            if let Err(err) = ctx.register_global_property(Console::NAME, console, Attribute::all())
-            {
-                error!("Error registering Console {err}");
-            };
-            if let Err(err) = JsBody::register(&mut ctx) {
-                error!("Error registering Url {err}");
-            };
-            if let Err(err) = Url::register(&mut ctx) {
-                error!("Error registering Url {err}");
-            };
-            if let Err(err) = UrlSearchParams::register(&mut ctx) {
-                error!("Error registering UrlSearchParams {err}");
-            };
-            if let Err(err) = ctx.register_global_class::<JsFlow>() {
-                error!("Error registering JsFlow {err}");
-            };
-            if let Err(err) = ctx.register_global_class::<JsRequest>() {
-                error!("Error registering JsRequest {err}");
-            };
-            if let Err(err) = ctx.register_global_class::<JsResponse>() {
-                error!("Error registering JsResponse {err}");
-            };
-            if let Err(err) = ctx.register_global_class::<JsHeaders>() {
-                error!("Error registering JsHeaders {err}");
-            };
+            if let Err(e) = register_classes(&mut ctx) {
+                error!("Error register_classes {e}");
+            }
 
             let notify_fn = FunctionObjectBuilder::new(ctx.realm(), unsafe {
                 NativeFunction::from_closure(move |_this, args, ctx| -> JsResult<JsValue> {
@@ -100,7 +90,10 @@ impl JsEngine {
                         .to_std_string_escaped();
 
                     if let Some(tx) = notify_tx.as_ref() {
-                        let _ = tx.try_send(FlowNotify { level, msg });
+                        let _ = tx.try_send(FlowNotify {
+                            level: level.into(),
+                            msg,
+                        });
                     }
                     Ok(JsValue::Undefined)
                 })

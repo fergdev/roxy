@@ -7,7 +7,7 @@ use std::{ffi::CString, sync::Arc};
 
 use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
-    interceptor::{KEY_REQUEST, KEY_RESPONSE},
+    interceptor::{KEY_REQUEST, KEY_RESPONSE, py::init_python},
 };
 
 use async_trait::async_trait;
@@ -15,10 +15,7 @@ use pyo3::ffi::c_str;
 use tokio::sync::{Mutex, mpsc::Sender};
 use tracing::{error, trace};
 
-use crate::interceptor::{
-    Error, FlowNotify, KEY_EXTENSIONS, RoxyEngine,
-    py::flow::{PyFlow, build_flow},
-};
+use crate::interceptor::{Error, FlowNotify, KEY_EXTENSIONS, RoxyEngine, py::flow::PyFlow};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PythonEngine {
@@ -27,7 +24,7 @@ pub(crate) struct PythonEngine {
 
 impl PythonEngine {
     pub fn new(notify_tx: Option<Sender<FlowNotify>>) -> Self {
-        Python::initialize();
+        init_python();
         if let Some(notify_tx) = notify_tx {
             Python::attach(|py| {
                 let _ = inject_notify(py, notify_tx);
@@ -47,7 +44,10 @@ struct Notifier {
 impl Notifier {
     #[pyo3(name = "__call__")]
     fn __call__(&self, level: i32, msg: String) -> PyResult<()> {
-        let _ = self.tx.try_send(FlowNotify { level, msg });
+        let _ = self.tx.try_send(FlowNotify {
+            level: level.into(),
+            msg,
+        });
         Ok(())
     }
 
@@ -55,6 +55,7 @@ impl Notifier {
         self.__call__(level, msg)
     }
 }
+
 fn inject_notify(py: Python<'_>, tx: Sender<FlowNotify>) -> PyResult<()> {
     let notifier = Py::new(py, Notifier { tx })?;
     let builtins = py.import("builtins")?;
@@ -83,8 +84,8 @@ impl RoxyEngine for PythonEngine {
     ) -> Result<Option<InterceptedResponse>, Error> {
         let addons = self.addons.lock().await;
         Python::attach(|py| {
-            let f = build_flow(py, req, &None)?;
-            let flow_obj = f.0.bind(py);
+            let f = PyFlow::from_data(py, req, &None)?;
+            let flow_obj = f.bind(py);
             for a in addons.iter() {
                 let obj = a.obj.bind(py);
                 if let Err(err) = obj.call_method(KEY_REQUEST, (&flow_obj,), None) {
@@ -98,8 +99,8 @@ impl RoxyEngine for PythonEngine {
     async fn intercept_response(&self, res: &mut InterceptedResponse) -> Result<(), Error> {
         let addons = self.addons.lock().await;
         Python::attach(|py| {
-            let f = build_flow(py, &InterceptedRequest::default(), &Some(res.clone()))?;
-            let flow_obj = f.0.bind(py);
+            let f = PyFlow::from_data(py, &InterceptedRequest::default(), &Some(res.clone()))?;
+            let flow_obj = f.bind(py);
             for a in addons.iter() {
                 let obj = a.obj.bind(py);
                 if let Err(err) = obj.call_method(KEY_RESPONSE, (&flow_obj,), None) {
@@ -165,66 +166,46 @@ fn update_request<'py>(
     flow_obj: &Bound<'py, PyAny>,
     req: &mut InterceptedRequest,
 ) -> Result<Option<InterceptedResponse>, Error> {
-    let py = flow_obj.py();
     let flow_cell = flow_obj
         .downcast::<PyFlow>()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
-    req.version = flow_cell
-        .borrow()
-        .request
-        .borrow(py)
+    let py_req = &flow_cell.borrow().request;
+    req.version = py_req
         .inner
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .version;
-    req.uri = flow_cell
-        .borrow()
-        .request
-        .borrow(py)
+    req.uri = py_req
         .url
-        .borrow(py)
         .uri
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .clone();
 
-    req.method = flow_cell
-        .borrow()
-        .request
-        .borrow(py)
+    req.method = py_req
         .inner
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .method
         .clone();
 
-    req.body = flow_cell
-        .borrow()
-        .request
-        .borrow(py)
+    req.body = py_req
         .body
-        .borrow(py)
         .inner
+        .lock()
+        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .clone();
 
-    req.headers = flow_cell
-        .borrow()
-        .request
-        .borrow(py)
+    req.headers = py_req
         .headers
-        .borrow(py)
         .inner
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .clone();
     req.trailers = {
-        let t = flow_cell
-            .borrow()
-            .request
-            .borrow(py)
+        let t = py_req
             .trailers
-            .borrow(py)
             .inner
             .lock()
             .map_err(|e| PyTypeError::new_err(format!("{e}")))?
@@ -249,13 +230,12 @@ fn update_response<'py>(
     flow_obj: &Bound<'py, PyAny>,
     res: &mut InterceptedResponse,
 ) -> Result<(), Error> {
-    let py = flow_obj.py();
     let flow_cell = flow_obj
         .downcast::<PyFlow>()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
     let resp = flow_cell.borrow();
-    let resp = resp.response.borrow(py);
+    let resp = &resp.response;
     let resp = resp
         .inner
         .lock()
@@ -263,19 +243,17 @@ fn update_response<'py>(
     res.body = flow_cell
         .borrow()
         .response
-        .borrow(py)
         .body
-        .borrow(py)
         .inner
+        .lock()
+        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .clone();
     res.status = resp.status;
     res.version = resp.version;
     res.headers = flow_cell
         .borrow()
         .response
-        .borrow(py)
         .headers
-        .borrow(py)
         .inner
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
@@ -284,9 +262,7 @@ fn update_response<'py>(
         let t = flow_cell
             .borrow()
             .response
-            .borrow(py)
             .trailers
-            .borrow(py)
             .inner
             .lock()
             .map_err(|e| PyTypeError::new_err(format!("{e}")))?

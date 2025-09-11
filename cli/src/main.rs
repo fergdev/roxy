@@ -15,7 +15,7 @@ use roxy_cli::{
 
 use roxy_proxy::{
     flow::FlowStore,
-    interceptor::{self, ScriptEngine},
+    interceptor::{self, FlowNotifyLevel, ScriptEngine},
     proxy::ProxyManager,
 };
 use roxy_shared::tls::TlsConfig;
@@ -57,11 +57,11 @@ async fn main() -> color_eyre::Result<()> {
     let notify_handle = tokio::spawn(async move {
         while let Some(notifcation) = notify_rx.recv().await {
             match notifcation.level {
-                0 => notify_info!("{}", notifcation.msg),
-                1 => notify_warn!("{}", notifcation.msg),
-                2 => notify_debug!("{}", notifcation.msg),
-                3 => notify_trace!("{}", notifcation.msg),
-                _ => notify_error!("{}", notifcation.msg),
+                FlowNotifyLevel::Trace => notify_trace!("{}", notifcation.msg),
+                FlowNotifyLevel::Debug => notify_debug!("{}", notifcation.msg),
+                FlowNotifyLevel::Info => notify_info!("{}", notifcation.msg),
+                FlowNotifyLevel::Warn => notify_warn!("{}", notifcation.msg),
+                FlowNotifyLevel::Error => notify_error!("{}", notifcation.msg),
             }
         }
     });
