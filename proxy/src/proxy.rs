@@ -138,15 +138,6 @@ impl Drop for ProxyManager {
     }
 }
 
-// TODO: provide a config here
-// pub struct CertificateVerifyConfig {
-// revocation_check_depth: RevocationCheckDepth,
-// unknown_revocation_policy: UnknownStatusPolicy,
-// revocation_expiration_policy: ExpirationPolicy,
-// supported: WebPkiSupportedAlgorithms,
-// }
-pub struct ProxyConfig {}
-
 #[derive(Debug, Clone)]
 pub struct FlowContext {
     pub proxy_cxt: ProxyContext,

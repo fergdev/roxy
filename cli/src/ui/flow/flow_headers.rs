@@ -92,12 +92,13 @@ impl Component for FlowDetailsHeaders {
                 for (k, v) in headers {
                     let value = v.to_str().unwrap_or("error").to_string();
 
-                    let r = Row::new(vec![
-                        Cell::from(Span::styled(k.clone().to_string(), header_style)),
-                        Cell::from(value),
-                    ])
-                    .height(1_u16);
-                    rows.push(r);
+                    rows.push(
+                        Row::new(vec![
+                            Cell::from(Span::styled(k.clone().to_string(), header_style)),
+                            Cell::from(value),
+                        ])
+                        .height(1_u16),
+                    );
                 }
                 let widths = [Constraint::Length(20), Constraint::Min(10)];
                 let table = themed_table(rows, widths, Some("Headers"), self.focus.get());

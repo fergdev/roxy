@@ -1,5 +1,5 @@
 use color_eyre::Result;
-use hyper::{Method, header::CONTENT_TYPE};
+use hyper::Method;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
@@ -15,7 +15,6 @@ use tracing::error;
 use crate::{
     app::ITEM_HEIGHT,
     event::Action,
-    themed_row,
     ui::framework::{
         component::{ActionResult, Component},
         theme::themed_table,
@@ -33,8 +32,6 @@ struct UiFlow {
 #[derive(Debug, Clone)]
 struct UiResponse {
     code: u16,
-    content_type: String,
-    duration: i64,
 }
 
 #[derive(Clone, Default)]
@@ -112,9 +109,6 @@ impl FlowList {
                                 let response = flow.response.as_ref()
                                     .map(|r| UiResponse{
                                     code: r.status.as_u16(),
-                                    content_type: r.headers.get(CONTENT_TYPE).and_then(|h| h.to_str().ok())
-                                        .unwrap_or("No content").to_string(),
-                                    duration: 100
                                 });
 
                                 let (method, line) = match flow.request.as_ref() {
@@ -218,26 +212,20 @@ impl Component for FlowList {
 
         let mut rows = vec![];
         for flow in &guard.flows {
+            let status = match &flow.response {
+                Some(resp) => resp.code.to_string(),
+                None => "-".to_string(),
+            };
             let c = Line::from(vec![
                 Span::styled(
                     flow.method.to_string(),
                     Style::default().fg(method_color(&flow.method)),
                 ),
                 Span::styled("   ", Style::default()),
+                Span::styled(format!(" {status} "), Style::default()),
                 Span::styled(&flow.uri, Style::default().fg(Color::Cyan)),
             ]);
-            let l = Row::new(vec![Cell::new(c)]);
-
-            rows.push(l);
-            match &flow.response {
-                Some(resp) => {
-                    rows.push(themed_row!(Line::from(vec![Span::styled(
-                        format!(" - {} {} {}", resp.code, resp.content_type, resp.duration),
-                        Style::default().fg(method_color(&flow.method))
-                    ),])));
-                }
-                None => rows.push(themed_row!(Line::from("-"))),
-            }
+            rows.push(Row::new(vec![Cell::new(c)]));
         }
 
         let widths = [Constraint::Fill(1)];

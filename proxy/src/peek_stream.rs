@@ -6,6 +6,7 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
 
+/// This is required because hyper does not support peeking into the stream
 pub struct PeekStream<S> {
     stream: S,
     buffer: Bytes,
