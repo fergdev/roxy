@@ -111,7 +111,6 @@ impl FlowDetails {
     pub fn new(flow_store: FlowStore) -> Self {
         let (tx, rx) = watch::channel(None::<i64>);
 
-        // TODO: 64 might be a bit high
         let (req_tx, req_rx) = mpsc::channel::<Option<InterceptedRequest>>(64);
         let (resp_tx, resp_rx) = mpsc::channel::<Option<InterceptedResponse>>(64);
         let (cert_tx, cert_rx) = mpsc::channel::<FlowCerts>(64);

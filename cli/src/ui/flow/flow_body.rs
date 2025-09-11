@@ -87,9 +87,8 @@ impl FlowDetailsBody {
             while let Some((content_type, mut body)) = body_rx.recv().await {
                 let lines = match content_type {
                     Some(ct) => match ct {
-                        ContentType::Json => Body::Text(highlight_json(body)),
-                        ContentType::Svg | ContentType::Xml => Body::Text(pretty_print_xml(&body)), // TODO:
-                        // can we render svg
+                        ContentType::Json => Body::Text(highlight_json(&body)),
+                        ContentType::Svg | ContentType::Xml => Body::Text(pretty_print_xml(&body)),
                         ContentType::Html => {
                             let mut cursor = Cursor::new(&mut body);
                             match highlight_html_dom(&mut cursor) {
@@ -117,10 +116,7 @@ impl FlowDetailsBody {
                             let line = vec![hex.into()];
                             Body::Text(line)
                         }
-                        ContentType::Text => {
-                            let lines = render_plain_text(&body);
-                            Body::Text(lines)
-                        }
+                        ContentType::Text => Body::Text(render_plain_text(&body)),
                     },
                     None => {
                         if body.is_empty() {

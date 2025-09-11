@@ -87,8 +87,6 @@ impl Component for FlowDetailsHeaders {
         let headers = self.headers.borrow_and_update();
         match headers.as_ref() {
             Some(headers) => {
-                // let width = area.width.saturating_sub(20).max(10) as usize;
-
                 let header_style = Style::default().bold();
                 let mut rows = vec![];
                 for (k, v) in headers {
@@ -116,19 +114,3 @@ impl Component for FlowDetailsHeaders {
         Ok(())
     }
 }
-
-// fn wrap_text(width: usize, str: String) -> (usize, Text<'static>) {
-//     let mut lines = Vec::new();
-//     let mut i = 0;
-//     while i < str.len() {
-//         let mut end = i + width;
-//         if end > str.len() {
-//             end = str.len();
-//         }
-//         let s = &str[i..end];
-//         lines.push(Line::from(s.clone()));
-//         i += width;
-//     }
-//
-//     (lines.len(), Text::from(lines))
-// }

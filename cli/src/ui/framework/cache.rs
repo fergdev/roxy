@@ -1,10 +1,12 @@
 use ratatui::{Frame, layout::Rect, widgets::WidgetRef};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use tracing::debug;
 
 pub struct CachedRender {
     last_hash: u64,
-    last_area: Option<ratatui::layout::Rect>,
-    widget: Option<Box<dyn ratatui::widgets::WidgetRef>>,
+    last_area: Option<Rect>,
+    widget: Option<Box<dyn WidgetRef>>,
 }
 
 impl CachedRender {
@@ -23,9 +25,6 @@ impl CachedRender {
         data: &str,
         make_widget: impl Fn() -> W,
     ) {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
         let mut hasher = DefaultHasher::new();
         data.hash(&mut hasher);
         area.hash(&mut hasher);

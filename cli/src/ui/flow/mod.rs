@@ -1,9 +1,9 @@
 mod csv;
 mod flow_body;
 mod flow_certs;
-pub mod flow_details; // TODO: should be private
+pub(crate) mod flow_details;
 mod flow_headers;
-pub mod flow_list;
+pub(crate) mod flow_list;
 mod flow_request;
 mod flow_response;
 mod flow_timing;

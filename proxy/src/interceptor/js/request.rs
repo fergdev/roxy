@@ -30,6 +30,18 @@ pub(crate) struct JsRequest {
     pub(crate) trailers: HeaderList,
 }
 
+impl Default for JsRequest {
+    fn default() -> Self {
+        Self {
+            req: Rc::new(RefCell::new(InterceptedRequest::default())),
+            body: JsBody::default(),
+            url_obj: Rc::new(RefCell::new(None)),
+            headers: HeaderList::default(),
+            trailers: HeaderList::default(),
+        }
+    }
+}
+
 impl JsRequest {
     fn ensure_url(&self, ctx: &mut Context) -> JsResult<JsObject> {
         if let Some(o) = self.url_obj.borrow().clone() {
@@ -154,11 +166,271 @@ js_class! {
         }
 
         constructor() {
-            Err(js_error!(TypeError: "Illegal constructor"))
+            Ok(Self::default())
         }
 
         init(_class: &mut ClassBuilder) -> JsResult<()> {
             Ok(())
         }
+    }
+}
+
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[cfg(test)]
+mod tests {
+    use crate::interceptor::js::engine::register_classes;
+    use boa_engine::{Context, JsValue, Source};
+
+    fn setup() -> Context {
+        let mut ctx = Context::default();
+        ctx.eval(Source::from_bytes(
+            r#"
+            function must(cond, msg) { if (!cond) throw new Error(msg || "assert failed"); }
+            "#,
+        ))
+        .unwrap();
+        register_classes(&mut ctx).expect("register classes");
+        ctx
+    }
+
+    #[test]
+    fn request_constructor_default_succeeds() {
+        let mut ctx = setup();
+        let ok = ctx
+            .eval(Source::from_bytes(
+                r#"
+                const r = new Request();
+                must(typeof r === "object", "Request should construct an object");
+                // default method and version are readable (format, not asserting exact)
+                must(typeof r.method === "string", "method is string");
+                must(typeof r.version === "string", "version is string");
+                true
+            "#,
+            ))
+            .unwrap();
+        assert!(ok.is_boolean() && ok.as_boolean().unwrap());
+    }
+
+    #[test]
+    fn request_method_set_get_roundtrip() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const r = new Request();
+            r.method = "POST";
+            must(r.method === "POST", "method roundtrip");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn request_method_invalid_type_throws() {
+        let mut ctx = setup();
+        let res = ctx.eval(Source::from_bytes(
+            r#"
+            try {
+              const r = new Request();
+              r.method = 123; // not a string
+              must(false, "expected TypeError");
+            } catch (e) {
+              must(e instanceof TypeError, "TypeError on non-string method");
+              true
+            }
+            "#,
+        ));
+        assert!(matches!(res, Ok(JsValue::Boolean(true))));
+    }
+
+    #[test]
+    fn request_method_invalid_value_throws() {
+        let mut ctx = setup();
+        let res = ctx.eval(Source::from_bytes(
+            r#"
+            try {
+              const r = new Request();
+              r.method = " NOT_A_METHOD ";
+              must(false, "expected TypeError for invalid method");
+            } catch (e) {
+              must(e instanceof TypeError, "TypeError for invalid method");
+              true
+            }
+            "#,
+        ));
+        assert!(matches!(res, Ok(JsValue::Boolean(true))));
+    }
+
+    #[test]
+    fn request_version_set_get_roundtrip() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const r = new Request();
+            r.version = "HTTP/2.0";
+            must(r.version === "HTTP/2.0", "version roundtrip to string format");
+            r.version = "HTTP/1.1";
+            must(r.version === "HTTP/1.1", "version downgraded ok");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn request_version_rejects_bad_values() {
+        let mut ctx = setup();
+        let res = ctx.eval(Source::from_bytes(
+            r#"
+            try {
+              const r = new Request();
+              r.version = "HTTP/9.9";
+              must(false, "expected TypeError for unsupported version");
+            } catch (e) {
+              must(e instanceof TypeError, "TypeError for bad version");
+              true
+            }
+            "#,
+        ));
+        assert!(matches!(res, Ok(JsValue::Boolean(true))));
+    }
+
+    #[test]
+    fn request_headers_returns_headers_object() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const r = new Request();
+            const h = r.headers;
+            must(h && typeof h === "object", "headers is object");
+            h.set("X-Test", "1");
+            must(h.get("X-Test") === "1", "headers.get after set");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn request_trailers_returns_headers_object() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const r = new Request();
+            const t = r.trailers;
+            must(t && typeof t === "object", "trailers is object");
+            t.append("X-Trailer", "A");
+            t.append("X-Trailer", "B");
+            const all = t.getAll("X-Trailer");
+            must(Array.isArray(all) && all.length === 2, "two trailer values");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn request_body_returns_body_object_and_roundtrips_text() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const r = new Request();
+            const b = r.body;
+            must(b && typeof b === "object", "body is object");
+            b.text = "hello";
+            must(b.text === "hello", "body text roundtrip");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn request_url_getter_returns_url_object() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const r = new Request();
+            const u = r.url;
+            must(u && typeof u === "object", "url is object");
+            // Not asserting exact fields, just that it behaves like URL (has href/toString)
+            must(typeof u.href === "string", "url.href is string");
+            must(typeof u.toString === "function", "url.toString exists");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn request_url_set_accepts_string() {
+        let mut ctx = setup();
+
+        ctx.eval(Source::from_bytes(
+            r#"
+            const r = new Request();
+            r.url = "http://example.com/path?x=1";
+            const u1 = r.url;
+            must(u1 && typeof u1 === "object", "url object after string set");
+            must(typeof u1.href === "string", "url.href exists");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn request_url_set_accepts_url_object() {
+        let mut ctx = setup();
+
+        let ok = ctx
+            .eval(Source::from_bytes(
+                r#"
+                const u = new URL("http://localhost/base", "http://localhost");
+                const r = new Request();
+                r.url = u;    // assign the object
+                const got = r.url;
+                must(got && typeof got === "object", "url is object after object set");
+                true
+            "#,
+            ))
+            .unwrap();
+        assert!(ok.is_boolean() && ok.as_boolean().unwrap());
+    }
+
+    #[test]
+    fn request_url_set_invalid_type_throws() {
+        let mut ctx = setup();
+        let res = ctx.eval(Source::from_bytes(
+            r#"
+            try {
+              const r = new Request();
+              r.url = 42; // not a URL object and not a string
+              must(false, "expected TypeError");
+            } catch (e) {
+              must(e instanceof TypeError, "TypeError for invalid url assignment");
+              true
+            }
+            "#,
+        ));
+        assert!(matches!(res, Ok(JsValue::Boolean(true))));
+    }
+
+    #[test]
+    fn request_properties_live_views_not_copies() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const r = new Request();
+            const h1 = r.headers;
+            const h2 = r.headers;
+            h1.set("X-Live", "yes");
+            must(h2.get("X-Live") === "yes", "same live headers view");
+
+            const t1 = r.trailers;
+            const t2 = r.trailers;
+            t1.append("X-Trail", "A");
+            must(t2.has("X-Trail") === true, "same live trailers view");
+
+            const b1 = r.body;
+            const b2 = r.body;
+            b1.text = "ok";
+            must(b2.text === "ok", "same live body view");
+            "#,
+        ))
+        .unwrap();
     }
 }

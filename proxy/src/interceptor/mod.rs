@@ -80,8 +80,30 @@ impl RoxyEngine for NoopEngine {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum FlowNotifyLevel {
+    Info = 0,
+    Warn = 1,
+    Error = 2,
+    Debug = 3,
+    Trace = 4,
+}
+
+impl From<i32> for FlowNotifyLevel {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => FlowNotifyLevel::Info,
+            1 => FlowNotifyLevel::Warn,
+            2 => FlowNotifyLevel::Error,
+            3 => FlowNotifyLevel::Debug,
+            4 => FlowNotifyLevel::Trace,
+            _ => FlowNotifyLevel::Info,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct FlowNotify {
-    pub level: i32, // TODO: should be an enum
+    pub level: FlowNotifyLevel,
     pub msg: String,
 }
 

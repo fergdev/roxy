@@ -47,7 +47,10 @@ struct Notifier {
 impl Notifier {
     #[pyo3(name = "__call__")]
     fn __call__(&self, level: i32, msg: String) -> PyResult<()> {
-        let _ = self.tx.try_send(FlowNotify { level, msg });
+        let _ = self.tx.try_send(FlowNotify {
+            level: level.into(),
+            msg,
+        });
         Ok(())
     }
 

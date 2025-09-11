@@ -275,7 +275,10 @@ fn register_functions(
 
     let lua_notify = if let Some(notify) = notify {
         lua.create_function(move |_, (level, msg): (i32, String)| {
-            if let Err(e) = notify.try_send(FlowNotify { level, msg }) {
+            if let Err(e) = notify.try_send(FlowNotify {
+                level: level.into(),
+                msg,
+            }) {
                 error!("Notify error {e}");
             }
             Ok(())
