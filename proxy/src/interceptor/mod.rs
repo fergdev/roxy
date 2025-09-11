@@ -51,7 +51,11 @@ pub trait RoxyEngine: Send + Sync {
         req: &mut InterceptedRequest,
     ) -> Result<Option<InterceptedResponse>, Error>;
 
-    async fn intercept_response(&self, res: &mut InterceptedResponse) -> Result<(), Error>;
+    async fn intercept_response(
+        &self,
+        req: &InterceptedRequest,
+        res: &mut InterceptedResponse,
+    ) -> Result<(), Error>;
 
     async fn set_script(&self, script: &str) -> Result<(), Error>;
 }
@@ -68,7 +72,11 @@ impl RoxyEngine for NoopEngine {
         Ok(None)
     }
 
-    async fn intercept_response(&self, _res: &mut InterceptedResponse) -> Result<(), Error> {
+    async fn intercept_response(
+        &self,
+        _req: &InterceptedRequest,
+        _res: &mut InterceptedResponse,
+    ) -> Result<(), Error> {
         warn!("Noop intercept_response");
         Ok(())
     }
@@ -203,10 +211,14 @@ impl ScriptEngine {
         guard.intercept_request(req).await
     }
 
-    pub async fn intercept_response(&self, res: &mut InterceptedResponse) -> Result<(), Error> {
+    pub async fn intercept_response(
+        &self,
+        req: &InterceptedRequest,
+        res: &mut InterceptedResponse,
+    ) -> Result<(), Error> {
         trace!("intercept_response");
         let guard = self.inner.lock().await;
-        guard.intercept_response(res).await
+        guard.intercept_response(req, res).await
     }
 
     pub async fn set_script(&mut self, script: &str, script_type: ScriptType) -> Result<(), Error> {

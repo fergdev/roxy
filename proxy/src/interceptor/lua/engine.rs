@@ -61,12 +61,16 @@ impl RoxyEngine for LuaEngine {
         }
     }
 
-    async fn intercept_response(&self, res: &mut InterceptedResponse) -> Result<(), Error> {
+    async fn intercept_response(
+        &self,
+        req: &InterceptedRequest,
+        res: &mut InterceptedResponse,
+    ) -> Result<(), Error> {
         trace!("intercept_response");
         let guard = self.inner.lock().map_err(|_| Error::InterceptedRequest)?;
         if let Some(lua) = &guard.lua {
             trace!("intercept_response rewrite");
-            intercept_response_inner(lua, res).map_err(|e| {
+            intercept_response_inner(lua, req, res).map_err(|e| {
                 error!("ScriptEngine intercept_response {}", e);
                 e
             })?
@@ -194,7 +198,11 @@ fn response_ready(r: &InterceptedResponse) -> bool {
     r.status != 200 || !r.body.is_empty()
 }
 
-pub fn intercept_response_inner(lua: &Lua, res: &mut InterceptedResponse) -> Result<(), Error> {
+pub fn intercept_response_inner(
+    lua: &Lua,
+    req: &InterceptedRequest,
+    res: &mut InterceptedResponse,
+) -> Result<(), Error> {
     let extensions: Table = lua
         .globals()
         .get(KEY_EXTENSIONS)
@@ -221,7 +229,7 @@ pub fn intercept_response_inner(lua: &Lua, res: &mut InterceptedResponse) -> Res
     }
 
     let res_arc = Arc::new(Mutex::new(res.clone()));
-    let lua_req = LuaRequest::default();
+    let lua_req = LuaRequest::from_parts(Arc::new(Mutex::new(req.clone())))?; // TODO: not clone
     let lua_resp = LuaResponse::from_parts(res_arc.clone())
         .map_err(|e| Error::Other(format!("LuaResponse::from_parts: {e}")))?;
 
