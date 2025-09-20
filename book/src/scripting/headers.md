@@ -14,34 +14,84 @@ HTTP headers are **case-insensitive**, **order-preserving**, and allow **multipl
 
 ## Common tasks
 
-### Read/Write a header
+### Set header
 
 {{#tabs global="language"}}
-{{#tab name="Lua"}}
-
-```lua
-local h = flow.request.headers
-print(h["host"])
-h["X-Trace"] = "abc123"
-```
-
-{{#endtab}}
-{{#tab name=“JS”}}
+{{#tab name=JS}}
 
 ```js
-const h = flow.request.headers;
-console.log(h.get("host"));
-h.set("X-Trace", "abc123");
+flow.request.headers.set("X-Header1", "request");
 ```
 
 {{#endtab}}
+{{#tab name=Lua}}
 
-{{#tab name=“Python”}}
+```lua
+flow.request.headers:set("X-Header1", "request")
+```
+
+{{#endtab}}
+{{#tab name=Python}}
 
 ```py
-h = flow.request.headers
-print(h["host"])
-h["X-Trace"] = "abc123"
+flow.request.headers.set("X-Header1", "request")
+```
+
+{{#endtab}}
+{{#endtabs}}
+
+### Append Header
+
+{{#tabs global="language"}}
+{{#tab name=JS}}
+
+```js
+flow.request.headers.append("X-Header1", "request");
+```
+
+{{#endtab}}
+{{#tab name=Lua}}
+
+```lua
+flow.request.headers:append("X-Header1", "request")
+```
+
+{{#endtab}}
+{{#tab name=Python}}
+
+```py
+flow.request.headers.append("X-Header1", "request")
+```
+
+{{#endtab}}
+{{#endtabs}}
+
+### Remove a header
+
+{{#tabs global="language"}}
+{{#tab name=JS}}
+
+```js
+flow.request.headers.delete("X-Header1");
+flow.request.headers.set("X-header2", undefined);
+flow.request.headers.set("X-header3", null);
+```
+
+{{#endtab}}
+{{#tab name=Lua}}
+
+```lua
+flow.request.headers:delete("X-Header");
+flow.request.headers["X-Header2"] = nil
+```
+
+{{#endtab}}
+{{#tab name=Python}}
+
+```py
+flow.request.headers.delete("X-Header1")
+flow.request.headers["X-Header2"] = None
+del flow.request.headers["X-header3"]
 ```
 
 {{#endtab}}

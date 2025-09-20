@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use http::header::{HeaderMap, HeaderName, HeaderValue};
 use mlua::prelude::*;
+use tracing::info;
 
 use crate::interceptor::lua::util::{KEY_NEW, lua_val_to_str};
 
@@ -99,6 +100,12 @@ impl LuaHeaders {
         g.insert(hname, hval);
         Ok(())
     }
+    fn delete(&mut self, name: &str) -> LuaResult<()> {
+        let hname = to_header_name_lc(name)?;
+        let mut g = self.lock()?;
+        g.remove(hname);
+        Ok(())
+    }
     fn get(&self, name: &str) -> LuaResult<String> {
         let hname = to_header_name_lc(name)?;
         let g = self.lock()?;
@@ -124,9 +131,11 @@ impl LuaUserData for LuaHeaders {
             let value = lua_val_to_str(value)?;
             this.set(&name, &value)
         });
+        methods.add_method_mut("delete", |_, this, name: String| this.delete(&name));
         methods.add_method("get", |_, this, name: String| this.get(&name));
 
         methods.add_meta_method(LuaMetaMethod::Index, |lua, this, key: LuaValue| {
+            info!("something here");
             if let LuaValue::String(s) = key {
                 let k = s.to_str()?;
                 match &*k {
@@ -146,6 +155,7 @@ impl LuaUserData for LuaHeaders {
         methods.add_meta_method_mut(
             LuaMetaMethod::NewIndex,
             |_, this, (key, val): (LuaValue, LuaValue)| {
+                info!("meta method");
                 let name = match key {
                     LuaValue::String(s) => s.to_str()?.to_string(),
                     _ => return Err(LuaError::external("header name must be a string")),

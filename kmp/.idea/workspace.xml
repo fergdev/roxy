@@ -9,7 +9,10 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="39b1ffe3-0d98-485c-b85f-38c17d33da6f" name="Changes" comment="" />
+    <list default="true" id="39b1ffe3-0d98-485c-b85f-38c17d33da6f" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/../book/book.toml" beforeDir="false" afterPath="$PROJECT_DIR$/../book/book.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />

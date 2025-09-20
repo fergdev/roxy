@@ -7,7 +7,6 @@ use pyo3::{
     pyclass, pymethods,
     types::{PyBytes, PyBytesMethods},
 };
-use tracing::info;
 
 #[pyclass]
 #[derive(Debug, Clone)]
@@ -66,7 +65,6 @@ impl PyBody {
 
     #[setter]
     fn set_text(&mut self, value: &str) -> PyResult<()> {
-        info!("set test {value:?}");
         let mut g = self.lock()?;
         *g = Bytes::copy_from_slice(value.as_bytes());
         Ok(())

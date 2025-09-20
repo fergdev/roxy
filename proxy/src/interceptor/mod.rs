@@ -17,10 +17,13 @@ use tokio::sync::{
     Mutex,
     mpsc::{self},
 };
-use tracing::{trace, warn};
+use tracing::{debug, trace};
 
 const KEY_EXTENSIONS: &str = "Extensions";
+const KEY_NOTIFY: &str = "notify";
 
+const KEY_START: &str = "start";
+const KEY_STOP: &str = "stop";
 const KEY_INTERCEPT_REQUEST: &str = "request";
 const KEY_INTERCEPT_RESPONSE: &str = "response";
 
@@ -58,6 +61,8 @@ pub trait RoxyEngine: Send + Sync {
     ) -> Result<(), Error>;
 
     async fn set_script(&self, script: &str) -> Result<(), Error>;
+
+    async fn on_stop(&self) -> Result<(), Error>;
 }
 
 struct NoopEngine {}
@@ -68,7 +73,7 @@ impl RoxyEngine for NoopEngine {
         &self,
         _req: &mut InterceptedRequest,
     ) -> Result<Option<InterceptedResponse>, Error> {
-        warn!("Noop intercept_request");
+        debug!("Noop intercept_request");
         Ok(None)
     }
 
@@ -77,12 +82,17 @@ impl RoxyEngine for NoopEngine {
         _req: &InterceptedRequest,
         _res: &mut InterceptedResponse,
     ) -> Result<(), Error> {
-        warn!("Noop intercept_response");
+        debug!("Noop intercept_response");
         Ok(())
     }
 
     async fn set_script(&self, _script: &str) -> Result<(), Error> {
-        warn!("Noop set script");
+        debug!("Noop set script");
+        Ok(())
+    }
+
+    async fn on_stop(&self) -> Result<(), Error> {
+        debug!("Noop on_stop");
         Ok(())
     }
 }
@@ -99,7 +109,6 @@ pub enum FlowNotifyLevel {
 impl From<i32> for FlowNotifyLevel {
     fn from(value: i32) -> Self {
         match value {
-            0 => FlowNotifyLevel::Info,
             1 => FlowNotifyLevel::Warn,
             2 => FlowNotifyLevel::Error,
             3 => FlowNotifyLevel::Debug,
@@ -222,6 +231,8 @@ impl ScriptEngine {
     }
 
     pub async fn set_script(&mut self, script: &str, script_type: ScriptType) -> Result<(), Error> {
+        trace!("set_script type={script_type} script={script}");
+        let _ = self.inner.lock().await.on_stop().await.ok();
         let engine: Box<dyn RoxyEngine> = match script_type {
             ScriptType::Lua => Box::new(LuaEngine::new(self.notify_tx.clone())),
             ScriptType::Js => Box::new(JsEngine::new(self.notify_tx.clone())),

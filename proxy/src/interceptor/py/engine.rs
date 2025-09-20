@@ -7,13 +7,13 @@ use std::{ffi::CString, sync::Arc};
 
 use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
-    interceptor::{KEY_REQUEST, KEY_RESPONSE, py::init_python},
+    interceptor::{KEY_REQUEST, KEY_RESPONSE, KEY_START, KEY_STOP, py::init_python},
 };
 
 use async_trait::async_trait;
 use pyo3::ffi::c_str;
 use tokio::sync::{Mutex, mpsc::Sender};
-use tracing::{error, trace};
+use tracing::{debug, error, trace};
 
 use crate::interceptor::{Error, FlowNotify, KEY_EXTENSIONS, RoxyEngine, py::flow::PyFlow};
 
@@ -117,6 +117,7 @@ impl RoxyEngine for PythonEngine {
     }
 
     async fn set_script(&self, script: &str) -> Result<(), Error> {
+        self.on_stop().await.ok();
         let mut guard = self.addons.lock().await;
         trace!("Setting python script {}\n{script:?}", guard.len());
         guard.clear();
@@ -156,6 +157,10 @@ impl RoxyEngine for PythonEngine {
                     .and_then(|n| n.extract::<String>().ok())
                     .unwrap_or_else(|| "<addon>".into());
 
+                if let Err(err) = item.call_method(KEY_START, (), None) {
+                    error!("Addon `{}` error in `start`: {}", name, err);
+                }
+
                 let obj: Py<PyAny> = item.unbind();
                 new_addons.push(PyAddon { name, obj });
             }
@@ -163,6 +168,21 @@ impl RoxyEngine for PythonEngine {
         })?;
         self.addons.lock().await.extend(new_addons);
         Ok(())
+    }
+
+    async fn on_stop(&self) -> Result<(), Error> {
+        debug!("on_stop");
+        let addons = self.addons.lock().await;
+        Python::attach(|py| {
+            for a in addons.iter() {
+                let obj = a.obj.bind(py);
+                debug!("Stopping addon {}", a.name);
+                if let Err(err) = obj.call_method(KEY_STOP, (), None) {
+                    error!("Addon `{}` error in `intercept_response`: {}", a.name, err);
+                }
+            }
+            Ok(())
+        })
     }
 }
 

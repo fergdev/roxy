@@ -7,8 +7,8 @@ title = "Roxy - Rust (mitm) Proxy"
 [output.html]
 default-theme = "light"
 preferred-dark-theme = "navy"
-git-repository-url = "https://example.com/your/repo"
-edit-url-template = "https://example.com/your/repo/edit/main/http-flow-book/{path}"
+git-repository-url = "https://github.com/fergdev/roxy"
+edit-url-template = "https://github.com/fergdev/roxy/edit/main/book/{path}"
 additional-css = ["theme/langtabs.css", "theme/tabs.css"]
 additional-js = ["theme/langtabs.js", "theme/tabs.js"]
 

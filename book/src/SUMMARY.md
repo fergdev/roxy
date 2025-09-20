@@ -1,7 +1,8 @@
 # Summary
 
 - [Getting Started](./getting-started.md)
-- [Scripting Reference](./scripting/README.md)
+- [Certificates](./certificates.md)
+- [Scripting](./scripting/README.md)
   - [Flows](./scripting/flows.md)
   - [Request](./scripting/request.md)
   - [Response](./scripting/response.md)

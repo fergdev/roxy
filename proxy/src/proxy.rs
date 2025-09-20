@@ -84,7 +84,7 @@ impl ProxyManager {
             TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], self.port_tcp))).await?;
         let udp_socket = UdpSocket::bind(SocketAddr::from(([127, 0, 0, 1], self.port_udp)))?;
 
-        let http_handle = start_http(self.cxt(), tcp_listener)
+        let http_handle = start_tcp(self.cxt(), tcp_listener)
             .await
             .map_err(|_| HttpError::Alpn)?; // TODO: Wrong error
         let h3_handle = start_h3(self.cxt(), udp_socket)
@@ -118,7 +118,7 @@ impl ProxyManager {
     }
     pub async fn start_tcp(&mut self, tcp_listeneter: TcpListener) -> Result<(), HttpError> {
         let addr = tcp_listeneter.local_addr()?;
-        let http_handle = start_http(self.cxt(), tcp_listeneter).await?;
+        let http_handle = start_tcp(self.cxt(), tcp_listeneter).await?;
 
         self.port_tcp = addr.port();
         self.http_handle = Some(Arc::new(http_handle));
@@ -174,7 +174,7 @@ impl ProxyContext {
     }
 }
 
-async fn start_http(
+async fn start_tcp(
     cxt: ProxyContext,
     tcp_listeneter: TcpListener,
 ) -> Result<JoinHandle<()>, HttpError> {

@@ -6,10 +6,14 @@ mod query;
 mod request;
 mod response;
 mod url;
+mod writer;
 
 use std::sync::Once;
 
-use pyo3::{Python, pymodule};
+use pyo3::{PyResult, Python, pymodule, types::PyAnyMethods};
+use tracing::error;
+
+use crate::interceptor::py::writer::{WriterStdErr, WriterStdOut};
 #[pymodule]
 mod roxy {
 
@@ -41,6 +45,16 @@ pub(crate) fn init_python() {
     INIT.call_once(|| {
         pyo3::append_to_inittab!(roxy);
         Python::initialize();
+        if let Err(err) = Python::attach::<_, PyResult<()>>(|py| {
+            let sys = py.import("sys")?;
+            let out = pyo3::Py::new(py, WriterStdOut)?;
+            sys.setattr("stdout", out.clone_ref(py))?;
+            let err = pyo3::Py::new(py, WriterStdErr)?;
+            sys.setattr("stderr", err)?;
+            Ok(())
+        }) {
+            error!("Error setting writer {err}");
+        }
     });
 }
 

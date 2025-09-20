@@ -22,7 +22,26 @@ You can read/modify either side during interception.
 ## Examples
 
 {{#tabs global="language"}}
-{{#tab name="Lua"}}
+{{#tab name=JS}}
+
+```js
+function request(flow) {
+  const h = flow.request.headers;
+  console.log(h.get("host"));
+  h.set("X-Trace", "abc123");
+
+  flow.request.body.text = flow.request.body.text + " appended from JS";
+}
+
+function response(flow) {
+  const h = flow.response.headers;
+  h.set("Server", "JsProxy");
+  flow.response.body.text = "overwritten response";
+}
+```
+
+{{#endtab}}
+{{#tab name=Lua}}
 
 ```lua
 -- Request interception
@@ -42,26 +61,10 @@ function response(flow)
   flow.response.body.text = "overwritten response"
 end
 ```
-{{#endtab}}
-{{#tab name=“JS”}}// Request interception
-```js
-function request(flow) {
-  const h = flow.request.headers;
-  console.log(h.get("host"));
-  h.set("X-Trace", "abc123");
-
-  flow.request.body.text = flow.request.body.text + " appended from JS";
-}
-
-function response(flow) {
-  const h = flow.response.headers;
-  h.set("Server", "JsProxy");
-  flow.response.body.text = "overwritten response";
-}
-```
 
 {{#endtab}}
-{{#tab name=“Python”}}
+{{#tab name=Python}}
+
 ```py
 def request(flow):
     h = flow.request.headers
@@ -78,6 +81,6 @@ def response(flow):
     flow.response.body = "overwritten response"
 
 ```
+
 {{#endtab}}
 {{#endtabs}}
-

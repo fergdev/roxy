@@ -11,12 +11,13 @@ use boa_runtime::Console;
 use bytes::Bytes;
 use http::HeaderMap;
 use roxy_shared::uri::RUri;
-use tracing::{error, info, trace};
+use tracing::{debug, error, trace};
 
 use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
     interceptor::{
-        Error, FlowNotify, RoxyEngine,
+        Error, FlowNotify, KEY_EXTENSIONS, KEY_INTERCEPT_REQUEST, KEY_INTERCEPT_RESPONSE,
+        KEY_NOTIFY, KEY_START, KEY_STOP, RoxyEngine,
         js::{
             body::JsBody, flow::JsFlow, headers::JsHeaders, query::UrlSearchParams,
             request::JsRequest, response::JsResponse, url::Url,
@@ -66,10 +67,21 @@ impl ScriptCmd {
     }
 }
 
+struct StopCmd {
+    resp: oneshot::Sender<Result<(), Error>>,
+}
+
+impl StopCmd {
+    fn new(resp: oneshot::Sender<Result<(), Error>>) -> Box<Self> {
+        Box::new(StopCmd { resp })
+    }
+}
+
 enum Cmd {
     InterceptReq { data: Box<ReqCmd> },
     InterceptRes { data: Box<ResCmd> },
     SetScript { data: Box<ScriptCmd> },
+    OnStop { data: Box<StopCmd> },
 }
 
 pub(crate) fn register_classes(ctx: &mut Context) -> JsResult<()> {
@@ -131,12 +143,41 @@ impl JsEngine {
                 })
             })
             .length(2)
-            .name(js_string!("notify"))
+            .name(js_string!(KEY_NOTIFY))
             .build();
 
             if let Err(err) = ctx.register_global_property(
-                js_string!("notify"),
+                js_string!(KEY_NOTIFY),
                 notify_fn,
+                Attribute::WRITABLE | Attribute::NON_ENUMERABLE | Attribute::CONFIGURABLE,
+            ) {
+                error!("Error register_global_property {err}");
+            }
+
+            let write_file_fn = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+                NativeFunction::from_closure(move |_this, args, ctx| -> JsResult<JsValue> {
+                    let path = args
+                        .first()
+                        .ok_or(js_error!("No path provided"))?
+                        .to_string(ctx)?
+                        .to_std_string_escaped();
+                    let data = args
+                        .get(1)
+                        .ok_or(js_error!("No data provided"))?
+                        .to_string(ctx)?
+                        .to_std_string_escaped();
+                    std::fs::write(&path, data)
+                        .map(|_| JsValue::undefined())
+                        .map_err(|e| js_error!("error writing file {}", e))
+                })
+            })
+            .length(2)
+            .name("writeFile")
+            .build();
+
+            if let Err(err) = ctx.register_global_property(
+                js_string!("writeFile"),
+                write_file_fn,
                 Attribute::WRITABLE | Attribute::NON_ENUMERABLE | Attribute::CONFIGURABLE,
             ) {
                 error!("Error register_global_property {err}");
@@ -156,14 +197,26 @@ impl JsEngine {
                                 let _ = data.resp.send(result);
                             }
                             Cmd::SetScript { data } => {
-                                let _ = ctx.create_realm();
+                                if let Err(e) = ctx.create_realm() {
+                                    error!("Error creating JS realm {e}");
+                                }
                                 let result = ctx.eval(Source::from_bytes(data.script.as_bytes()));
                                 if let Err(e) = &result {
                                     error!("Script error {e}");
                                 };
+                                if let Err(e) = run_start_handles(&mut ctx) {
+                                    error!("Error running start handles {e}");
+                                }
+
                                 let _ = data
                                     .resp
                                     .send(result.map(|_| ()).map_err(|_| Error::LoadError));
+                            }
+                            Cmd::OnStop { data } => {
+                                on_stop(&mut ctx).await.unwrap_or_else(|e| {
+                                    error!("Error running stop handles {e}");
+                                });
+                                let _ = data.resp.send(Ok(()));
                             }
                         }
                     }
@@ -185,7 +238,7 @@ pub async fn handle_intercept_req(
     ctx: &mut Context,
     req: InterceptedRequest,
 ) -> Result<(InterceptedRequest, Option<InterceptedResponse>), Error> {
-    info!("handle_intercept_req");
+    debug!("handle_intercept_req");
 
     let header_cell = Rc::new(RefCell::new(req.headers.clone()));
     let trailers_cell = Rc::new(RefCell::new(req.trailers.clone().unwrap_or_default()));
@@ -262,9 +315,35 @@ fn run_request_handlers(ctx: &mut Context, flow_arg: JsValue) -> JsResult<()> {
         if addon.is_undefined() || addon.is_null() {
             continue;
         }
-        if let Err(err) =
-            call_method_if_callable(ctx, &addon, "request", std::slice::from_ref(&flow_arg))
-        {
+        if let Err(err) = call_method_if_callable(
+            ctx,
+            &addon,
+            KEY_INTERCEPT_REQUEST,
+            std::slice::from_ref(&flow_arg),
+        ) {
+            error!("Error invoking request: {err}");
+        }
+    }
+
+    Ok(())
+}
+
+fn run_start_handles(ctx: &mut Context) -> JsResult<()> {
+    let ext_val = ctx.global_object().get(js_string!("Extensions"), ctx)?;
+    let Some(ext_obj) = ext_val.as_object() else {
+        return Ok(());
+    };
+
+    let ext_arr = JsArray::from_object(ext_obj.clone())
+        .map_err(|_| js_error!(TypeError: "`Extensions` must be an Array"))?;
+
+    let len = ext_arr.length(ctx)?;
+    for i in 0..len {
+        let addon = ext_arr.get(i, ctx)?;
+        if addon.is_undefined() || addon.is_null() {
+            continue;
+        }
+        if let Err(err) = call_method_if_callable(ctx, &addon, KEY_START, &[]) {
             error!("Error invoking request: {err}");
         }
     }
@@ -284,6 +363,27 @@ fn call_method_if_callable(
     let method = obj.get(js_string!(name), ctx)?;
     if let Some(fun) = method.as_callable() {
         let _ = fun.call(this, args, ctx)?;
+    }
+    Ok(())
+}
+
+async fn on_stop(ctx: &mut Context) -> JsResult<()> {
+    let ext_val = ctx.global_object().get(js_string!(KEY_EXTENSIONS), ctx)?;
+    let Some(ext_obj) = ext_val.as_object() else {
+        return Ok(());
+    };
+    let ext_arr = JsArray::from_object(ext_obj.clone())
+        .map_err(|_| js_error!(TypeError: "`Extensions` must be an Array"))?;
+
+    let len = ext_arr.length(ctx)?;
+    for i in 0..len {
+        let addon = ext_arr.get(i, ctx)?;
+        if addon.is_undefined() || addon.is_null() {
+            continue;
+        }
+        if let Err(err) = call_method_if_callable(ctx, &addon, KEY_STOP, &[]) {
+            error!("Error invoking on: {err}");
+        }
     }
     Ok(())
 }
@@ -350,9 +450,12 @@ fn run_response_handlers(ctx: &mut Context, flow_arg: JsValue) -> JsResult<()> {
         if addon.is_undefined() || addon.is_null() {
             continue;
         }
-        if let Err(err) =
-            call_method_if_callable(ctx, &addon, "response", std::slice::from_ref(&flow_arg))
-        {
+        if let Err(err) = call_method_if_callable(
+            ctx,
+            &addon,
+            KEY_INTERCEPT_RESPONSE,
+            std::slice::from_ref(&flow_arg),
+        ) {
             error!("Error invoking response: {err}");
         }
     }
@@ -365,7 +468,7 @@ impl RoxyEngine for JsEngine {
         &self,
         req: &mut InterceptedRequest,
     ) -> Result<Option<InterceptedResponse>, Error> {
-        info!("JS intercept_request");
+        debug!("JS engine intercept_request");
         let (txr, rxr) = oneshot::channel();
         self.tx
             .send(Cmd::InterceptReq {
@@ -413,6 +516,21 @@ impl RoxyEngine for JsEngine {
         self.tx
             .send(Cmd::SetScript {
                 data: ScriptCmd::new(script.to_string(), txr),
+            })
+            .await
+            .map_err(|_| Error::LoadError)?;
+        let _resp = rxr
+            .await
+            .map_err(|_| Error::LoadError)?
+            .map_err(|_| Error::LoadError)?;
+        Ok(())
+    }
+
+    async fn on_stop(&self) -> Result<(), Error> {
+        let (txr, rxr) = oneshot::channel();
+        self.tx
+            .send(Cmd::OnStop {
+                data: StopCmd::new(txr),
             })
             .await
             .map_err(|_| Error::LoadError)?;

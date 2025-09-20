@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::{CryptoProvider, aws_lc_rs};
 use std::sync::{Arc, Mutex};
 
 use crate::alpn::AlpnProtocol;
@@ -10,8 +10,8 @@ use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
 use rustls::sign::CertifiedKey;
 use rustls::{
-    ClientConnection, ProtocolVersion, RootCertStore, ServerConnection, SignatureScheme,
-    SupportedCipherSuite, pki_types::*,
+    ClientConnection, DigitallySignedStruct, ProtocolVersion, RootCertStore, ServerConnection,
+    SignatureScheme, SupportedCipherSuite, pki_types::*,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -56,7 +56,7 @@ pub enum TlsVerify {
 pub struct TlsCapture {
     pub message: Bytes,
     pub cert: Bytes,
-    pub dss: rustls::DigitallySignedStruct,
+    pub dss: DigitallySignedStruct,
     pub error: Option<rustls::Error>,
 }
 
@@ -118,7 +118,7 @@ impl From<&ClientConnection> for ClientTlsConnectionData {
 
 #[derive(Debug)]
 pub struct LoggingClientVerifier {
-    pub certs: std::sync::Mutex<ClientVerificationCapture>,
+    pub certs: Mutex<ClientVerificationCapture>,
     name: Vec<rustls::DistinguishedName>,
     inner: Option<Arc<dyn ClientCertVerifier>>,
 }
@@ -126,21 +126,21 @@ pub struct LoggingClientVerifier {
 impl LoggingClientVerifier {
     pub fn new() -> Self {
         LoggingClientVerifier {
-            certs: std::sync::Mutex::new(ClientVerificationCapture::default()),
+            certs: Mutex::new(ClientVerificationCapture::default()),
             name: vec![],
             inner: None,
         }
     }
 
     pub fn with_inner(root_store: Arc<RootCertStore>) -> Self {
-        let provider = rustls::crypto::aws_lc_rs::default_provider();
+        let provider = aws_lc_rs::default_provider();
         let inner = WebPkiClientVerifier::builder_with_provider(root_store, Arc::new(provider))
             .build()
             .map(Some)
             .unwrap_or(None);
 
         LoggingClientVerifier {
-            certs: std::sync::Mutex::new(ClientVerificationCapture::default()),
+            certs: Mutex::new(ClientVerificationCapture::default()),
             name: vec![],
             inner,
         }
@@ -163,7 +163,7 @@ impl ClientCertVerifier for LoggingClientVerifier {
         end_entity: &CertificateDer<'_>,
         intermediates: &[CertificateDer<'_>],
         now: UnixTime,
-    ) -> Result<rustls::server::danger::ClientCertVerified, rustls::Error> {
+    ) -> Result<ClientCertVerified, rustls::Error> {
         let mut guard = self
             .certs
             .lock()
@@ -183,7 +183,7 @@ impl ClientCertVerifier for LoggingClientVerifier {
         &self,
         message: &[u8],
         cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
         let verification_result = self
             .inner
@@ -210,7 +210,7 @@ impl ClientCertVerifier for LoggingClientVerifier {
         &self,
         message: &[u8],
         cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
         let verification_result = self
             .inner
@@ -251,14 +251,14 @@ impl ClientCertVerifier for LoggingClientVerifier {
 
 #[derive(Debug)]
 pub struct LoggingServerVerifier {
-    pub certs: std::sync::Mutex<ServerVerificationCapture>,
+    pub certs: Mutex<ServerVerificationCapture>,
     inner: Option<Arc<WebPkiServerVerifier>>,
 }
 
 impl LoggingServerVerifier {
     pub fn new() -> Self {
         LoggingServerVerifier {
-            certs: std::sync::Mutex::new(ServerVerificationCapture::default()),
+            certs: Mutex::new(ServerVerificationCapture::default()),
             inner: None,
         }
     }
@@ -272,7 +272,7 @@ impl LoggingServerVerifier {
             .map(Some)
             .unwrap_or(None);
         LoggingServerVerifier {
-            certs: std::sync::Mutex::new(ServerVerificationCapture::default()),
+            certs: Mutex::new(ServerVerificationCapture::default()),
             inner,
         }
     }
@@ -322,7 +322,7 @@ impl ServerCertVerifier for LoggingServerVerifier {
         &self,
         message: &[u8],
         cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
         let res = self
             .inner
@@ -349,7 +349,7 @@ impl ServerCertVerifier for LoggingServerVerifier {
         &self,
         message: &[u8],
         cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
         let res = self
             .inner
