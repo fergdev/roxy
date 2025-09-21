@@ -25,6 +25,8 @@ pub(crate) struct JsHeaders {
     pub headers: HeaderList,
 }
 
+// TODO: implement proxy for headers h["a"] = "a", delete h["a"]
+// see JsProxyBuilder
 impl Default for JsHeaders {
     fn default() -> Self {
         Self {
@@ -67,20 +69,23 @@ js_class! {
             Ok(arr.into())
         }
 
-        fn set(this: JsClass<JsHeaders>, name: Convert<String>, value: Convert<String>) -> JsResult<()> {
+        fn set(this: JsClass<JsHeaders>, name: Convert<String>, value: JsValue, context: &mut Context) -> JsResult<()> {
             let name = to_header_name(&name.0)?;
-            let value = to_header_value(&value.0)?;
-
             let this = this.borrow();
             let mut list = this.headers.borrow_mut();
-            list.insert(name, value);
+            list.remove(&name);
+            if !value.is_null() && !value.is_undefined() {
+                let js_string = value.to_string(context)?;
+                let a = js_string.to_std_string_lossy();
+                let value = to_header_value(&a)?;
+                list.insert(name, value);
+            }
             Ok(())
         }
 
         fn append(this: JsClass<JsHeaders>, name: Convert<String>, value: Convert<String>) -> JsResult<()> {
             let name = to_header_name(&name.0)?;
             let value = to_header_value(&value.0)?;
-
             this.borrow().headers.borrow_mut().append(name, value);
             Ok(())
         }

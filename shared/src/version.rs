@@ -99,8 +99,7 @@ mod tests {
     #[test]
     fn parse_invalid_versions_error() {
         let invalid = &[
-            "HTTP/1.2", "HTTP/0.8", "HTTP/2.1", "HTTP/", "1.1", "", "HTTP/1", "HTTP/03",
-            "http/1.1", // case sensitive
+            "HTTP/1.2", "HTTP/0.8", "HTTP/2.1", "HTTP/", "1.1", "", "HTTP/1", "HTTP/03", "http/1.1",
         ];
         for s in invalid {
             assert!(

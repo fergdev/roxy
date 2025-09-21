@@ -9,7 +9,7 @@ use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
     interceptor::{
         Error, FlowNotify, KEY_EXTENSIONS, KEY_INTERCEPT_REQUEST, KEY_INTERCEPT_RESPONSE,
-        RoxyEngine,
+        KEY_START, KEY_STOP, RoxyEngine,
         lua::{
             body::register_body,
             flow::{LuaFlow, register_flow},
@@ -79,14 +79,66 @@ impl RoxyEngine for LuaEngine {
         }
         Ok(())
     }
+
+    async fn on_stop(&self) -> Result<(), Error> {
+        debug!("on_stop");
+        self.inner
+            .lock()
+            .map_err(|_| Error::InterceptedRequest)?
+            .on_stop()?;
+        Ok(())
+    }
 }
 
 impl Inner {
+    fn on_stop(&mut self) -> Result<(), Error> {
+        if let Some(lua) = &self.lua {
+            debug!("on_stop");
+            let extensions: Table = lua
+                .globals()
+                .get(KEY_EXTENSIONS)
+                .map_err(|e| Error::Other(format!("missing Extensions: {e}")))?;
+
+            for pair in extensions.pairs::<Value, Table>() {
+                let (_, ext) = match pair {
+                    Ok(x) => x,
+                    Err(_) => continue,
+                };
+                if let Ok(f) = ext.get::<Function>(KEY_STOP) {
+                    debug!("Calling stop function");
+                    if let Err(err) = f.call::<()>(()) {
+                        error!("Error running stop for extension {err}");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn set_script(&mut self, script: &str) -> Result<(), Error> {
         trace!("Set script {script}");
+        self.on_stop()?;
         let lua = Lua::new();
         register_functions(&lua, self.notify_tx.clone())?;
         lua.load(script).exec()?;
+        let extensions: Table = lua
+            .globals()
+            .get(KEY_EXTENSIONS)
+            .map_err(|e| Error::Other(format!("missing Extensions: {e}")))?;
+
+        for pair in extensions.pairs::<Value, Table>() {
+            let (_, ext) = match pair {
+                Ok(x) => x,
+                Err(_) => continue,
+            };
+            if let Ok(f) = ext.get::<Function>(KEY_START) {
+                debug!("Calling start function");
+                if let Err(err) = f.call::<()>(()) {
+                    error!("Error running start for extension {err}");
+                }
+            }
+        }
+
         self.lua = Some(lua);
         trace!("Loaded script");
         Ok(())
@@ -182,7 +234,7 @@ fn intercept_request_inner(
         }
     }
 
-    info!("Updating response from Lua");
+    debug!("Updating response from Lua");
     let updated_resp = lua_resp
         .get_inner()
         .map_err(|_| Error::Other("req lock poisoned".into()))?;
@@ -229,7 +281,7 @@ pub fn intercept_response_inner(
     }
 
     let res_arc = Arc::new(Mutex::new(res.clone()));
-    let lua_req = LuaRequest::from_parts(Arc::new(Mutex::new(req.clone())))?; // TODO: not clone
+    let lua_req = LuaRequest::from_parts(Arc::new(Mutex::new(req.clone())))?;
     let lua_resp = LuaResponse::from_parts(res_arc.clone())
         .map_err(|e| Error::Other(format!("LuaResponse::from_parts: {e}")))?;
 
@@ -264,7 +316,6 @@ pub fn intercept_response_inner(
             .map
             .lock()
             .map_err(|_| Error::Other("req lock poisoned".into()))?;
-        info!("trailers {:?}", trailers);
         if trailers.is_empty() {
             res.trailers = None;
         } else {
@@ -275,7 +326,7 @@ pub fn intercept_response_inner(
     Ok(())
 }
 
-fn register_functions(
+pub(crate) fn register_functions(
     lua: &Lua,
     notify: Option<mpsc::Sender<FlowNotify>>,
 ) -> Result<(), mlua::Error> {

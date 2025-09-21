@@ -1,12 +1,15 @@
 # Summary
 
 - [Getting Started](./getting-started.md)
-- [Scripting Reference](./scripting/README.md)
+- [Certificates](./certificates.md)
+- [Scripting](./scripting/README.md)
   - [Flows](./scripting/flows.md)
   - [Request](./scripting/request.md)
   - [Response](./scripting/response.md)
   - [Headers](./scripting/headers.md)
-  - [Query](./scripting/query.md)
+  - [Body](./scripting/body.md)
+  - [Url](./scripting/url.md)
+    - [Query](./scripting/query.md)
   - [Notify](./scripting/notify.md)
 
 ---

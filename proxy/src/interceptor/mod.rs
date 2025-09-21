@@ -17,10 +17,13 @@ use tokio::sync::{
     Mutex,
     mpsc::{self},
 };
-use tracing::{trace, warn};
+use tracing::trace;
 
 const KEY_EXTENSIONS: &str = "Extensions";
+const KEY_NOTIFY: &str = "notify";
 
+const KEY_START: &str = "start";
+const KEY_STOP: &str = "stop";
 const KEY_INTERCEPT_REQUEST: &str = "request";
 const KEY_INTERCEPT_RESPONSE: &str = "response";
 
@@ -33,8 +36,10 @@ const KEY_VERSION: &str = "version";
 
 const KEY_SCHEME: &str = "scheme";
 const KEY_HOST: &str = "host";
+const KEY_HOSTNAME: &str = "hostname";
 const KEY_PORT: &str = "port";
 const KEY_PATH: &str = "path";
+const KEY_AUTHORITY: &str = "authority";
 const KEY_USERNAME: &str = "username";
 const KEY_PASSWORD: &str = "password";
 
@@ -58,6 +63,8 @@ pub trait RoxyEngine: Send + Sync {
     ) -> Result<(), Error>;
 
     async fn set_script(&self, script: &str) -> Result<(), Error>;
+
+    async fn on_stop(&self) -> Result<(), Error>;
 }
 
 struct NoopEngine {}
@@ -68,7 +75,7 @@ impl RoxyEngine for NoopEngine {
         &self,
         _req: &mut InterceptedRequest,
     ) -> Result<Option<InterceptedResponse>, Error> {
-        warn!("Noop intercept_request");
+        trace!("Noop intercept_request");
         Ok(None)
     }
 
@@ -77,12 +84,17 @@ impl RoxyEngine for NoopEngine {
         _req: &InterceptedRequest,
         _res: &mut InterceptedResponse,
     ) -> Result<(), Error> {
-        warn!("Noop intercept_response");
+        trace!("Noop intercept_response");
         Ok(())
     }
 
     async fn set_script(&self, _script: &str) -> Result<(), Error> {
-        warn!("Noop set script");
+        trace!("Noop set script");
+        Ok(())
+    }
+
+    async fn on_stop(&self) -> Result<(), Error> {
+        trace!("Noop on_stop");
         Ok(())
     }
 }
@@ -99,7 +111,6 @@ pub enum FlowNotifyLevel {
 impl From<i32> for FlowNotifyLevel {
     fn from(value: i32) -> Self {
         match value {
-            0 => FlowNotifyLevel::Info,
             1 => FlowNotifyLevel::Warn,
             2 => FlowNotifyLevel::Error,
             3 => FlowNotifyLevel::Debug,
@@ -145,16 +156,16 @@ impl From<pyo3::PyErr> for Error {
 
 #[derive(Debug, Clone, Copy, EnumIter)]
 pub enum ScriptType {
-    Lua,
     Js,
+    Lua,
     Python,
 }
 
 impl ScriptType {
     pub fn ext(&self) -> &str {
         match self {
-            ScriptType::Lua => "lua",
             ScriptType::Js => "js",
+            ScriptType::Lua => "lua",
             ScriptType::Python => "py",
         }
     }
@@ -222,6 +233,8 @@ impl ScriptEngine {
     }
 
     pub async fn set_script(&mut self, script: &str, script_type: ScriptType) -> Result<(), Error> {
+        trace!("set_script type={script_type} script={script}");
+        let _ = self.inner.lock().await.on_stop().await.ok();
         let engine: Box<dyn RoxyEngine> = match script_type {
             ScriptType::Lua => Box::new(LuaEngine::new(self.notify_tx.clone())),
             ScriptType::Js => Box::new(JsEngine::new(self.notify_tx.clone())),

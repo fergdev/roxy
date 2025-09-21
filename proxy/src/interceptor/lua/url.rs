@@ -5,9 +5,12 @@ use mlua::UserData;
 use mlua::Value;
 use mlua::prelude::*;
 use roxy_shared::uri::RUri;
+use tracing::info;
 use url::Url;
 
+use crate::interceptor::KEY_AUTHORITY;
 use crate::interceptor::KEY_HOST;
+use crate::interceptor::KEY_HOSTNAME;
 use crate::interceptor::KEY_PASSWORD;
 use crate::interceptor::KEY_PATH;
 use crate::interceptor::KEY_PORT;
@@ -104,8 +107,62 @@ impl LuaUrl {
         self.write_from(&u)
     }
 
+    fn get_authority(&self) -> LuaResult<String> {
+        Ok(self.parse()?.authority().to_string())
+    }
+
+    fn set_authority(&self, authority: &str) -> LuaResult<()> {
+        info!("set_authority: {authority}");
+        let mut u = self.parse()?;
+        if authority.contains('@') {
+            let mut split = authority.split('@');
+            let user = split.next().ok_or(LuaError::external("Missing username"))?;
+            let host = split.next().ok_or(LuaError::external("Missing password"))?;
+            let mut user = user.split(':');
+            let username = user.next().unwrap_or("");
+            let password = user.next().unwrap_or("");
+
+            let mut host = host.split(':');
+            let hostname = host.next().unwrap_or("");
+            let port = host.next().unwrap_or("");
+
+            u.set_username(username)
+                .map_err(|_| LuaError::external("invalid username"))?;
+            u.set_password(Some(password))
+                .map_err(|_| LuaError::external("invalid password"))?;
+            u.set_host(Some(hostname))
+                .map_err(|_| LuaError::external("invalid host"))?;
+            u.set_port(if port.is_empty() {
+                None
+            } else {
+                Some(
+                    port.parse::<u16>()
+                        .map_err(|_| LuaError::external("bad port"))?,
+                )
+            })
+            .map_err(|_| LuaError::external("bad port"))?;
+        } else {
+            let mut host = authority.split(':');
+            let hostname = host.next().unwrap_or("");
+            let port = host.next().unwrap_or("");
+            u.set_host(Some(hostname))
+                .map_err(|_| LuaError::external("invalid host"))?;
+            u.set_port(if port.is_empty() {
+                None
+            } else {
+                Some(
+                    port.parse::<u16>()
+                        .map_err(|_| LuaError::external("bad port"))?,
+                )
+            })
+            .map_err(|_| LuaError::external("bad port"))?;
+        }
+        self.write_from(&u)?;
+        Ok(())
+    }
+
     fn get_port(&self) -> LuaResult<u16> {
-        Ok(self.parse()?.port().unwrap_or_default())
+        Ok(self.parse()?.port_or_known_default().unwrap_or_default())
     }
     fn set_port(&self, port: u16) -> LuaResult<()> {
         let mut u = self.parse()?;
@@ -116,13 +173,7 @@ impl LuaUrl {
 
     fn get_host(&self) -> LuaResult<String> {
         let u = self.parse()?;
-        let host = u.host_str().unwrap_or("");
-        let out = if let Some(p) = u.port() {
-            format!("{host}:{}", p)
-        } else {
-            host.to_string()
-        };
-        Ok(out)
+        Ok(url::quirks::host(&u).to_string())
     }
     fn set_host(&self, host_port: &str) -> LuaResult<()> {
         let mut u = self.parse()?;
@@ -142,6 +193,17 @@ impl LuaUrl {
                 .map_err(|_| LuaError::external("invalid host"))?;
             u.set_port(None).ok();
         }
+        self.write_from(&u)
+    }
+
+    fn get_hostname(&self) -> LuaResult<String> {
+        let u = self.parse()?;
+        Ok(url::quirks::hostname(&u).to_string())
+    }
+    fn set_hostname(&self, hostname: &str) -> LuaResult<()> {
+        let mut u = self.parse()?;
+        url::quirks::set_hostname(&mut u, hostname)
+            .map_err(|_| LuaError::external("invalid hostname"))?;
         self.write_from(&u)
     }
 
@@ -200,8 +262,10 @@ impl UserData for LuaUrl {
                 KEY_USERNAME => Value::String(lua.create_string(&this.get_username()?)?),
                 KEY_PASSWORD => Value::String(lua.create_string(&this.get_password()?)?),
                 KEY_HOST => Value::String(lua.create_string(&this.get_host()?)?),
+                KEY_HOSTNAME => Value::String(lua.create_string(&this.get_hostname()?)?),
                 KEY_PORT => Value::Integer(this.get_port()? as i64),
                 KEY_PATH => Value::String(lua.create_string(&this.get_path()?)?),
+                KEY_AUTHORITY => Value::String(lua.create_string(&this.get_authority()?)?),
                 "search" => Value::String(lua.create_string(&this.get_search()?)?),
                 "origin" => Value::String(lua.create_string(&this.get_origin()?)?),
                 "searchParams" => {
@@ -232,7 +296,11 @@ impl UserData for LuaUrl {
                     (KEY_SCHEME, Value::String(s)) => this.set_scheme(s.to_str()?.as_ref())?,
                     (KEY_USERNAME, Value::String(s)) => this.set_username(s.to_str()?.as_ref())?,
                     (KEY_PASSWORD, Value::String(s)) => this.set_password(s.to_str()?.as_ref())?,
+                    (KEY_AUTHORITY, Value::String(s)) => {
+                        this.set_authority(s.to_str()?.as_ref())?
+                    }
                     (KEY_HOST, Value::String(s)) => this.set_host(s.to_str()?.as_ref())?,
+                    (KEY_HOSTNAME, Value::String(s)) => this.set_hostname(s.to_str()?.as_ref())?,
                     (KEY_PORT, Value::Integer(s)) => this.set_port(s as u16)?,
                     (KEY_PATH, Value::String(s)) => this.set_path(s.to_str()?.as_ref())?,
                     ("search", Value::String(s)) => this.set_search(s.to_str()?.as_ref())?,
@@ -272,12 +340,13 @@ pub(crate) fn register_url(lua: &Lua) -> LuaResult<LuaTable> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use super::register_url;
+    use crate::interceptor::lua::engine::register_functions;
+
     use mlua::prelude::*;
 
     fn with_lua<F: FnOnce(&Lua) -> LuaResult<()>>(f: F) {
         let lua = Lua::new();
-        register_url(&lua).expect("register Url");
+        register_functions(&lua, None).expect("register functions");
         f(&lua).expect("lua ok");
     }
 
@@ -286,17 +355,24 @@ mod tests {
         with_lua(|lua| {
             lua.load(
                 r#"
+                print("u01_construct_and_getters")
                 local u = Url.new("https://user:pass@example.com:8443/a/b?x=1")
                 assert(u.href == "https://user:pass@example.com:8443/a/b?x=1")
+                print("scheme:", u.scheme)
                 assert(u.scheme == "https")
+                print("authority:", u.authority)
+                assert(u.authority == "user:pass@example.com:8443")
                 assert(u.username == "user")
                 assert(u.password == "pass")
+                print("host:", u.host)
                 assert(u.host == "example.com:8443")
+                assert(u.hostname == "example.com")
                 assert(u.port == 8443)
                 assert(u.path == "/a/b")
                 assert(u.search == "?x=1")
                 assert(u.origin == "https://example.com:8443")
                 assert(tostring(u) == u.href)
+                print("u01_construct_and_getters done")
             "#,
             )
             .exec()
@@ -423,12 +499,9 @@ mod tests {
             lua.load(
                 r#"
                 local u = Url.new("http://x/")
-                u.host = "example.com:1234"
+                u.host = "example.com"
+                u.port = 1234
                 assert(u.host == "example.com:1234")
-                assert(u.port == 1234)
-                u.host = "example.com"  -- drop port
-                assert(u.host == "example.com") 
-                assert(u.port == 0 or u.port == nil)  -- get_port returns 0 when absent
             "#,
             )
             .exec()

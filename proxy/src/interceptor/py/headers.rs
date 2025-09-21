@@ -57,7 +57,7 @@ impl PyHeaders {
         Ok(())
     }
 
-    fn set(&self, _py: Python<'_>, name: &str, value: &str) -> PyResult<()> {
+    fn set(&self, name: &str, value: &str) -> PyResult<()> {
         let name = to_header_name(name)?;
         let value = to_header_value(value)?;
         let mut g = self.lock()?;
@@ -65,8 +65,24 @@ impl PyHeaders {
         Ok(())
     }
 
-    fn delete(&self, _py: Python<'_>, name: &str) -> PyResult<()> {
+    fn __setitem__(&mut self, key: &str, value: &Bound<PyAny>) -> PyResult<()> {
+        if value.is_none() {
+            self.delete(key)
+        } else {
+            let s = value.extract::<String>()?;
+            self.set(key, &s)
+        }
+    }
+
+    fn delete(&self, name: &str) -> PyResult<()> {
         let name = to_header_name(name)?;
+        let mut g = self.lock()?;
+        g.remove(name);
+        Ok(())
+    }
+
+    fn __delitem__(&mut self, key: &str) -> PyResult<()> {
+        let name = to_header_name(key)?;
         let mut g = self.lock()?;
         g.remove(name);
         Ok(())
