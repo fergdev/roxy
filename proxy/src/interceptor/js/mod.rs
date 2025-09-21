@@ -2,6 +2,7 @@ mod body;
 pub mod engine;
 mod flow;
 mod headers;
+mod logger;
 mod query;
 mod request;
 mod response;

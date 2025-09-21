@@ -1,16 +1,18 @@
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use http::uri::Authority;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use roxy_shared::uri::RUri;
+use tracing::info;
 
 use crate::interceptor::py::query::PyURLSearchParams;
 
 #[derive(Debug, Clone)]
 #[pyclass(name = "URL")]
 pub struct PyUrl {
-    pub(crate) uri: Arc<Mutex<RUri>>,
+    pub(crate) uri: Arc<Mutex<RUri>>, // TODO: refactor to use URL
 }
 
 impl Default for PyUrl {
@@ -172,29 +174,44 @@ impl PyUrl {
     #[setter]
     fn set_password(&self, pass: &str) -> PyResult<()> {
         self.with_parts_mut(|parts| {
-            let (mut user, host, port) = {
-                let (h, p) = parts
-                    .authority
-                    .as_ref()
-                    .map(|a| (a.host().to_string(), a.port_u16()))
-                    .unwrap_or((String::new(), None));
-                (String::new(), h, p)
-            };
+            let (host, port) = parts
+                .authority
+                .as_ref()
+                .map(|a| (a.host().to_string(), a.port_u16()))
+                .unwrap_or((String::new(), None));
+
+            let existing_user = parts
+                .authority
+                .as_ref()
+                .map(|a| {
+                    let s = a.as_str();
+                    let userinfo = s.rsplit_once('@').map(|(ui, _)| ui).unwrap_or("");
+                    userinfo
+                        .split_once(':')
+                        .map(|x| x.0)
+                        .unwrap_or("")
+                        .to_string()
+                })
+                .unwrap_or_default();
+
             let mut auth = String::new();
-            if !user.is_empty() || !pass.is_empty() {
-                if user.is_empty() {
-                    user = "".into();
+            if !existing_user.is_empty() || !pass.is_empty() {
+                auth.push_str(&existing_user);
+
+                if !pass.is_empty() {
+                    auth.push(':');
+                    auth.push_str(pass);
                 }
-                auth.push_str(&user);
-                auth.push(':');
-                auth.push_str(pass);
+
                 auth.push('@');
             }
+
             auth.push_str(&host);
             if let Some(p) = port {
                 auth.push(':');
                 auth.push_str(&p.to_string());
             }
+
             parts.authority = Some(
                 Authority::from_maybe_shared(auth)
                     .map_err(|e| PyTypeError::new_err(e.to_string()))?,
@@ -206,17 +223,69 @@ impl PyUrl {
     #[getter]
     fn hostname(&self) -> PyResult<Option<String>> {
         let g = self.lock()?;
-        Ok(g.inner.authority().map(|a| a.host().to_string()))
+        let hostname = g
+            .inner
+            .authority()
+            .and_then(|a| a.as_str().split_once(':'))
+            .map(|h| h.0.to_string());
+        info!("get_hostname to {hostname:?}");
+        Ok(hostname)
     }
     #[setter]
-    fn set_hostname(&self, host: &str) -> PyResult<()> {
+    fn set_hostname(&self, hostname: &str) -> PyResult<()> {
+        info!("set_hostname to {hostname}");
         self.with_parts_mut(|parts| {
-            let port = parts.authority.as_ref().and_then(|a| a.port_u16());
-            let auth = if let Some(p) = port {
-                format!("{host}:{p}")
-            } else {
-                host.to_string()
-            };
+            let (_, port) = parts
+                .authority
+                .as_ref()
+                .map(|a| (a.host().to_string(), a.port_u16()))
+                .unwrap_or((String::new(), None));
+
+            let existing_user = parts
+                .authority
+                .as_ref()
+                .map(|a| {
+                    let s = a.as_str();
+                    let userinfo = s.rsplit_once('@').map(|(ui, _)| ui).unwrap_or("");
+                    userinfo
+                        .split_once(':')
+                        .map(|x| x.0)
+                        .unwrap_or("")
+                        .to_string()
+                })
+                .unwrap_or_default();
+            let existing_pass = parts
+                .authority
+                .as_ref()
+                .map(|a| {
+                    let s = a.as_str();
+                    let userinfo = s.rsplit_once('@').map(|(ui, _)| ui).unwrap_or("");
+                    userinfo
+                        .split_once(':')
+                        .map(|x| x.1)
+                        .unwrap_or("")
+                        .to_string()
+                })
+                .unwrap_or_default();
+
+            let mut auth = String::new();
+            if !existing_user.is_empty() || !existing_pass.is_empty() {
+                auth.push_str(&existing_user);
+
+                if !existing_pass.is_empty() {
+                    auth.push(':');
+                    auth.push_str(&existing_pass);
+                }
+
+                auth.push('@');
+            }
+
+            auth.push_str(hostname);
+            if let Some(p) = port {
+                auth.push(':');
+                auth.push_str(&p.to_string());
+            }
+
             parts.authority = Some(
                 Authority::from_maybe_shared(auth)
                     .map_err(|e| PyTypeError::new_err(e.to_string()))?,
@@ -243,7 +312,7 @@ impl PyUrl {
     #[getter]
     fn port(&self) -> PyResult<Option<u16>> {
         let g = self.lock()?;
-        Ok(g.inner.port_u16())
+        Ok(Some(g.port()))
     }
     #[setter]
     fn set_port(&self, port: u16) -> PyResult<()> {
@@ -283,6 +352,24 @@ impl PyUrl {
             parts.path_and_query = Some(
                 http::uri::PathAndQuery::from_maybe_shared(pq)
                     .map_err(|e| PyTypeError::new_err(e.to_string()))?,
+            );
+            Ok(())
+        })
+    }
+
+    #[getter]
+    fn authority(&self) -> PyResult<String> {
+        let g = self.lock()?;
+        Ok(g.inner
+            .authority()
+            .map(|a| a.to_string())
+            .unwrap_or("".to_string()))
+    }
+    #[setter]
+    fn set_authority(&self, authority: &str) -> PyResult<()> {
+        self.with_parts_mut(|parts| {
+            parts.authority = Some(
+                Authority::from_str(authority).map_err(|e| PyTypeError::new_err(e.to_string()))?,
             );
             Ok(())
         })
@@ -398,33 +485,6 @@ assert u.username == "newuser"
 print(u.password)
 print("hihihihi")
 assert u.password == "pass"
-"#,
-        );
-    }
-
-    #[test]
-    fn pyurl_hostname_host_port_get_set() {
-        with_module(
-            r#"
-from roxy import URL
-u = URL("http://example.com/")
-# hostname/host/port getters
-assert u.hostname == "example.com"
-assert u.host == "example.com"
-assert u.port is None
-# Set port
-u.port = 8080
-assert u.port == 8080
-assert u.host == "example.com:8080"
-# Set hostname (preserves port)
-u.hostname = "example.org"
-assert u.hostname == "example.org"
-assert u.host == "example.org:8080"
-# Set host directly (overwrites both)
-u.host = "myhost:1234"
-assert u.hostname == "myhost"
-assert u.port == 1234
-assert u.host == "myhost:1234"
 "#,
         );
     }

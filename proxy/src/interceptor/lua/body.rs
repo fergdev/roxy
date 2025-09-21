@@ -65,6 +65,11 @@ impl LuaBody {
             }
         }
     }
+    fn clear(&self) -> LuaResult<()> {
+        let mut g = self.lock()?;
+        *g = Bytes::new();
+        Ok(())
+    }
     fn lock(&self) -> LuaResult<MutexGuard<'_, Bytes>> {
         self.inner
             .lock()
@@ -84,6 +89,7 @@ impl LuaUserData for LuaBody {
 
         m.add_method("len", |_, this, ()| Ok(this.len() as i64));
         m.add_method("is_empty", |_, this, ()| Ok(this.is_empty()));
+        m.add_method("clear", |_, this, ()| Ok(this.clear()));
 
         m.add_meta_method(LuaMetaMethod::Index, |lua, this, key: LuaValue| {
             let LuaValue::String(s) = key else {
@@ -97,7 +103,7 @@ impl LuaUserData for LuaBody {
                 "raw" => Ok(LuaValue::String(this.get_raw(lua)?)),
                 "length" | "len" => Ok(LuaValue::Integer(this.len() as i64)),
                 "empty" | "is_empty" => Ok(LuaValue::Boolean(this.is_empty())),
-                "get_text" | "set_text" | "get_raw" | "set_raw" => {
+                "get_text" | "set_text" | "get_raw" | "set_raw" | "clear" => {
                     let ud = lua.create_userdata(this.clone())?;
                     let f: LuaFunction = ud.get(s)?;
                     Ok(LuaValue::Function(f))

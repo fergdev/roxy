@@ -7,7 +7,6 @@ use boa_engine::{
 use boa_gc::{Finalize, Trace};
 use boa_interop::{JsClass, js_class};
 use http::{HeaderMap, HeaderName, HeaderValue};
-use tracing::info;
 
 fn to_header_name(name: &str) -> JsResult<HeaderName> {
     HeaderName::from_bytes(name.as_bytes())
@@ -87,13 +86,11 @@ js_class! {
         fn append(this: JsClass<JsHeaders>, name: Convert<String>, value: Convert<String>) -> JsResult<()> {
             let name = to_header_name(&name.0)?;
             let value = to_header_value(&value.0)?;
-
             this.borrow().headers.borrow_mut().append(name, value);
             Ok(())
         }
 
         fn delete(this: JsClass<JsHeaders>, name: Convert<String>) -> JsResult<()> {
-            info!("deleting");
             let name = to_header_name(&name.0)?;
             let this = this.borrow();
             let mut list = this.headers.borrow_mut();

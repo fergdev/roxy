@@ -17,7 +17,7 @@ use tokio::sync::{
     Mutex,
     mpsc::{self},
 };
-use tracing::{debug, trace};
+use tracing::trace;
 
 const KEY_EXTENSIONS: &str = "Extensions";
 const KEY_NOTIFY: &str = "notify";
@@ -36,8 +36,10 @@ const KEY_VERSION: &str = "version";
 
 const KEY_SCHEME: &str = "scheme";
 const KEY_HOST: &str = "host";
+const KEY_HOSTNAME: &str = "hostname";
 const KEY_PORT: &str = "port";
 const KEY_PATH: &str = "path";
+const KEY_AUTHORITY: &str = "authority";
 const KEY_USERNAME: &str = "username";
 const KEY_PASSWORD: &str = "password";
 
@@ -73,7 +75,7 @@ impl RoxyEngine for NoopEngine {
         &self,
         _req: &mut InterceptedRequest,
     ) -> Result<Option<InterceptedResponse>, Error> {
-        debug!("Noop intercept_request");
+        trace!("Noop intercept_request");
         Ok(None)
     }
 
@@ -82,17 +84,17 @@ impl RoxyEngine for NoopEngine {
         _req: &InterceptedRequest,
         _res: &mut InterceptedResponse,
     ) -> Result<(), Error> {
-        debug!("Noop intercept_response");
+        trace!("Noop intercept_response");
         Ok(())
     }
 
     async fn set_script(&self, _script: &str) -> Result<(), Error> {
-        debug!("Noop set script");
+        trace!("Noop set script");
         Ok(())
     }
 
     async fn on_stop(&self) -> Result<(), Error> {
-        debug!("Noop on_stop");
+        trace!("Noop on_stop");
         Ok(())
     }
 }
@@ -154,16 +156,16 @@ impl From<pyo3::PyErr> for Error {
 
 #[derive(Debug, Clone, Copy, EnumIter)]
 pub enum ScriptType {
-    Lua,
     Js,
+    Lua,
     Python,
 }
 
 impl ScriptType {
     pub fn ext(&self) -> &str {
         match self {
-            ScriptType::Lua => "lua",
             ScriptType::Js => "js",
+            ScriptType::Lua => "lua",
             ScriptType::Python => "py",
         }
     }

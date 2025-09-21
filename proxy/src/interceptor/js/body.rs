@@ -49,6 +49,15 @@ impl JsBody {
             _ => Err(js_error!(TypeError: "Invalid type {value} has no data")),
         }
     }
+
+    fn len(&self) -> JsValue {
+        let len = self.inner.borrow().len();
+        JsValue::Integer(len as i32)
+    }
+
+    fn is_empty(&self) -> JsValue {
+        JsValue::Boolean(self.inner.borrow().is_empty())
+    }
 }
 
 js_class! {
@@ -85,11 +94,30 @@ js_class! {
                 Ok(())
             }
         }
+        property len {
+            fn get(this: JsClass<JsBody>) -> JsResult<JsValue> {
+                let this = this.borrow();
+                Ok(this.len())
+            }
+        }
+        property is_empty as "isEmpty" {
+            fn get(this: JsClass<JsBody>) -> JsResult<JsValue> {
+                let this = this.borrow();
+                Ok(this.is_empty())
+            }
+        }
+
+
         constructor(value: JsValue) {
             JsBody::new_value(&value)
         }
 
         init(_class: &mut ClassBuilder) -> JsResult<()> {
+            Ok(())
+        }
+
+        fn clear(this: JsClass<JsBody>) -> JsResult<()> {
+            *this.borrow().inner.borrow_mut() = Bytes::new();
             Ok(())
         }
     }

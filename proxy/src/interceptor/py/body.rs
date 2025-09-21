@@ -80,6 +80,12 @@ impl PyBody {
         Ok(g.is_empty())
     }
 
+    fn clear(&self) -> PyResult<()> {
+        let mut g = self.lock()?;
+        *g = Bytes::new();
+        Ok(())
+    }
+
     fn __repr__(&self) -> PyResult<String> {
         let g = self.lock()?;
         Ok(format!("PyBody(len={}, preview={:?})", g.len(), &g))

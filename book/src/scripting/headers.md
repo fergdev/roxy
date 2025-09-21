@@ -2,17 +2,7 @@
 
 HTTP headers are **case-insensitive**, **order-preserving**, and allow **multiple fields with the same name**.
 
-## Quick API
-
-- `h[name]` / `h.get(name)` → folded string (values joined with `", "`).
-- `h[name] = value` / `h.set(name, value)` → replace all fields for that name.
-- `del h[name]` / `h.delete(name)` → remove all fields for that name.
-- `h.get_all(name)` → list of values in order.
-- `h.set_all(name, values)` → explicit multi-field set.
-- `h.insert(index, name, value)` → insert raw field at index.
-- `h.items(multi=false)` → iterate (raw if `multi=true`).
-
-## Common tasks
+## API
 
 ### Set header
 
@@ -92,6 +82,37 @@ flow.request.headers["X-Header2"] = nil
 flow.request.headers.delete("X-Header1")
 flow.request.headers["X-Header2"] = None
 del flow.request.headers["X-header3"]
+```
+
+{{#endtab}}
+{{#endtabs}}
+
+### Test if value is present
+
+{{#tabs global="language"}}
+{{#tab name=JS}}
+
+```js
+if (flow.request.headers.has("X-Header")) {
+  console.log("header is present");
+}
+```
+
+{{#endtab}}
+{{#tab name=Lua}}
+
+```lua
+if (flow.request.headers:has("X-Header")) then
+  print("header is present")
+end
+```
+
+{{#endtab}}
+{{#tab name=Python}}
+
+```py
+if flow.request.headers.has("X-Header"):
+  print("header is present")
 ```
 
 {{#endtab}}

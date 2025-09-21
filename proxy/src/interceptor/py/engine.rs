@@ -158,7 +158,7 @@ impl RoxyEngine for PythonEngine {
                     .unwrap_or_else(|| "<addon>".into());
 
                 if let Err(err) = item.call_method(KEY_START, (), None) {
-                    error!("Addon `{}` error in `start`: {}", name, err);
+                    trace!("Addon `{}` error in `start`: {}", name, err);
                 }
 
                 let obj: Py<PyAny> = item.unbind();

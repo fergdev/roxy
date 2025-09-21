@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, str::FromStr};
 
 use bytes::Bytes;
 use http::{HeaderMap, HeaderName, Method, StatusCode};
@@ -7,7 +7,7 @@ use roxy_proxy::{
     init_test_logging,
     interceptor::{FlowNotify, FlowNotifyLevel, ScriptEngine, ScriptType},
 };
-use roxy_shared::alpn::AlpnProtocol;
+use roxy_shared::{alpn::AlpnProtocol, uri::RUri};
 use strum::IntoEnumIterator;
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
@@ -235,6 +235,25 @@ async fn test_header_delete() {
 }
 
 #[tokio::test]
+async fn test_header_has() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let init_res = cxt.default_resp.clone();
+
+    let expect_req = InterceptedRequest {
+        body: Bytes::from_static(b"has"),
+        ..cxt.default_req.clone()
+    };
+    let expect_res = InterceptedResponse {
+        body: Bytes::from_static(b"has"),
+        ..cxt.default_resp.clone()
+    };
+    cxt.run_test("header_has", &init_req, &expect_req, &init_res, &expect_res)
+        .await;
+}
+
+#[tokio::test]
 async fn test_trailer_append() {
     let mut cxt = TestContext::new().await;
 
@@ -393,6 +412,295 @@ async fn test_body_cascade_with_empty() {
 
     cxt.run_test(
         "body_cascade_with_empty",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_body_clear() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        body: Bytes::from("request"),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = InterceptedRequest {
+        body: Bytes::new(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = InterceptedResponse {
+        body: Bytes::from("response"),
+        ..cxt.default_resp.clone()
+    };
+    let expect_res = InterceptedResponse {
+        body: Bytes::new(),
+        ..cxt.default_resp.clone()
+    };
+
+    cxt.run_test("body_clear", &init_req, &expect_req, &init_res, &expect_res)
+        .await;
+}
+
+#[tokio::test]
+async fn test_body_len() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        body: Bytes::from_static(b"1234567890"),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = InterceptedRequest {
+        body: Bytes::from_static(b"len is 10 request"),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = InterceptedResponse {
+        body: Bytes::from_static(b"1234567890"),
+        ..cxt.default_resp.clone()
+    };
+    let expect_res = InterceptedResponse {
+        body: Bytes::from_static(b"len is 10 response"),
+        ..cxt.default_resp.clone()
+    };
+
+    cxt.run_test("body_len", &init_req, &expect_req, &init_res, &expect_res)
+        .await;
+}
+
+#[tokio::test]
+async fn test_body_is_empty() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        body: Bytes::new(),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = InterceptedRequest {
+        body: Bytes::from("empty request"),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = InterceptedResponse {
+        body: Bytes::new(),
+        ..cxt.default_resp.clone()
+    };
+    let expect_res = InterceptedResponse {
+        body: Bytes::from("empty response"),
+        ..cxt.default_resp.clone()
+    };
+
+    cxt.run_test(
+        "body_is_empty",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_url_host() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        uri: RUri::from_str("http://localhost:1234").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("http://example.com:4321").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test("url_host", &init_req, &expect_req, &init_res, &expect_res)
+        .await;
+}
+
+#[tokio::test]
+async fn test_url_hostname() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        uri: RUri::from_str("http://localhost:1234").unwrap(),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("http://example.com:1234").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test(
+        "url_hostname",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_url_port() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("http://localhost:8080").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test("url_port", &init_req, &expect_req, &init_res, &expect_res)
+        .await;
+}
+
+#[tokio::test]
+async fn test_url_scheme() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("https://localhost").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test("url_scheme", &init_req, &expect_req, &init_res, &expect_res)
+        .await;
+}
+
+#[tokio::test]
+async fn test_url_path() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        uri: RUri::from_str("https://localhost/some/path").unwrap(),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("https://localhost/another/path").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test("url_path", &init_req, &expect_req, &init_res, &expect_res)
+        .await;
+}
+
+#[tokio::test]
+async fn test_url_username() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        uri: RUri::from_str("https://dave@localhost").unwrap(),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("https://damo@localhost").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test(
+        "url_username",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_url_passsword() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        uri: RUri::from_str("https://dave:1234@localhost").unwrap(),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("https://dave:abcd@localhost").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test(
+        "url_password",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_url_authority() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        uri: RUri::from_str("https://dave:1234@localhost:1234").unwrap(),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("https://damo:abcd@localhost:4321").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test(
+        "url_authority",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_url_query() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        uri: RUri::from_str("https://dave:1234@localhost:1234").unwrap(),
+        ..cxt.default_req.clone()
+    };
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("https://damo:abcd@localhost:4321").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test(
+        "url_authority",
         &init_req,
         &expect_req,
         &init_res,

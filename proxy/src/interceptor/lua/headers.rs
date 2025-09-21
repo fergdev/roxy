@@ -113,6 +113,11 @@ impl LuaHeaders {
             .map(Self::value_to_string_lossy)
             .ok_or_else(|| LuaError::external("header not found"))
     }
+    fn has(&self, name: &str) -> LuaResult<bool> {
+        let hname = to_header_name_lc(name)?;
+        let g = self.lock()?;
+        Ok(g.contains_key(hname))
+    }
 }
 
 impl LuaUserData for LuaHeaders {
@@ -133,6 +138,7 @@ impl LuaUserData for LuaHeaders {
         });
         methods.add_method_mut("delete", |_, this, name: String| this.delete(&name));
         methods.add_method("get", |_, this, name: String| this.get(&name));
+        methods.add_method("has", |_, this, name: String| this.has(&name));
 
         methods.add_meta_method(LuaMetaMethod::Index, |lua, this, key: LuaValue| {
             info!("something here");

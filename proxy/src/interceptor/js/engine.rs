@@ -19,8 +19,8 @@ use crate::{
         Error, FlowNotify, KEY_EXTENSIONS, KEY_INTERCEPT_REQUEST, KEY_INTERCEPT_RESPONSE,
         KEY_NOTIFY, KEY_START, KEY_STOP, RoxyEngine,
         js::{
-            body::JsBody, flow::JsFlow, headers::JsHeaders, query::UrlSearchParams,
-            request::JsRequest, response::JsResponse, url::Url,
+            body::JsBody, flow::JsFlow, headers::JsHeaders, logger::JsLogger,
+            query::UrlSearchParams, request::JsRequest, response::JsResponse, url::Url,
         },
     },
 };
@@ -85,8 +85,7 @@ enum Cmd {
 }
 
 pub(crate) fn register_classes(ctx: &mut Context) -> JsResult<()> {
-    let console = Console::init(ctx);
-    ctx.register_global_property(Console::NAME, console, Attribute::all())?;
+    Console::register_with_logger(ctx, JsLogger {})?;
     ctx.register_global_class::<UrlSearchParams>()?;
     ctx.register_global_class::<Url>()?;
     ctx.register_global_class::<JsBody>()?;

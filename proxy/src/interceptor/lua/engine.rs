@@ -326,7 +326,7 @@ pub fn intercept_response_inner(
     Ok(())
 }
 
-fn register_functions(
+pub(crate) fn register_functions(
     lua: &Lua,
     notify: Option<mpsc::Sender<FlowNotify>>,
 ) -> Result<(), mlua::Error> {
