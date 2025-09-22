@@ -59,7 +59,7 @@ time = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["async_tokio"] }
-tempfile = "3.11.0"
+tempfile = "3.22.0"
 roxy-servers = { path = "../servers" }
 
 # [[bench]]
