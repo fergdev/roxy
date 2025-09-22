@@ -27,7 +27,7 @@ declare global {
   }
 
   interface Url {
-    protocol: String | undefined;
+    protocol: Protocol | undefined;
     authority: String | undefined;
     username: String | undefined;
     password: String | undefined;
@@ -39,8 +39,17 @@ declare global {
     searchParams: URLSearchParams;
   }
   interface URLSearchParams {
-
+    isEmpty: boolean;
+    clear(): void;
+    append(name: string, value: string): void;
+    get(name: string): string | undefined;
+    set(name: string, value: string): void;
+    delete(name: string): void;
+    has(name: string): boolean;
+    length: number;
+    toString(): string;
   }
+
   interface Response {
     statusCode: number;
     version: Version,
@@ -70,23 +79,27 @@ declare global {
   }
 
   enum Version {
-    Http0_9 = 0,
-    Http1_0 = 1,
-    Http1_1 = 2,
-    Http2_0 = 3,
-    Http3_0 = 4,
+    HTTP0_9 = "HTTP/0.9",
+    HTTP1_0 = "HTTP/1.0",
+    HTTP1_1 = "HTTP/1.1",
+    HTTP2_0 = "HTTP/2.0",
+    HTTP3_0 = "HTTP/3.0",
   }
 
   enum Method {
-    Options = 0,
-    Get = 1,
-    Post = 2,
-    Put = 3,
-    Delete = 4,
-    Head = 5,
-    Trace = 6,
-    Connect = 7,
-    Patch = 8,
+    CONNECT = "CONNECT",
+    DELETE = "DELETE",
+    GET = "GET",
+    HEAD = "HEAD",
+    OPTIONS = "OPTIONS",
+    PATCH = "PATCH",
+    POST = "POST",
+    PUT = "PUT",
+    TRACE = "TRACE",
+  }
+  enum Protocol {
+    HTTP = "http",
+    HTTPS = "https",
   }
 
   var extensions: Extensions[];

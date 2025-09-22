@@ -1,18 +1,25 @@
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::{
+    ops::Deref,
+    sync::{Arc, Mutex, MutexGuard},
+};
 
 use http::Method;
-use pyo3::{PyResult, exceptions::PyTypeError, pyclass, pymethods};
+use pyo3::{
+    Bound, PyAny, PyResult, exceptions::PyTypeError, pyclass, pymethods, types::PyAnyMethods,
+};
 use roxy_shared::version::HttpVersion;
+use tracing::error;
 
 use crate::{
     flow::InterceptedRequest,
-    interceptor::py::{body::PyBody, headers::PyHeaders, url::PyUrl},
+    interceptor::py::{body::PyBody, constants::PyMethod, headers::PyHeaders, url::PyUrl},
 };
 
 #[derive(Debug, Clone)]
 #[pyclass]
 pub(crate) struct PyRequest {
     pub(crate) inner: Arc<Mutex<InterceptedRequest>>,
+    pub(crate) method: Arc<Mutex<PyMethod>>,
     #[pyo3(get)]
     pub(crate) body: PyBody,
     #[pyo3(get)]
@@ -27,6 +34,7 @@ impl Default for PyRequest {
     fn default() -> Self {
         Self {
             inner: Arc::new(Mutex::new(InterceptedRequest::default())),
+            method: Arc::new(Mutex::new(PyMethod::default())),
             body: PyBody::default(),
             url: PyUrl::default(),
             headers: PyHeaders::default(),
@@ -39,6 +47,7 @@ impl PyRequest {
     pub(crate) fn from_req(req: &InterceptedRequest) -> Self {
         PyRequest {
             inner: Arc::new(Mutex::new(req.clone())),
+            method: Arc::new(Mutex::new(PyMethod::from(&req.method))),
             body: PyBody::new(req.body.clone()),
             url: PyUrl::from_ruri(req.uri.clone()),
             headers: PyHeaders::from_headers(req.headers.clone()),
@@ -60,16 +69,40 @@ impl PyRequest {
     }
 
     #[getter]
-    fn method(&self) -> PyResult<String> {
-        let g = self.lock()?;
-        Ok(g.method.to_string())
+    fn method(&self) -> PyResult<PyMethod> {
+        let g = self
+            .method
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))?;
+        error!("get method {}", g);
+        Ok(g.clone())
     }
     #[setter]
-    fn set_method(&self, value: &str) -> PyResult<()> {
-        let mut g = self.lock()?;
-        g.method = Method::try_from(value).map_err(|e| PyTypeError::new_err(e.to_string()))?;
-        Ok(())
+    fn set_method(&mut self, py_val: Bound<PyAny>) -> PyResult<()> {
+        error!("set method {:?}", py_val);
+        let mut g = self
+            .method
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))?;
+        if let Ok(method) = py_val.extract::<PyMethod>() {
+            error!("Assigning enum {method}");
+            *g = method.clone();
+            return Ok(());
+        }
+
+        if let Ok(s) = py_val.extract::<String>() {
+            error!("Assigning string");
+            *g = PyMethod::from(
+                &Method::try_from(s.deref()).map_err(|e| PyTypeError::new_err(e.to_string()))?,
+            );
+            return Ok(());
+        }
+
+        Err(pyo3::exceptions::PyTypeError::new_err(
+            "method must be Method enum or string",
+        ))
     }
+
     #[getter]
     fn version(&self) -> PyResult<String> {
         let g = self.lock()?;

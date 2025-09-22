@@ -35,17 +35,17 @@ const KEY_URL: &str = "url";
 const KEY_METHOD: &str = "method";
 const KEY_VERSION: &str = "version";
 
-const KEY_SEARCH: &str = "search";
-const KEY_SEARCH_PARAMS: &str = "search_params";
 const KEY_HREF: &str = "href";
-const KEY_SCHEME: &str = "scheme";
+const KEY_PROTOCOL: &str = "protocol";
+const KEY_AUTHORITY: &str = "authority";
+const KEY_USERNAME: &str = "username";
+const KEY_PASSWORD: &str = "password";
 const KEY_HOST: &str = "host";
 const KEY_HOSTNAME: &str = "hostname";
 const KEY_PORT: &str = "port";
 const KEY_PATH: &str = "path";
-const KEY_AUTHORITY: &str = "authority";
-const KEY_USERNAME: &str = "username";
-const KEY_PASSWORD: &str = "password";
+const KEY_SEARCH: &str = "search";
+const KEY_SEARCH_PARAMS: &str = "search_params";
 
 const KEY_HEADERS: &str = "headers";
 const KEY_BODY: &str = "body";
@@ -128,6 +128,12 @@ impl From<i32> for FlowNotifyLevel {
 pub struct FlowNotify {
     pub level: FlowNotifyLevel,
     pub msg: String,
+}
+
+impl FlowNotify {
+    fn new(level: FlowNotifyLevel, msg: String) -> Self {
+        Self { level, msg }
+    }
 }
 
 #[derive(Debug)]

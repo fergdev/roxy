@@ -1,14 +1,13 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "roxy-scripting"
+name = "roxy"
 version = "0.1.0"
-description = "Roxy scripting API typings and minimal runtime shim"
+description = "Roxy - Rust (mitm) Proxy"
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "Your Name", email = "you@example.com" }]
-urls = { Homepage = "https://example.com/roxy" }
+authors = [{ name = "Fergus Hewson", email = "ferg.dev@outlook.com" }]
+urls = { Homepage = "https://github.com/fergdev/roxy#readme" }
 requires-python = ">=3.8"
-packages = [{ include = "roxy", from = "src" }]

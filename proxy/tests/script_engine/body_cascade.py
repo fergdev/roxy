@@ -2,7 +2,7 @@ from roxy import Flow, Extension
 
 
 class ChangeBody(Extension):
-    def __init__(self, index: int) -> None:
+    def __init__(self, index: int):
         self.index = index
 
     def request(self, flow: Flow) -> None:

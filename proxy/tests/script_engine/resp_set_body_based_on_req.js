@@ -1,4 +1,4 @@
-/// <reference path="../../script_libs/js/roxy.d.ts" />
+/// <reference path="../../script_libs/js/index.d.ts" />
 /** @type {Extension} */
 const resp_set_body_based_on_req = {
   response(flow) {

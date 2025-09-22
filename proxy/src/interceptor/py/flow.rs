@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-#[pyclass]
+#[pyclass(name = "Flow")]
 #[derive(Default)]
 pub(crate) struct PyFlow {
     #[pyo3(get)]

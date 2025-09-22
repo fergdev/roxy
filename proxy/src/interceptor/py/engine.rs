@@ -14,7 +14,7 @@ use crate::{
 use async_trait::async_trait;
 use pyo3::ffi::c_str;
 use tokio::sync::{Mutex, mpsc::Sender};
-use tracing::{debug, error, trace};
+use tracing::{debug, error, info, trace};
 
 use crate::interceptor::{Error, FlowNotify, KEY_EXTENSIONS, RoxyEngine, py::flow::PyFlow};
 
@@ -211,12 +211,14 @@ fn update_request<'py>(
     )
     .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
-    req.method = py_req
-        .inner
+    let method = py_req
+        .method
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
-        .method
         .clone();
+    info!("assigning {}", method);
+    req.method = method.into();
+    info!("post assing {}", req.method);
 
     req.body = py_req
         .body

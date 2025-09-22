@@ -125,7 +125,7 @@ b = PyBody()
 b.text = "abc\x00def"
 assertEqual(len(b), 7)
 assert isinstance(b.raw, (bytes, bytearray))
-assertEqual(.braw, b"abc\x00def")
+assertEqual(b.raw, b"abc\x00def")
 "#,
         );
     }

@@ -12,6 +12,7 @@ use crate::{
         KEY_START, KEY_STOP, RoxyEngine,
         lua::{
             body::register_body,
+            constants::register_constants,
             flow::{LuaFlow, register_flow},
             headers::register_headers,
             query::register_query,
@@ -392,6 +393,7 @@ pub(crate) fn register_functions(
     register_body(lua)?;
     register_url(lua)?;
     register_query(lua)?;
+    register_constants(lua)?;
 
     Ok(())
 }

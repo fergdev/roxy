@@ -68,12 +68,12 @@ impl PyUrl {
     }
 
     #[getter]
-    fn scheme(&self) -> PyResult<String> {
+    fn protocol(&self) -> PyResult<String> {
         let g = self.lock()?;
         Ok(g.scheme().to_owned())
     }
     #[setter]
-    fn set_scheme(&self, proto: &str) -> PyResult<()> {
+    fn set_protocol(&self, proto: &str) -> PyResult<()> {
         let mut g = self.lock()?;
         url::quirks::set_protocol(&mut g, proto)
             .map_err(|e| PyTypeError::new_err(format!("{e:#?}")))

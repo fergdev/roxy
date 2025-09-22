@@ -1,4 +1,4 @@
-/// <reference path="../../script_libs/js/roxy.d.ts" />
+/// <reference path="../../script_libs/js/index.d.ts" />
 /** @type {Extension} */
 const header_length = {
   request(flow) {

@@ -14,7 +14,7 @@ use crate::interceptor::KEY_HREF;
 use crate::interceptor::KEY_PASSWORD;
 use crate::interceptor::KEY_PATH;
 use crate::interceptor::KEY_PORT;
-use crate::interceptor::KEY_SCHEME;
+use crate::interceptor::KEY_PROTOCOL;
 use crate::interceptor::KEY_SEARCH;
 use crate::interceptor::KEY_SEARCH_PARAMS;
 use crate::interceptor::KEY_USERNAME;
@@ -185,7 +185,7 @@ impl UserData for LuaUrl {
             let k = s.to_str()?;
             let out = match &*k {
                 KEY_HREF => Value::String(lua.create_string(&this.get_href()?)?),
-                KEY_SCHEME => Value::String(lua.create_string(&this.get_scheme()?)?),
+                KEY_PROTOCOL => Value::String(lua.create_string(&this.get_scheme()?)?),
                 KEY_USERNAME => Value::String(lua.create_string(&this.get_username()?)?),
                 KEY_PASSWORD => Value::String(lua.create_string(&this.get_password()?)?),
                 KEY_HOST => Value::String(lua.create_string(&this.get_host()?)?),
@@ -214,7 +214,7 @@ impl UserData for LuaUrl {
                 };
                 match (k.as_str(), val) {
                     (KEY_HREF, Value::String(s)) => this.set_href(s.to_str()?.as_ref())?,
-                    (KEY_SCHEME, Value::String(s)) => this.set_scheme(s.to_str()?.as_ref())?,
+                    (KEY_PROTOCOL, Value::String(s)) => this.set_scheme(s.to_str()?.as_ref())?,
                     (KEY_USERNAME, Value::String(s)) => this.set_username(s.to_str()?.as_ref())?,
                     (KEY_PASSWORD, Value::String(s)) => this.set_password(s.to_str()?.as_ref())?,
                     (KEY_AUTHORITY, Value::String(s)) => {

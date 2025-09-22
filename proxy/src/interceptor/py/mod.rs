@@ -1,7 +1,10 @@
 pub mod body;
+mod constants;
 pub mod engine;
+mod extension;
 mod flow;
 mod headers;
+mod notify;
 mod query;
 mod request;
 mod response;
@@ -16,6 +19,9 @@ use tracing::error;
 use crate::interceptor::py::writer::{WriterStdErr, WriterStdOut};
 #[pymodule]
 mod roxy {
+
+    #[pymodule_export]
+    use super::extension::Extension;
 
     #[pymodule_export]
     use super::body::PyBody;
@@ -37,6 +43,18 @@ mod roxy {
 
     #[pymodule_export]
     use super::request::PyRequest;
+
+    #[pymodule_export]
+    use super::constants::PyMethod;
+
+    #[pymodule_export]
+    use super::constants::PyProtocol;
+
+    #[pymodule_export]
+    use super::constants::PyVersion;
+
+    #[pymodule_export]
+    use super::notify::notify;
 }
 
 static INIT: Once = Once::new();
