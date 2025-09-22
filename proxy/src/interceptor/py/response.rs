@@ -83,6 +83,9 @@ impl PyResponse {
         res.version = value;
         Ok(())
     }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self:?}"))
+    }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -111,9 +114,9 @@ _ = r.version
 from roxy import PyResponse
 r = PyResponse()
 r.status = 204
-assert r.status == 204
+assertEqual(r.status, 204)
 r.status = 418
-assert r.status == 418
+assertEqual(r.status, 418)
 "#,
         );
     }
@@ -141,11 +144,11 @@ assert threw, "setting invalid HTTP status should raise"
 from roxy import PyResponse
 r = PyResponse()
 r.version = "HTTP/1.1"
-assert r.version == "HTTP/1.1"
+assertEqual(r.version, "HTTP/1.1")
 r.version = "HTTP/2.0"
-assert r.version == "HTTP/2.0"
+assertEqual(r.version, "HTTP/2.0")
 r.version = "HTTP/3.0"
-assert r.version == "HTTP/3.0"
+assertEqual(r.version, "HTTP/3.0")
 "#,
         );
     }

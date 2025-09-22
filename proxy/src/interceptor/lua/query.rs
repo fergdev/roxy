@@ -16,6 +16,33 @@ impl LuaQueryView {
             .lock()
             .map_err(|e| LuaError::external(format!("lock poisoned: {e}")))
     }
+
+    fn len(&self) -> usize {
+        if let Ok(req) = self.uri.lock() {
+            req.query_pairs().count()
+        } else {
+            0
+        }
+    }
+
+    fn to_string(&self) -> LuaResult<String> {
+        let req = self
+            .uri
+            .lock()
+            .map_err(|e| mlua::Error::external(format!("lock poisoned: {e}")))?;
+        let encoded = req
+            .query()
+            .map(|q| {
+                let mut ser = Serializer::new(String::new());
+                for (k, v) in parse_qs(q.as_bytes()) {
+                    ser.append_pair(k.as_ref(), v.as_ref());
+                }
+                ser.finish()
+            })
+            .unwrap_or_else(String::new);
+        Ok(encoded)
+    }
+
     fn with_pairs_mut<F, R>(&self, f: F) -> LuaResult<R>
     where
         F: FnOnce(&mut Vec<(String, String)>) -> LuaResult<R>,
@@ -95,7 +122,7 @@ impl UserData for LuaQueryView {
 
         m.add_method("clear", |_, this, ()| {
             let mut req = this.lock()?;
-            req.query_pairs_mut().clear();
+            req.set_query(None);
             Ok(())
         });
 
@@ -157,23 +184,6 @@ impl UserData for LuaQueryView {
                 Ok(Value::Nil)
             }
         });
-        m.add_method("to_string", |_, this, ()| {
-            let req = this
-                .uri
-                .lock()
-                .map_err(|e| mlua::Error::external(format!("lock poisoned: {e}")))?;
-            let encoded = req
-                .query()
-                .map(|q| {
-                    let mut ser = Serializer::new(String::new());
-                    for (k, v) in parse_qs(q.as_bytes()) {
-                        ser.append_pair(k.as_ref(), v.as_ref());
-                    }
-                    ser.finish()
-                })
-                .unwrap_or_else(String::new);
-            Ok(encoded)
-        });
 
         m.add_meta_function(
             MetaMethod::NewIndex,
@@ -199,6 +209,8 @@ impl UserData for LuaQueryView {
                 })
             },
         );
+        m.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| this.to_string());
+        m.add_meta_method(LuaMetaMethod::Len, |_, this, ()| Ok(this.len()));
     }
 }
 
@@ -221,14 +233,7 @@ pub fn register_query(lua: &Lua) -> LuaResult<LuaTable> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use super::register_query;
-    use mlua::prelude::*;
-
-    fn with_lua<F: FnOnce(&Lua) -> LuaResult<()>>(f: F) {
-        let lua = Lua::new();
-        register_query(&lua).expect("register Query");
-        f(&lua).expect("lua ok");
-    }
+    use crate::interceptor::lua::tests::with_lua;
 
     #[test]
     fn q01_construct_get_get_all_has() {

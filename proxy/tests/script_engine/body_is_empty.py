@@ -1,10 +1,10 @@
 class ClearBody:
     def request(self, flow):
-        if flow.request.body.is_empty:
+        if not flow.request.body:
             flow.request.body.text = "empty request"
 
     def response(self, flow):
-        if flow.response.body.is_empty:
+        if not flow.response.body:
             flow.response.body.text = "empty response"
 
 

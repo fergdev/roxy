@@ -1,4 +1,4 @@
-globalThis.Extensions = [
+globalThis.extensions = [
   {
     request(flow) {
       flow.request.body.clear();

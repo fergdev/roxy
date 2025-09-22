@@ -38,25 +38,8 @@ js_class! {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-
-    use crate::interceptor::js::engine::register_classes;
-    use boa_engine::{Context, Source};
-
-    fn setup() -> Context {
-        crate::init_test_logging();
-        let mut ctx = Context::default();
-
-        // JS assert helper
-        ctx.eval(Source::from_bytes(
-            r#"
-            function must(cond, msg) { if (!cond) throw new Error(msg || "assert failed"); }
-            "#,
-        ))
-        .unwrap();
-
-        register_classes(&mut ctx).expect("register classes");
-        ctx
-    }
+    use crate::interceptor::js::tests::setup;
+    use boa_engine::Source;
 
     #[test]
     fn flow_constructor_creates_default_instance() {
@@ -65,7 +48,7 @@ mod tests {
             .eval(Source::from_bytes(
                 r#"
                 const f = new Flow();
-                must(typeof f === "object", "Flow() should construct an object");
+                assertTrue(typeof f === "object", "Flow() should construct an object");
                 // Just return something so we can assert in Rust too
                 true
                 "#,
@@ -80,8 +63,8 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const flow = new Flow();
-            must(typeof flow.request === "object", "flow.request is object");
-            must(typeof flow.response === "object", "flow.response is object");
+            assertTrue(typeof flow.request === "object", "flow.request is object");
+            assertTrue(typeof flow.response === "object", "flow.response is object");
             "#,
         ))
         .unwrap();
@@ -94,8 +77,8 @@ mod tests {
             r#"
             const flow = new Flow();
             const r = flow.request;
-            must(r && typeof r === "object", "request is object");
-            try { void r.method; } catch (e) { must(false, "request.method should be readable"); }
+            assertTrue(r && typeof r === "object", "request is object");
+            try { void r.method; } catch (e) { assertTrue(false, "request.method should be readable"); }
             "#,
         ))
         .unwrap();
@@ -108,9 +91,8 @@ mod tests {
             r#"
             const flow = new Flow();
             const res = flow.response;
-            must(res && typeof res === "object", "response is object");
-            // Non-throwing accessor sanity check (adjust if your API differs)
-            try { void res.status; } catch (e) { must(false, "response.status should be readable"); }
+            assertTrue(res && typeof res === "object", "response is object");
+            try { void res.status; } catch (e) { assertTrue(false, "response.status should be readable"); }
             "#,
         ))
         .unwrap();
@@ -124,9 +106,9 @@ mod tests {
             const flow = new Flow();
             const r1 = flow.request;
             const r2 = flow.request;
-            must(r1 && r2, "both requests exist");
-            must(typeof r1 === "object" && typeof r2 === "object", "both are objects");
-            try { void r1.method; void r2.method; } catch (e) { must(false, "request accessors ok"); }
+            assertTrue(r1 && r2, "both requests exist");
+            assertTrue(typeof r1 === "object" && typeof r2 === "object", "both are objects");
+            try { void r1.method; void r2.method; } catch (e) { assertTrue(false, "request accessors ok"); }
             "#,
         ))
         .unwrap();

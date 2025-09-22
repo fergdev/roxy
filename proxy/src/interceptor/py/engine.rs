@@ -3,7 +3,8 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyList},
 };
-use std::{ffi::CString, sync::Arc};
+use roxy_shared::uri::RUri;
+use std::{ffi::CString, str::FromStr, sync::Arc};
 
 use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
@@ -200,12 +201,15 @@ fn update_request<'py>(
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .version;
-    req.uri = py_req
-        .url
-        .uri
-        .lock()
-        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
-        .clone();
+    req.uri = RUri::from_str(
+        py_req
+            .url
+            .inner
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("{e}")))?
+            .as_str(),
+    )
+    .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
     req.method = py_req
         .inner

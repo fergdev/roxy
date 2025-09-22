@@ -2,59 +2,30 @@ use pyo3::prelude::*;
 use std::sync::{Arc, Mutex};
 
 use pyo3::{exceptions::PyTypeError, types::PyList};
-use url::form_urlencoded::{Serializer, parse as parse_qs};
-
-use roxy_shared::uri::RUri;
-
-fn read_pairs(uri: &RUri) -> Vec<(String, String)> {
-    uri.inner
-        .query()
-        .map(|q| {
-            parse_qs(q.as_bytes())
-                .map(|(k, v)| (k.into_owned(), v.into_owned()))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn write_pairs(parts: &mut http::uri::Parts, pairs: &[(String, String)]) -> PyResult<()> {
-    let path = parts
-        .path_and_query
-        .as_ref()
-        .map(|pq| pq.path().to_owned())
-        .unwrap_or("/".to_string());
-    let mut ser = Serializer::new(String::new());
-    for (k, v) in pairs {
-        ser.append_pair(k, v);
-    }
-    let qs = ser.finish();
-    let pq = if qs.is_empty() {
-        http::uri::PathAndQuery::from_maybe_shared(path)
-    } else {
-        http::uri::PathAndQuery::from_maybe_shared(format!("{path}?{qs}"))
-    }
-    .map_err(|e| PyTypeError::new_err(e.to_string()))?;
-    parts.path_and_query = Some(pq);
-    Ok(())
-}
+use url::Url;
 
 #[pyclass(name = "URLSearchParams")]
 pub struct PyURLSearchParams {
-    uri: Arc<Mutex<RUri>>,
+    uri: Arc<Mutex<Url>>,
 }
 
 impl Default for PyURLSearchParams {
+    #[allow(clippy::expect_used)]
     fn default() -> Self {
-        Self::new(Arc::new(Mutex::new(RUri::default())))
+        Self {
+            uri: Arc::new(Mutex::new(
+                Url::parse("http://localhost/").expect("default URL is valid"),
+            )),
+        }
     }
 }
 
 impl PyURLSearchParams {
-    pub fn new(uri: Arc<Mutex<RUri>>) -> Self {
+    pub fn new(uri: Arc<Mutex<Url>>) -> Self {
         Self { uri }
     }
 
-    fn lock(&self) -> PyResult<std::sync::MutexGuard<'_, RUri>> {
+    fn lock(&self) -> PyResult<std::sync::MutexGuard<'_, Url>> {
         self.uri
             .lock()
             .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))
@@ -64,14 +35,19 @@ impl PyURLSearchParams {
     where
         F: FnOnce(&mut Vec<(String, String)>) -> PyResult<R>,
     {
-        let mut guard = self.lock()?;
-        let mut parts = guard.inner.clone().into_parts();
-        let mut pairs = read_pairs(&guard);
+        let mut url = self.lock()?;
+        let mut pairs: Vec<(String, String)> = url
+            .query_pairs()
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+
         let out = f(&mut pairs)?;
-        write_pairs(&mut parts, &pairs)?;
-        *guard = RUri::new(
-            http::Uri::from_parts(parts).map_err(|e| PyTypeError::new_err(e.to_string()))?,
-        );
+        {
+            let mut qp = url.query_pairs_mut();
+            qp.clear();
+            qp.extend_pairs(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+        }
+
         Ok(out)
     }
 }
@@ -80,22 +56,13 @@ impl PyURLSearchParams {
 impl PyURLSearchParams {
     #[new]
     #[pyo3(signature = (value=None))]
+    #[allow(clippy::expect_used)]
     fn new_with_str(value: Option<&str>) -> PyResult<Self> {
-        let uri = if let Some(s) = value {
-            let s = s.strip_prefix('?').unwrap_or(s);
-            let full = format!("http://dummy/?{s}");
-            match full.parse() {
-                Ok(uri) => RUri::new(uri),
-                Err(e) => {
-                    return Err(PyTypeError::new_err(format!(
-                        "failed to parse URLSearchParams from '{s}': {e}"
-                    )));
-                }
-            }
-        } else {
-            RUri::default()
-        };
-        Ok(Self::new(Arc::new(Mutex::new(uri))))
+        let mut url = Url::parse("http://localhost/").expect("default URL is valid");
+        if let Some(s) = value {
+            url::quirks::set_search(&mut url, s);
+        }
+        Ok(Self::new(Arc::new(Mutex::new(url))))
     }
 
     fn set(&self, key: &str, value: &Bound<PyAny>) -> PyResult<()> {
@@ -124,9 +91,9 @@ impl PyURLSearchParams {
 
     fn get(&self, key: &str) -> PyResult<Option<String>> {
         let guard = self.lock()?;
-        for (k, v) in read_pairs(&guard) {
+        for (k, v) in guard.query_pairs() {
             if k == key {
-                return Ok(Some(v));
+                return Ok(Some(v.to_string()));
             }
         }
         Ok(None)
@@ -134,23 +101,23 @@ impl PyURLSearchParams {
 
     fn get_all<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyList>> {
         let guard = self.lock()?;
-        let vals: Vec<String> = read_pairs(&guard)
+        let vals: Vec<String> = guard
+            .query_pairs()
             .into_iter()
-            .filter_map(|(k, v)| (k == key).then_some(v))
-            .collect();
+            .filter_map(|(k, v)| (k == key).then_some(v.to_string()))
+            .collect::<Vec<String>>();
         PyList::new(py, vals)
     }
 
     fn has(&self, key: &str) -> PyResult<bool> {
         let guard = self.lock()?;
-        Ok(read_pairs(&guard).iter().any(|(k, _)| k == key))
+        Ok(guard.query_pairs().any(|(k, _)| k == key))
     }
 
     fn clear(&self) -> PyResult<()> {
-        self.with_pairs_mut(|pairs| {
-            pairs.clear();
-            Ok(())
-        })
+        let mut guard = self.lock()?;
+        guard.set_query(None);
+        Ok(())
     }
 
     fn sort(&self) -> PyResult<()> {
@@ -160,9 +127,13 @@ impl PyURLSearchParams {
         })
     }
 
-    fn to_string(&self) -> PyResult<String> {
+    fn __str__(&self) -> PyResult<String> {
         let guard = self.lock()?;
-        Ok(guard.inner.query().unwrap_or("").to_string())
+        Ok(guard.query().unwrap_or("").to_owned())
+    }
+    fn __len__(&self) -> PyResult<usize> {
+        let guard = self.lock()?;
+        Ok(guard.query_pairs().count())
     }
 
     fn __getitem__(&self, key: &str) -> PyResult<Option<String>> {
@@ -173,10 +144,6 @@ impl PyURLSearchParams {
     }
     fn __delitem__(&self, key: &str) -> PyResult<()> {
         self.delete(key)
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        self.to_string()
     }
 }
 
@@ -191,10 +158,22 @@ mod tests {
             r#"
 from roxy import URLSearchParams as P
 p1 = P("a=1&b=2")
-assert str(p1) == "a=1&b=2"
+assertEqual(str(p1), "a=1&b=2")
 p2 = P("?x=9&x=10")
-assert p2.get("x") == "9"
-assert p2.get_all("x") == ["9","10"]
+assertEqual(p2.get("x"), "9")
+assertEqual(p2.get_all("x"), ["9","10"])
+"#,
+        );
+    }
+    #[test]
+    fn is_empty() {
+        with_module(
+            r#"
+from roxy import URLSearchParams as P
+p1 = P("a=1&b=2")
+assertFalse(not p1)
+p1.clear()
+assertTrue(not p1)
 "#,
         );
     }
@@ -205,11 +184,11 @@ assert p2.get_all("x") == ["9","10"]
             r#"
 from roxy import URLSearchParams as P
 p = P("foo=1&bar=2")
-assert p.get("foo") == "1"
+assertEqual(p.get("foo"), "1")
 p.set("foo", "9")
-assert p.get("foo") == "9"
+assertEqual(p.get("foo"), "9")
 p.append("foo", "10")
-assert p.get_all("foo") == ["9","10"]
+assertEqual(p.get_all("foo"), ["9","10"])
 assert p.has("bar") is True
 p.delete("foo")
 assert p.get("foo") is None
@@ -225,9 +204,9 @@ assert p.has("foo") is False
 from roxy import URLSearchParams as P
 p = P("z=3&b=2&a=1&b=1")
 p.sort()
-assert str(p) == "a=1&b=1&b=2&z=3"
+assertEqual(str(p), "a=1&b=1&b=2&z=3")
 p.clear()
-assert str(p) == ""
+assertEqual(str(p), "")
 assert p.has("a") is False
 "#,
         );
@@ -239,24 +218,36 @@ assert p.has("a") is False
             r#"
 from roxy import URLSearchParams as P
 p = P("x=1")
-assert p["x"] == "1"
+assertEqual(p["x"], "1")
 p["x"] = "42"
-assert p.get("x") == "42"
+assertEqual(p.get("x"), "42")
 del p["x"]
 assert p.get("x") is None
-assert str(p) == ""
+assertEqual(str(p), "")
 "#,
         );
     }
 
     #[test]
-    fn p05_to_string_and_str_match() {
+    fn p05_str() {
         with_module(
             r#"
 from roxy import URLSearchParams as P
 p = P("a=1&b=2")
-assert p.to_string() == "a=1&b=2"
-assert str(p) == "a=1&b=2"
+assertEqual(str(p), "a=1&b=2")
+"#,
+        );
+    }
+
+    #[test]
+    fn not_is_empty() {
+        with_module(
+            r#"
+from roxy import URLSearchParams as P
+p = P("a=1&b=2")
+assertFalse(not p, "Not P on non empty should yield false");
+p.clear()
+assertTrue(not p, "Not P on empty should yield true");
 "#,
         );
     }
@@ -267,10 +258,10 @@ assert str(p) == "a=1&b=2"
             r#"
 from roxy import URLSearchParams as P
 p = P()
-p.set("n", 123)          # -> "123"
-p.append("n", True)      # -> "True"
-p.append("n", 4.5)       # -> "4.5"
-assert p.get_all("n") == ["123","True","4.5"]
+p.set("n", 123)
+p.append("n", True)
+p.append("n", 4.5)
+assertEqual(p.get_all("n"), ["123","True","4.5"])
 "#,
         );
     }

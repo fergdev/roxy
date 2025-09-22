@@ -1,7 +1,7 @@
 Extensions = {
 	{
 		request = function(flow)
-			flow.request.url.host = "example.com"
+			flow.request.body.text = tostring(flow.request.url)
 		end,
 	},
 }

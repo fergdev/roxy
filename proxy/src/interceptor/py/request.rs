@@ -84,6 +84,9 @@ impl PyRequest {
         g.version = value;
         Ok(())
     }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self:?}"))
+    }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -111,7 +114,7 @@ assert hasattr(r, "version")
 from roxy import PyRequest
 r = PyRequest()
 r.method = "POST"
-assert r.method == "POST"
+assertEqual(r.method, "POST")
 "#,
         );
     }
@@ -139,9 +142,9 @@ assert threw, "setting invalid HTTP method should raise"
 from roxy import PyRequest
 r = PyRequest()
 r.version = "HTTP/1.1"
-assert r.version == "HTTP/1.1"
+assertEqual(r.version, "HTTP/1.1")
 r.version = "HTTP/2.0"
-assert r.version == "HTTP/2.0"
+assertEqual(r.version, "HTTP/2.0")
 "#,
         );
     }

@@ -1,4 +1,4 @@
-globalThis.Extensions = [{
+globalThis.extensions = [{
   request(flow) {
     console.log(flow.request.url.host);
     if (flow.request.url.host = "localhost:1234") {

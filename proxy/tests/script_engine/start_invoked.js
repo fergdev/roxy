@@ -1,5 +1,5 @@
 let count = 0
-globalThis.Extensions = [{
+globalThis.extensions = [{
   start() {
     count = 10
   },

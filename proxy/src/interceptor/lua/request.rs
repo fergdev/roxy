@@ -147,6 +147,8 @@ impl LuaUserData for LuaRequest {
                 Ok(())
             },
         );
+        // TODO: implement
+        // m.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| this.to_string());
     }
 }
 
@@ -164,20 +166,7 @@ pub fn register_request(lua: &Lua) -> LuaResult<LuaTable> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::interceptor::lua::{
-        body::register_body, headers::register_headers, request::register_request,
-        url::register_url,
-    };
-
-    fn with_lua<F: FnOnce(&Lua) -> LuaResult<()>>(f: F) {
-        let lua = Lua::new();
-        register_headers(&lua).unwrap();
-        register_url(&lua).unwrap();
-        register_body(&lua).unwrap();
-        register_request(&lua).unwrap();
-        f(&lua).expect("lua script should run ok");
-    }
+    use crate::interceptor::lua::tests::with_lua;
 
     #[test]
     fn r01_constructor_and_types() {
@@ -185,7 +174,6 @@ mod tests {
             lua.load(
                 r#"
                 local req = Request.new()
-                -- Ensure properties exist and are the right userdata types
                 assert(req.method ~= nil, "method should exist")
                 assert(req.version ~= nil, "version should exist")
                 assert(req.url ~= nil, "url should exist")
@@ -193,10 +181,8 @@ mod tests {
                 assert(req.trailers ~= nil, "trailers should exist")
                 assert(req.body ~= nil, "body should exist")
 
-                -- Basic shape checks (the actual strings can vary by defaults)
                 assert(type(req.method) == "string")
                 assert(type(req.version) == "string")
-                -- url/headers/trailers/body are userdata
                 assert(type(req.url) == "userdata")
                 assert(type(req.headers) == "userdata")
                 assert(type(req.trailers) == "userdata")
@@ -252,28 +238,24 @@ mod tests {
                 r#"
                 local req = Request.new()
 
-                -- default empty
-                assert(req.body:is_empty() == true)
-                assert(req.body:len() == 0)
+                assert(req.body.is_empty == true)
+                assert(#req.body == 0)
 
-                -- text setter/getter sugar
                 req.body.text = "hello\x00world"
                 assert(req.body.text == "hello\x00world")
-                assert(req.body:is_empty() == false)
-                assert(req.body:len() == 11)
+                assert(req.body.is_empty == false)
+                assert(#req.body == 11)
 
-                -- raw getter/setter (string of bytes)
                 local raw = req.body.raw
                 assert(type(raw) == "string" and #raw == 11)
 
-                req.body:set_raw("\1\2\3")
-                assert(req.body:len() == 3)
+                req.body.raw = "\1\2\3"
+                assert(#req.body == 3)
                 assert(req.body.raw == "\1\2\3")
 
-                -- set_text again should overwrite
-                req.body:set_text("abc")
+                req.body.text = "abc"
                 assert(req.body.text == "abc")
-                assert(req.body:len() == 3)
+                assert(#req.body == 3)
             "#,
             )
             .exec()
@@ -310,7 +292,7 @@ mod tests {
                 u.host = "example.org"
                 u.path = "/a/b"
                 u.search = "?x=1&x=2"
-                local href = u:to_string()
+                local href = tostring(u)
                 assert(href:find("^https://example%.org/") ~= nil)
                 assert(href:find("x=1") ~= nil and href:find("x=2") ~= nil)
             "#,
@@ -374,7 +356,7 @@ mod tests {
                 assert(req.body.text == "payload")
 
                 -- tweak URL query
-                local q = req.url.searchParams
+                local q = req.url.search_params
                 q:set("x", "1")
                 q:append("x", "2")
                 local qs = q:to_string()

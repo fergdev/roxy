@@ -11,6 +11,7 @@ use crate::{
 mod js;
 mod lua;
 mod py;
+mod util;
 
 use std::{fmt::Debug, sync::Arc};
 use tokio::sync::{
@@ -34,6 +35,9 @@ const KEY_URL: &str = "url";
 const KEY_METHOD: &str = "method";
 const KEY_VERSION: &str = "version";
 
+const KEY_SEARCH: &str = "search";
+const KEY_SEARCH_PARAMS: &str = "search_params";
+const KEY_HREF: &str = "href";
 const KEY_SCHEME: &str = "scheme";
 const KEY_HOST: &str = "host";
 const KEY_HOSTNAME: &str = "hostname";

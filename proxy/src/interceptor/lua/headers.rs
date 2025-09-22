@@ -2,7 +2,6 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use http::header::{HeaderMap, HeaderName, HeaderValue};
 use mlua::prelude::*;
-use tracing::info;
 
 use crate::interceptor::lua::util::{KEY_NEW, lua_val_to_str};
 
@@ -118,6 +117,19 @@ impl LuaHeaders {
         let g = self.lock()?;
         Ok(g.contains_key(hname))
     }
+    fn len(&self) -> LuaResult<usize> {
+        let g = self.lock()?;
+        Ok(g.len())
+    }
+    fn to_string(&self) -> LuaResult<String> {
+        let g = self.lock()?;
+        Ok(format!("{g:?}"))
+    }
+    fn clear(&self) -> LuaResult<()> {
+        let mut g = self.lock()?;
+        g.clear();
+        Ok(())
+    }
 }
 
 impl LuaUserData for LuaHeaders {
@@ -139,13 +151,13 @@ impl LuaUserData for LuaHeaders {
         methods.add_method_mut("delete", |_, this, name: String| this.delete(&name));
         methods.add_method("get", |_, this, name: String| this.get(&name));
         methods.add_method("has", |_, this, name: String| this.has(&name));
+        methods.add_method("clear", |_, this, ()| this.clear());
 
         methods.add_meta_method(LuaMetaMethod::Index, |lua, this, key: LuaValue| {
-            info!("something here");
             if let LuaValue::String(s) = key {
                 let k = s.to_str()?;
                 match &*k {
-                    "get_all" | "set_all" | "append" | "items" => {
+                    "get_all" | "set_all" | "append" => {
                         let ud = lua.create_userdata(this.clone())?;
                         let f: LuaFunction = ud.get(k)?;
                         return Ok(LuaValue::Function(f));
@@ -161,7 +173,6 @@ impl LuaUserData for LuaHeaders {
         methods.add_meta_method_mut(
             LuaMetaMethod::NewIndex,
             |_, this, (key, val): (LuaValue, LuaValue)| {
-                info!("meta method");
                 let name = match key {
                     LuaValue::String(s) => s.to_str()?.to_string(),
                     _ => return Err(LuaError::external("header name must be a string")),
@@ -175,6 +186,8 @@ impl LuaUserData for LuaHeaders {
                 }
             },
         );
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| this.to_string());
+        methods.add_meta_method(LuaMetaMethod::Len, |_, this, ()| Ok(this.len()));
     }
 }
 
@@ -189,20 +202,14 @@ pub(crate) fn register_headers(lua: &Lua) -> LuaResult<LuaTable> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    fn with_lua<F: FnOnce(&Lua) -> LuaResult<()>>(f: F) {
-        let lua = Lua::new();
-        register_headers(&lua).unwrap();
-        f(&lua).expect("lua ok");
-    }
+    use crate::interceptor::lua::tests::with_lua;
 
     #[test]
     fn h01_set_and_get_single_via_methods() {
         with_lua(|lua| {
             lua.load(
                 r#"
-                local h = Headers.new({})           -- start empty
+                local h = Headers.new({})
                 h:set("Content-Type", "text/plain")
                 assert(h:get("content-type") == "text/plain")
                 local all = h:get_all("CONTENT-TYPE")

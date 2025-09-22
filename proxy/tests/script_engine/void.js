@@ -1,4 +1,4 @@
-globalThis.Extensions = [{
+globalThis.extensions = [{
   request(flow) {
   },
   response(flow) {

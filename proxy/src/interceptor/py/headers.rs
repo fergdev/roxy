@@ -88,12 +88,6 @@ impl PyHeaders {
         Ok(())
     }
 
-    fn clear(&self, _py: Python<'_>) -> PyResult<()> {
-        let mut g = self.lock()?;
-        g.clear();
-        Ok(())
-    }
-
     fn get(&self, _py: Python<'_>, name: &str) -> PyResult<Option<String>> {
         let name = to_header_name(name)?;
         let g = self.lock()?;
@@ -104,6 +98,21 @@ impl PyHeaders {
         let name = to_header_name(name)?;
         let g = self.lock()?;
         Ok(g.contains_key(name))
+    }
+
+    fn clear(&self) -> PyResult<()> {
+        let mut guard = self.lock()?;
+        guard.clear();
+        Ok(())
+    }
+
+    fn __str__(&self) -> PyResult<String> {
+        let guard = self.lock()?;
+        Ok(format!("{:?}", *guard))
+    }
+    fn __len__(&self) -> PyResult<usize> {
+        let g = self.lock()?;
+        Ok(g.len())
     }
 }
 
@@ -120,9 +129,23 @@ from roxy import PyHeaders
 h = PyHeaders()
 h.append("x-test", "v1")
 h.append("x-test-2", "v2")
-assert h.get("x-test") == "v1"
-assert h.get("x-test-2") == "v2"
+assertEqual(h.get("x-test"), "v1")
+assertEqual(h.get("x-test-2"), "v2")
 assert h.get("missing") is None
+"#,
+        );
+    }
+    #[test]
+    fn pyheaders_is_empty() {
+        with_module(
+            r#"
+from roxy import PyHeaders
+h = PyHeaders()
+h.append("x-test", "v1")
+h.append("x-test-2", "v2")
+assertFalse(not h)
+h.clear()
+assertTrue(not h)
 "#,
         );
     }
@@ -135,7 +158,7 @@ from roxy import PyHeaders
 h = PyHeaders()
 h.append("x", "a")
 h.set("x", "b")      # must overwrite
-assert h.get("x") == "b"
+assertEqual(h.get("x"), "b")
 "#,
         );
     }

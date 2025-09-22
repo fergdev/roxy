@@ -1,7 +1,9 @@
 Extensions = {
 	{
 		request = function(flow)
-			flow.request.method = "POST"
+			if flow.request.method == "GET" then
+				flow.request.method = "POST"
+			end
 		end,
 	},
 }

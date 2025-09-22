@@ -46,7 +46,7 @@ Roxy converts types to idiomatic host-language objects (tables in Lua, dict-like
 {{#tab name=JS}}
 
 ```js
-module.exports = {
+globalThis.extensions = [{
   start() {
     this.count = 0;
     console.log("counter started");
@@ -56,7 +56,7 @@ module.exports = {
     this.count += 1;
     console.log(`seen ${this.count} requests`);
   }
-};
+}];
 ```
 
 {{#endtab}}
@@ -64,13 +64,16 @@ module.exports = {
 
 ```lua
 local count = 0
-function request(flow)
-  count = count + 1
-  flow.request.headers["x-roxy-example"] = "hello-from-roxy"
-end
 Extensions = {
  {
-  request = request,
+  start = function(self)
+    count = 0
+    print("counter started")
+  end,
+  request = function request(flow)
+    count = count + 1
+    print("seen %d requests", self.count)
+  end
  },
 }
 ```
@@ -79,19 +82,17 @@ Extensions = {
 {{#tab name=Python}}
 
 ```python
-import logging
-
 class Counter:
     def __init__(self):
         self.count = 0
 
     def start(self):
-        logging.info("counter started")
+        print("counter started")
         self.count = 0
 
     def request(self, flow):
         self.count += 1
-        logging.info("seen %d requests", self.count)
+        print("seen %d requests", self.count)
 
 Extensions = [Counter()]
 ```

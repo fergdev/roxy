@@ -11,7 +11,7 @@ use crate::{
     interceptor::js::{
         body::JsBody,
         headers::{HeaderList, JsHeaders},
-        url::Url,
+        url::JsUrl,
     },
 };
 
@@ -57,7 +57,7 @@ fn make_url_for_request(ctx: &mut Context, req: &InterceptedRequest) -> JsResult
     let href = req.uri.to_string();
     let base = "http://localhost";
 
-    let url_ctor = ctx.global_object().get(js_string!(Url::NAME), ctx)?;
+    let url_ctor = ctx.global_object().get(js_string!(JsUrl::NAME), ctx)?;
     let url_obj = url_ctor
         .as_object()
         .ok_or_else(|| js_error!("URL constructor missing"))?
@@ -149,7 +149,7 @@ js_class! {
                     let href = value.to_string(context)?.to_std_string_escaped();
                     let url_obj = {
                         let base = "http://localhost";
-                        let url_ctor = context.global_object().get(js_string!(Url::NAME), context)?;
+                        let url_ctor = context.global_object().get(js_string!(JsUrl::NAME), context)?;
                         url_ctor.as_object()
                             .ok_or_else(|| js_error!("URL constructor missing"))?
                             .construct(&[
@@ -178,20 +178,8 @@ js_class! {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use crate::interceptor::js::engine::register_classes;
-    use boa_engine::{Context, JsValue, Source};
-
-    fn setup() -> Context {
-        let mut ctx = Context::default();
-        ctx.eval(Source::from_bytes(
-            r#"
-            function must(cond, msg) { if (!cond) throw new Error(msg || "assert failed"); }
-            "#,
-        ))
-        .unwrap();
-        register_classes(&mut ctx).expect("register classes");
-        ctx
-    }
+    use crate::interceptor::js::tests::setup;
+    use boa_engine::{JsValue, Source};
 
     #[test]
     fn request_constructor_default_succeeds() {
@@ -200,10 +188,10 @@ mod tests {
             .eval(Source::from_bytes(
                 r#"
                 const r = new Request();
-                must(typeof r === "object", "Request should construct an object");
+                assertTrue(typeof r === "object", "Request should construct an object");
                 // default method and version are readable (format, not asserting exact)
-                must(typeof r.method === "string", "method is string");
-                must(typeof r.version === "string", "version is string");
+                assertTrue(typeof r.method === "string", "method is string");
+                assertTrue(typeof r.version === "string", "version is string");
                 true
             "#,
             ))
@@ -218,7 +206,7 @@ mod tests {
             r#"
             const r = new Request();
             r.method = "POST";
-            must(r.method === "POST", "method roundtrip");
+            assertEqual(r.method, "POST", "method roundtrip");
             "#,
         ))
         .unwrap();
@@ -232,9 +220,9 @@ mod tests {
             try {
               const r = new Request();
               r.method = 123; // not a string
-              must(false, "expected TypeError");
+              assertTrue(false, "expected TypeError");
             } catch (e) {
-              must(e instanceof TypeError, "TypeError on non-string method");
+              assertTrue(e instanceof TypeError, "TypeError on non-string method");
               true
             }
             "#,
@@ -250,9 +238,9 @@ mod tests {
             try {
               const r = new Request();
               r.method = " NOT_A_METHOD ";
-              must(false, "expected TypeError for invalid method");
+              assertTrue(false, "expected TypeError for invalid method");
             } catch (e) {
-              must(e instanceof TypeError, "TypeError for invalid method");
+              assertTrue(e instanceof TypeError, "TypeError for invalid method");
               true
             }
             "#,
@@ -267,9 +255,9 @@ mod tests {
             r#"
             const r = new Request();
             r.version = "HTTP/2.0";
-            must(r.version === "HTTP/2.0", "version roundtrip to string format");
+            assertEqual(r.version, "HTTP/2.0", "version roundtrip to string format");
             r.version = "HTTP/1.1";
-            must(r.version === "HTTP/1.1", "version downgraded ok");
+            assertEqual(r.version, "HTTP/1.1", "version downgraded ok");
             "#,
         ))
         .unwrap();
@@ -283,9 +271,9 @@ mod tests {
             try {
               const r = new Request();
               r.version = "HTTP/9.9";
-              must(false, "expected TypeError for unsupported version");
+              assertTrue(false, "expected TypeError for unsupported version");
             } catch (e) {
-              must(e instanceof TypeError, "TypeError for bad version");
+              assertTrue(e instanceof TypeError, "TypeError for bad version");
               true
             }
             "#,
@@ -300,9 +288,9 @@ mod tests {
             r#"
             const r = new Request();
             const h = r.headers;
-            must(h && typeof h === "object", "headers is object");
+            assertTrue(h && typeof h === "object", "headers is object");
             h.set("X-Test", "1");
-            must(h.get("X-Test") === "1", "headers.get after set");
+            assertEqual(h.get("X-Test"), "1", "headers.get after set");
             "#,
         ))
         .unwrap();
@@ -315,11 +303,11 @@ mod tests {
             r#"
             const r = new Request();
             const t = r.trailers;
-            must(t && typeof t === "object", "trailers is object");
+            assertTrue(t && typeof t === "object", "trailers is object");
             t.append("X-Trailer", "A");
             t.append("X-Trailer", "B");
             const all = t.getAll("X-Trailer");
-            must(Array.isArray(all) && all.length === 2, "two trailer values");
+            assertTrue(Array.isArray(all) && all.length === 2, "two trailer values");
             "#,
         ))
         .unwrap();
@@ -332,9 +320,9 @@ mod tests {
             r#"
             const r = new Request();
             const b = r.body;
-            must(b && typeof b === "object", "body is object");
+            assertTrue(b && typeof b === "object", "body is object");
             b.text = "hello";
-            must(b.text === "hello", "body text roundtrip");
+            assertEqual(b.text, "hello", "body text roundtrip");
             "#,
         ))
         .unwrap();
@@ -347,10 +335,10 @@ mod tests {
             r#"
             const r = new Request();
             const u = r.url;
-            must(u && typeof u === "object", "url is object");
+            assertTrue(u && typeof u === "object", "url is object");
             // Not asserting exact fields, just that it behaves like URL (has href/toString)
-            must(typeof u.href === "string", "url.href is string");
-            must(typeof u.toString === "function", "url.toString exists");
+            assertTrue(typeof u.href === "string", "url.href is string");
+            assertTrue(typeof u.toString === "function", "url.toString exists");
             "#,
         ))
         .unwrap();
@@ -365,8 +353,8 @@ mod tests {
             const r = new Request();
             r.url = "http://example.com/path?x=1";
             const u1 = r.url;
-            must(u1 && typeof u1 === "object", "url object after string set");
-            must(typeof u1.href === "string", "url.href exists");
+            assertTrue(u1 && typeof u1 === "object", "url object after string set");
+            assertTrue(typeof u1.href === "string", "url.href exists");
             "#,
         ))
         .unwrap();
@@ -383,7 +371,7 @@ mod tests {
                 const r = new Request();
                 r.url = u;    // assign the object
                 const got = r.url;
-                must(got && typeof got === "object", "url is object after object set");
+                assertTrue(got && typeof got === "object", "url is object after object set");
                 true
             "#,
             ))
@@ -399,9 +387,9 @@ mod tests {
             try {
               const r = new Request();
               r.url = 42; // not a URL object and not a string
-              must(false, "expected TypeError");
+              assertTrue(false, "expected TypeError");
             } catch (e) {
-              must(e instanceof TypeError, "TypeError for invalid url assignment");
+              assertTrue(e instanceof TypeError, "TypeError for invalid url assignment");
               true
             }
             "#,
@@ -418,17 +406,17 @@ mod tests {
             const h1 = r.headers;
             const h2 = r.headers;
             h1.set("X-Live", "yes");
-            must(h2.get("X-Live") === "yes", "same live headers view");
+            assertEqual(h2.get("X-Live"), "yes", "same live headers view");
 
             const t1 = r.trailers;
             const t2 = r.trailers;
             t1.append("X-Trail", "A");
-            must(t2.has("X-Trail") === true, "same live trailers view");
+            assertEqual(t2.has("X-Trail"), true, "same live trailers view");
 
             const b1 = r.body;
             const b2 = r.body;
             b1.text = "ok";
-            must(b2.text === "ok", "same live body view");
+            assertEqual(b2.text, "ok", "same live body view");
             "#,
         ))
         .unwrap();

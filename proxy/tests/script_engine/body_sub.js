@@ -1,4 +1,4 @@
-globalThis.Extensions = [{
+globalThis.extensions = [{
   request(flow) {
     flow.request.body.text = flow.request.body.text.replace("replaceme", "gone");
   },

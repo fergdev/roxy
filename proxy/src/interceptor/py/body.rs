@@ -70,20 +70,19 @@ impl PyBody {
         Ok(())
     }
 
-    fn len(&self) -> PyResult<usize> {
-        let g = self.lock()?;
-        Ok(g.len())
-    }
-
-    fn is_empty(&self) -> PyResult<bool> {
-        let g = self.lock()?;
-        Ok(g.is_empty())
-    }
-
     fn clear(&self) -> PyResult<()> {
         let mut g = self.lock()?;
         *g = Bytes::new();
         Ok(())
+    }
+
+    fn __len__(&self) -> PyResult<usize> {
+        let g = self.lock()?;
+        Ok(g.len())
+    }
+
+    fn __str__(&self) -> PyResult<String> {
+        self.text()
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -98,21 +97,21 @@ mod tests {
     use crate::interceptor::py::with_module;
 
     #[test]
-    fn pybody_constructor_and_basic_props() {
+    fn constructor() {
         with_module(
             r#"
 from roxy import PyBody
-# Construct with initial text
-b = PyBody("seed")
-assert b.text == "seed"
-assert b.len() == 4
-assert not b.is_empty()
+b = PyBody()
+assertEqual(b.text, "")
+assertEqual(b.raw, b"")
+assertEqual(len(b), 0)
+assertTrue(not b)
 
-# Default constructor: empty
-b2 = PyBody()
-assert b2.text == ""
-assert b2.len() == 0
-assert b2.is_empty()
+b = PyBody("seed")
+assertEqual(b.text, "seed")
+assertEqual(b.raw, b"seed")
+assertEqual(len(b), 4)
+assertFalse(not b)
 "#,
         );
     }
@@ -123,12 +122,11 @@ assert b2.is_empty()
             r#"
 from roxy import PyBody
 b = PyBody()
-# Text -> raw, include NUL to ensure binary safety
 b.text = "abc\x00def"
-assert b.len() == 7
+assertEqual(len(b), 7)
 raw = b.raw
 assert isinstance(raw, (bytes, bytearray))
-assert raw == b"abc\x00def"
+assertEqual(raw, b"abc\x00def")
 "#,
         );
     }
@@ -140,8 +138,8 @@ assert raw == b"abc\x00def"
 from roxy import PyBody
 b = PyBody("x")
 b.raw = b"hi"
-assert b.text == "hi"
-assert b.len() == 2
+assertEqual(b.text, "hi")
+assertEqual(len(b), 2)
 "#,
         );
     }

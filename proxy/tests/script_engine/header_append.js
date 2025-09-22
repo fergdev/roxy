@@ -1,4 +1,4 @@
-globalThis.Extensions = [{
+globalThis.extensions = [{
   request(flow) {
     flow.request.headers.append("X-Header1", "request");
     flow.request.headers.append("X-Header9", "request");

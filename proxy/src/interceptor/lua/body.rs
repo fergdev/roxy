@@ -79,16 +79,6 @@ impl LuaBody {
 
 impl LuaUserData for LuaBody {
     fn add_methods<M: LuaUserDataMethods<Self>>(m: &mut M) {
-        m.add_method("get_text", |_, this, ()| this.get_text());
-        m.add_method_mut("set_text", |_, this, s: String| this.set_text(&s));
-
-        m.add_method("get_raw", |lua, this, ()| this.get_raw(lua));
-        m.add_method_mut("set_raw", |_, this, bytes: LuaString| {
-            this.set_raw(bytes.as_bytes().as_ref())
-        });
-
-        m.add_method("len", |_, this, ()| Ok(this.len() as i64));
-        m.add_method("is_empty", |_, this, ()| Ok(this.is_empty()));
         m.add_method("clear", |_, this, ()| Ok(this.clear()));
 
         m.add_meta_method(LuaMetaMethod::Index, |lua, this, key: LuaValue| {
@@ -101,9 +91,8 @@ impl LuaUserData for LuaBody {
                     Ok(LuaValue::String(lua.create_string(&t)?))
                 }
                 "raw" => Ok(LuaValue::String(this.get_raw(lua)?)),
-                "length" | "len" => Ok(LuaValue::Integer(this.len() as i64)),
-                "empty" | "is_empty" => Ok(LuaValue::Boolean(this.is_empty())),
-                "get_text" | "set_text" | "get_raw" | "set_raw" | "clear" => {
+                "is_empty" => Ok(LuaValue::Boolean(this.is_empty())),
+                "clear" => {
                     let ud = lua.create_userdata(this.clone())?;
                     let f: LuaFunction = ud.get(s)?;
                     Ok(LuaValue::Function(f))
@@ -131,9 +120,7 @@ impl LuaUserData for LuaBody {
                         };
                         this.set_raw(v.as_bytes().as_ref())
                     }
-                    "length" | "len" | "empty" | "is_empty" => {
-                        Err(LuaError::external("read-only property"))
-                    }
+                    "is_empty" => Err(LuaError::external("read-only property")),
                     other => Err(LuaError::external(format!(
                         "unknown body property '{other}'"
                     ))),
@@ -141,6 +128,7 @@ impl LuaUserData for LuaBody {
             },
         );
         m.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| this.get_text());
+        m.add_meta_method(LuaMetaMethod::Len, |_, this, ()| Ok(this.len()));
     }
 }
 
@@ -160,27 +148,18 @@ pub fn register_body(lua: &Lua) -> LuaResult<LuaTable> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use mlua::Lua;
-
-    fn with_lua<F: FnOnce(&Lua) -> LuaResult<()>>(f: F) {
-        let lua = Lua::new();
-        register_body(&lua).unwrap();
-        f(&lua).expect("lua ok");
-    }
+    use crate::interceptor::lua::tests::with_lua;
 
     #[test]
-    fn b01_new_defaults_empty() {
+    fn constructor() {
         with_lua(|lua| {
             lua.load(
                 r#"
-                local Body = Body
                 local b = Body.new()
-                assert(b:is_empty() == true)
-                assert(b:len() == 0)
-                -- default text is empty string
-                assert(b:get_text() == "")
-                -- tostring uses __tostring -> text
+                assert(b.is_empty == true)
+                assert(#b == 0)
+                assert(b.text == "")
+                assert(b.raw == "")
                 assert(tostring(b) == "")
             "#,
             )
@@ -194,10 +173,10 @@ mod tests {
             lua.load(
                 r#"
                 local b = Body.new()
-                b:set_text("hello")
-                assert(b:get_text() == "hello")
-                assert(b:is_empty() == false)
-                assert(b:len() == 5)
+                b.text = "hello"
+                assert(b.text == "hello")
+                assert(b.is_empty == false)
+                assert(#b == 5)
             "#,
             )
             .exec()
@@ -210,15 +189,12 @@ mod tests {
             lua.load(
                 r#"
                 local b = Body.new()
-                -- include NUL and non-ASCII bytes
                 local s = "a\0b\255"
-                b:set_raw(s)
-                local got = b:get_raw()
+                b.raw = s
+                local got = b.raw
                 assert(got == s)
-                -- tostring(b) decodes as UTF-8; non-UTF8 may error in Rust,
-                -- but here "\255" may be treated as 0xFF by Lua; ensure raw path works:
-                assert(b:len() == #s)
-                assert(b:is_empty() == false)
+                assert(#b == #s)
+                assert(b.is_empty == false)
             "#,
             )
             .exec()
@@ -233,10 +209,8 @@ mod tests {
                 local b = Body.new()
                 b.text = "world"
                 assert(b.text == "world")
-                -- sugar sets underlying bytes
-                assert(b:len() == 5)
-                -- updating via methods reflects in property
-                b:set_text("x")
+                assert(#b == 5)
+                b.text = "x"
                 assert(b.text == "x")
             "#,
             )
@@ -253,31 +227,12 @@ mod tests {
                 local payload = "\0\1\2xyz"
                 b.raw = payload
                 assert(b.raw == payload)
-                assert(b:len() == #payload)
-                -- mix: set_raw then read text (may be invalid UTF-8; we only assert len stability)
+                assert(#b == #payload)
                 b.raw = "abc"
                 assert(b.text == "abc")
             "#,
             )
             .exec()
-        });
-    }
-
-    #[test]
-    fn b06_readonly_len_and_empty() {
-        with_lua(|lua| {
-            let ok = lua
-                .load(
-                    r#"
-                    local b = Body.new("hi")
-                    local ok1, err1 = pcall(function() b.len = 99 end)
-                    local ok2, err2 = pcall(function() b.is_empty = false end)
-                    return ok1, ok2
-                "#,
-                )
-                .eval::<(bool, bool)>()?;
-            assert_eq!(ok, (false, false));
-            Ok(())
         });
     }
 
@@ -305,7 +260,7 @@ mod tests {
                 local Body = Body
                 local b = Body.new("seed")
                 assert(b.text == "seed")
-                assert(b:len() == 4)
+                assert(#b == 4)
             "#,
             )
             .exec()

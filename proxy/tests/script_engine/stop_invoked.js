@@ -1,6 +1,6 @@
 let count = 0
 let out_file = ""
-globalThis.Extensions = [{
+globalThis.extensions = [{
   start() {
     count = 10
   },

@@ -1,4 +1,4 @@
-globalThis.Extensions = [
+globalThis.extensions = [
   {
     request(flow) {
       if (flow.request.url.username == "dave") {

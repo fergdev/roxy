@@ -1,4 +1,4 @@
-globalThis.Extensions = [{
+globalThis.extensions = [{
   request(flow) {
     flow.request.headers.delete("X-header1");
     flow.request.headers.set("X-header2", undefined);

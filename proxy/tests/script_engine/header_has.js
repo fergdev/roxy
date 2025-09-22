@@ -1,4 +1,4 @@
-globalThis.Extensions = [{
+globalThis.extensions = [{
   request(flow) {
     if (flow.request.headers.has("X-Header1")) {
       flow.request.body.text = "has"
