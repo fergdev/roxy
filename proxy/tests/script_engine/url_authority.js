@@ -1,9 +1,10 @@
-globalThis.extensions = [
-  {
-    request(flow) {
-      if (flow.request.url.authority == "dave:1234@localhost:1234") {
-        flow.request.url.authority = "damo:abcd@localhost:4321";
-      }
-    },
-  }
-]
+/// <reference path="../../script_libs/js/roxy.d.ts" />
+/** @type {Extension} */
+const url_authority = {
+  request(flow) {
+    if (flow.request.url.authority == "dave:1234@localhost:1234") {
+      flow.request.url.authority = "damo:abcd@localhost:4321";
+    }
+  },
+};
+globalThis.extensions = [url_authority]

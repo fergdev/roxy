@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "roxy-scripting"
+version = "0.1.0"
+description = "Roxy scripting API typings and minimal runtime shim"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Your Name", email = "you@example.com" }]
+urls = { Homepage = "https://example.com/roxy" }
+requires-python = ">=3.8"
+packages = [{ include = "roxy", from = "src" }]

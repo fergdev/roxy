@@ -1,4 +1,6 @@
-globalThis.extensions = [{
+/// <reference path="../../script_libs/js/roxy.d.ts" />
+/** @type {Extension} */
+const trailer_has = {
   request(flow) {
     if (flow.request.trailers.has("X-trailer1")) {
       flow.request.body.text = "has"
@@ -9,4 +11,5 @@ globalThis.extensions = [{
       flow.response.body.text = "has"
     }
   }
-}];
+};
+globalThis.extensions = [trailer_has];

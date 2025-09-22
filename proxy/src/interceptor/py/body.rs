@@ -124,9 +124,8 @@ from roxy import PyBody
 b = PyBody()
 b.text = "abc\x00def"
 assertEqual(len(b), 7)
-raw = b.raw
-assert isinstance(raw, (bytes, bytearray))
-assertEqual(raw, b"abc\x00def")
+assert isinstance(b.raw, (bytes, bytearray))
+assertEqual(.braw, b"abc\x00def")
 "#,
         );
     }

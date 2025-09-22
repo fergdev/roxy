@@ -145,6 +145,14 @@ impl PyURLSearchParams {
     fn __delitem__(&self, key: &str) -> PyResult<()> {
         self.delete(key)
     }
+    fn __repr__(&self) -> PyResult<String> {
+        let g = self.lock()?;
+        Ok(format!(
+            "URLSearchParams(len={:?}, values={:?})",
+            g.query_pairs().count(),
+            g
+        ))
+    }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

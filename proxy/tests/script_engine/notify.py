@@ -1,4 +1,7 @@
-class TestNotify:
+from roxy import Extension, notify
+
+
+class TestNotify(Extension):
     def request(self, flow):
         notify(1, "hi")
 

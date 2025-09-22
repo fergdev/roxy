@@ -1,4 +1,7 @@
-class LengthTrailers:
+from roxy import Extension
+
+
+class LengthTrailers(Extension):
     def request(self, flow):
         t = flow.request.trailers
         if len(t) == 12:

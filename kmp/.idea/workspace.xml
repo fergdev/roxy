@@ -9,16 +9,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="39b1ffe3-0d98-485c-b85f-38c17d33da6f" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/../proxy/src/interceptor/js/engine.rs" beforeDir="false" afterPath="$PROJECT_DIR$/../proxy/src/interceptor/js/engine.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../proxy/src/interceptor/js/request.rs" beforeDir="false" afterPath="$PROJECT_DIR$/../proxy/src/interceptor/js/request.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../proxy/src/interceptor/js/url.rs" beforeDir="false" afterPath="$PROJECT_DIR$/../proxy/src/interceptor/js/url.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../proxy/src/interceptor/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/../proxy/src/interceptor/mod.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../proxy/src/interceptor/py/engine.rs" beforeDir="false" afterPath="$PROJECT_DIR$/../proxy/src/interceptor/py/engine.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../proxy/src/interceptor/py/query.rs" beforeDir="false" afterPath="$PROJECT_DIR$/../proxy/src/interceptor/py/query.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../proxy/src/interceptor/py/url.rs" beforeDir="false" afterPath="$PROJECT_DIR$/../proxy/src/interceptor/py/url.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../proxy/tests/script_engine.rs" beforeDir="false" afterPath="$PROJECT_DIR$/../proxy/tests/script_engine.rs" afterDir="false" />
-    </list>
+    <list default="true" id="39b1ffe3-0d98-485c-b85f-38c17d33da6f" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />

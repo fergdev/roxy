@@ -40,6 +40,12 @@ impl PyFlow {
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self:?}"))
     }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!(
+            "Flow(request={:?}, response={:?})",
+            self.request, self.response
+        ))
+    }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

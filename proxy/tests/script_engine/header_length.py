@@ -1,4 +1,7 @@
-class LengthHeader:
+from roxy import Extension
+
+
+class LengthHeader(Extension):
     def request(self, flow):
         if len(flow.request.headers) == 12:
             flow.request.headers.clear()

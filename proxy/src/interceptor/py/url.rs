@@ -189,6 +189,10 @@ impl PyUrl {
     fn __str__(&self) -> PyResult<String> {
         self.href_get()
     }
+    fn __repr__(&self) -> PyResult<String> {
+        let g = self.lock()?;
+        Ok(format!("URL({:?})", g))
+    }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

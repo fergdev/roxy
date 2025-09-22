@@ -1,19 +1,23 @@
+/// <reference path="../../script_libs/js/roxy.d.ts" />
+
+/**
+ * Make a BodyCascade extension that appends the given id.
+ * @param {number} id
+ * @returns {Extension}
+ */
+function makeBodyCascade(id) {
+  return {
+    request(flow) {
+      flow.request.body.text = (flow.request.body.text ?? "") + " request" + id;
+    },
+    response(flow) {
+      flow.response.body.text = (flow.response.body.text ?? "") + " response" + id;
+    },
+  };
+}
+
 globalThis.extensions = [
-  {
-    request(flow) {
-      flow.request.body.text = flow.request.body.text + " request1";
-    },
-    response(flow) {
-      flow.response.body.text = flow.response.body.text + " response1";
-    }
-  },
+  makeBodyCascade(1),
   {},
-  {
-    request(flow) {
-      flow.request.body.text = flow.request.body.text + " request2";
-    },
-    response(flow) {
-      flow.response.body.text = flow.response.body.text + " response2";
-    }
-  }
+  makeBodyCascade(2),
 ];

@@ -87,6 +87,10 @@ impl PyRequest {
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self:?}"))
     }
+    fn __repr__(&self) -> PyResult<String> {
+        let g = self.lock()?;
+        Ok(format!("Request({:?})", g))
+    }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

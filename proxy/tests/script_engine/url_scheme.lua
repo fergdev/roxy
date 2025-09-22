@@ -1,9 +1,10 @@
-Extensions = {
-	{
-		request = function(flow)
-			if flow.request.url.scheme == "http" then
-				flow.request.url.scheme = "https"
-			end
-		end,
-	},
+pcall(require, "../../script_libs/lua/roxy.lua")
+---@type Extension
+local url_scheme = {
+	request = function(flow)
+		if flow.request.url.protocol == "http" then
+			flow.request.url.protocol = "https"
+		end
+	end,
 }
+Extensions = { url_scheme }

@@ -1,4 +1,7 @@
-class SetVersion:
+from roxy import Extension
+
+
+class SetVersion(Extension):
     def request(self, flow):
         flow.request.version = "HTTP/3.0"
 

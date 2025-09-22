@@ -1,22 +1,27 @@
-local function req(flow)
-	flow.request.body.text = flow.request.body.text .. " request1"
-end
+pcall(require, "../../script_libs/lua/roxy.lua")
 
-local function resp(flow)
-	flow.response.body.text = flow.response.body.text .. " response1"
+--- Append a numeric id to request/response bodies.
+---@param id integer
+---@return Extension
+local function make_body_cascade(id)
+	---@type Extension
+	local ext = {
+		---@param flow Flow
+		request = function(flow)
+			local t = flow.request.body.text or ""
+			flow.request.body.text = t .. " request" .. tostring(id)
+		end,
+
+		---@param flow Flow
+		response = function(flow)
+			local t = flow.response.body.text or ""
+			flow.response.body.text = t .. " response" .. tostring(id)
+		end,
+	}
+	return ext
 end
 Extensions = {
-	{
-		request = req,
-		response = resp,
-	},
+	make_body_cascade(1),
 	{},
-	{
-		request = function(flow)
-			flow.request.body.text = flow.request.body.text .. " request2"
-		end,
-		response = function(flow)
-			flow.response.body.text = flow.response.body.text .. " response2"
-		end,
-	},
+	make_body_cascade(2),
 }

@@ -1,4 +1,7 @@
-class ClearTrailer:
+from roxy import Extension
+
+
+class ClearTrailer(Extension):
     def request(self, flow):
         flow.request.trailers.clear()
 

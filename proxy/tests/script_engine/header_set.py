@@ -1,4 +1,7 @@
-class AppendHeader:
+from roxy import Extension
+
+
+class AppendHeader(Extension):
     def request(self, flow):
         flow.request.headers.set("X-Header1", "request")
 

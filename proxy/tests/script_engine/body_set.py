@@ -1,4 +1,7 @@
-class ChangeBody:
+from roxy import Extension
+
+
+class ChangeBody(Extension):
     def request(self, flow):
         flow.request.body.text = "rewrite request"
 

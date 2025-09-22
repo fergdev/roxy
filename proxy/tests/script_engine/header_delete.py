@@ -1,4 +1,7 @@
-class DeleteHeader:
+from roxy import Extension
+
+
+class DeleteHeader(Extension):
     def request(self, flow):
         flow.request.headers.delete("X-Header1")
         flow.request.headers["X-Header2"] = None

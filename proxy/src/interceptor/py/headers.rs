@@ -114,6 +114,10 @@ impl PyHeaders {
         let g = self.lock()?;
         Ok(g.len())
     }
+    fn __repr__(&self) -> PyResult<String> {
+        let g = self.lock()?;
+        Ok(format!("Headers(len={:?}, values={:?})", g.len(), g))
+    }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

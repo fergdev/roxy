@@ -1,10 +1,11 @@
-Extensions = {
-	{
-		request = function(flow)
-			print("Original host: " .. flow.request.url.host)
-			if flow.request.url.host == "localhost:1234" then
-				flow.request.url.host = "example.com:4321"
-			end
-		end,
-	},
+pcall(require, "../../script_libs/lua/roxy.lua")
+---@type Extension
+local url_host = {
+	request = function(flow)
+		print("Original host: " .. flow.request.url.host)
+		if flow.request.url.host == "localhost:1234" then
+			flow.request.url.host = "example.com:4321"
+		end
+	end,
 }
+Extensions = { url_host }

@@ -1,4 +1,7 @@
-class AppendHeader:
+from roxy import Extension
+
+
+class AppendHeader(Extension):
     def request(self, flow):
         if flow.request.headers.has("X-Header1"):
             flow.request.body.text = "has"

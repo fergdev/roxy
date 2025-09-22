@@ -1,0 +1,26 @@
+{
+  "name": "@roxy/scripting",
+  "version": "0.1.0",
+  "description": "Roxy scripting API typings and minimal runtime shim",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.d.ts",
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "roxy",
+    "mitm",
+    "proxy",
+    "scripting",
+    "types"
+  ],
+  "license": "MIT",
+  "repository": "https://example.com/roxy",
+  "publishConfig": {
+    "access": "public"
+  }
+}

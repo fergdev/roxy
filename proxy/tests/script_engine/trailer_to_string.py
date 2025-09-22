@@ -1,4 +1,7 @@
-class TrailersToString:
+from roxy import Extension
+
+
+class TrailersToString(Extension):
     def request(self, flow):
         flow.request.body.text = str(flow.request.trailers)
 
