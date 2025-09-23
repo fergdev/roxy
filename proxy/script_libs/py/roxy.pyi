@@ -27,7 +27,7 @@ class Headers:
 class Request:
     method: Method
     url: Url
-    version: str
+    version: Version
     headers: Headers
     trailers: Headers
     body: Body
@@ -39,7 +39,9 @@ class Version(enum.Enum):
     HTTP1_0 = ("HTTP/1.0",)
     HTTP1_1 = ("HTTP/1.1",)
     HTTP2_0 = ("HTTP/2.0",)
-    HTTP3_0 = ("HTTP/3.0",)
+    HTTP3 = ("HTTP/3.0",)
+    def __str__(self) -> str: ...
+    def __repr__(self) -> str: ...
 
 class Method(enum.Enum):
     CONNECT = ("CONNECT",)
@@ -51,13 +53,17 @@ class Method(enum.Enum):
     POST = ("POST",)
     PUT = ("PUT",)
     TRACE = ("TRACE",)
+    def __str__(self) -> str: ...
+    def __repr__(self) -> str: ...
 
 class Protocol(enum.Enum):
     HTTP = ("http",)
     HTTPS = ("https",)
+    def __str__(self) -> str: ...
+    def __repr__(self) -> str: ...
 
 class Url:
-    protocol: Optional[str]
+    protocol: Optional[Protocol]
     authority: Optional[str]
     username: Optional[str]
     password: Optional[str]
@@ -81,7 +87,7 @@ class UrlSearchParams:
 
 class Response:
     status: int
-    version: str
+    version: Version
     headers: Headers
     trailers: Headers
     body: Body

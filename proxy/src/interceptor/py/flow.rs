@@ -57,8 +57,8 @@ mod tests {
     fn pyflow_constructor_defaults() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
+from roxy import Flow
+f = Flow()
 # attributes exist
 assert hasattr(f, "request")
 assert hasattr(f, "response")
@@ -75,8 +75,8 @@ _ = f.response.version
     fn pyflow_request_set_method_and_version() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
+from roxy import Flow
+f = Flow()
 f.request.method = "POST"
 assertEqual(f.request.method, "POST")
 f.request.version = "HTTP/1.1"
@@ -89,8 +89,8 @@ assertEqual(f.request.version, "HTTP/1.1")
     fn pyflow_response_set_status_and_version() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
+from roxy import Flow
+f = Flow()
 f.response.status = 201
 assertEqual(f.response.status, 201)
 f.response.version = "HTTP/2.0"
@@ -103,8 +103,8 @@ assertEqual(f.response.version, "HTTP/2.0")
     fn pyflow_body_roundtrip_on_response() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
+from roxy import Flow
+f = Flow()
 assert not f.response.body
 assertEqual(len(f.response.body), 0)
 
@@ -127,8 +127,8 @@ assert isinstance(f.response.body.text, str)
     fn pyflow_request_headers_and_url_present() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
+from roxy import Flow
+f = Flow()
 # request sub-objects exist and are usable (minimal smoke)
 h = f.request.headers
 t = f.request.trailers

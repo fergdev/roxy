@@ -789,7 +789,7 @@ async fn test_url_port() {
 }
 
 #[tokio::test]
-async fn test_url_scheme() {
+async fn test_url_protocol() {
     let mut cxt = TestContext::new().await;
 
     let init_req = cxt.default_req.clone();
@@ -804,8 +804,14 @@ async fn test_url_scheme() {
     let init_res = cxt.default_resp.clone();
     let expect_res = cxt.default_resp.clone();
 
-    cxt.run_test("url_scheme", &init_req, &expect_req, &init_res, &expect_res)
-        .await;
+    cxt.run_test(
+        "url_protocol",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
 }
 
 #[tokio::test]

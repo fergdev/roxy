@@ -2,8 +2,8 @@
 /** @type {Extension} */
 const reqSetMethod = {
   request(flow) {
-    if (flow.request.method == "GET") {
-      flow.request.method = "POST";
+    if (flow.request.method == Method.GET) {
+      flow.request.method = Method.POST;
     }
   }
 };

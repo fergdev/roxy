@@ -993,7 +993,7 @@ async fn test_redirect_scheme() {
 Extensions = {{
   {{
   function (flow) 
-    flow.request.url.scheme = "{}"
+    flow.request.url.protocol = "{}"
   end,
   function (flow) 
   end,

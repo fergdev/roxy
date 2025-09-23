@@ -16,8 +16,8 @@
 
 ---@class Request
 ---@field url URL
----@field method Method
----@field version Version
+---@field method string
+---@field version string
 ---@field headers Headers
 ---@field body Body
 ---@field trailers Headers?
@@ -65,10 +65,15 @@ Version = {
 }
 
 ---@class Method
+---@field CONNECT string
+---@field DELETE string
 ---@field GET string
+---@field HEAD string
+---@field OPTIONS string
+---@field PATCH string
 ---@field POST string
 ---@field PUT string
----@field DELETE string
+---@field TRACE string
 ---@type Method
 Method = {
 	CONNECT = "CONNECT",
@@ -84,7 +89,7 @@ Method = {
 
 ---@class Response
 ---@field status integer
----@field version Version
+---@field version string
 ---@field headers Headers
 ---@field body Body
 ---@field trailers Headers?

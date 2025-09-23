@@ -3,8 +3,10 @@ use std::sync::{Arc, Mutex};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use roxy_shared::uri::RUri;
+use tracing::info;
 use url::Url;
 
+use crate::interceptor::py::constants::PyProtocol;
 use crate::interceptor::py::query::PyURLSearchParams;
 use crate::interceptor::util::set_url_authority;
 
@@ -68,14 +70,16 @@ impl PyUrl {
     }
 
     #[getter]
-    fn protocol(&self) -> PyResult<String> {
+    fn protocol(&self) -> PyResult<PyProtocol> {
         let g = self.lock()?;
-        Ok(g.scheme().to_owned())
+        info!("get protocol {}", g.scheme());
+        Ok(PyProtocol::from(g.scheme()))
     }
     #[setter]
-    fn set_protocol(&self, proto: &str) -> PyResult<()> {
+    fn set_protocol(&self, proto: Bound<PyProtocol>) -> PyResult<()> {
+        info!("set protocol {proto:?}");
         let mut g = self.lock()?;
-        url::quirks::set_protocol(&mut g, proto)
+        url::quirks::set_protocol(&mut g, &proto.unbind().to_string())
             .map_err(|e| PyTypeError::new_err(format!("{e:#?}")))
     }
 
@@ -231,9 +235,9 @@ assertEqual(str(u), "https://example.org/zzz?q=1")
             r#"
 from roxy import URL
 u = URL("http://example.com/")
-assertEqual(u.scheme, "http")
-u.scheme = "https"
-assertEqual(u.scheme, "https")
+assertEqual(u.protocol, "http")
+u.protocol = "https"
+assertEqual(u.protocol, "https")
 assert u.href.startswith("https://")
 "#,
         );

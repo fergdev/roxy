@@ -15,7 +15,7 @@ fn to_header_value(val: &str) -> PyResult<HeaderValue> {
 pub(crate) type HeaderList = Arc<Mutex<HeaderMap>>;
 
 #[derive(Debug, Clone)]
-#[pyclass]
+#[pyclass(name = "Headers")]
 pub(crate) struct PyHeaders {
     pub(crate) inner: HeaderList,
 }
@@ -129,8 +129,8 @@ mod tests {
     fn pyheaders_append_and_get() {
         with_module(
             r#"
-from roxy import PyHeaders
-h = PyHeaders()
+from roxy import Headers
+h = Headers()
 h.append("x-test", "v1")
 h.append("x-test-2", "v2")
 assertEqual(h.get("x-test"), "v1")
@@ -143,8 +143,8 @@ assert h.get("missing") is None
     fn pyheaders_is_empty() {
         with_module(
             r#"
-from roxy import PyHeaders
-h = PyHeaders()
+from roxy import Headers
+h = Headers()
 h.append("x-test", "v1")
 h.append("x-test-2", "v2")
 assertFalse(not h)
@@ -158,8 +158,8 @@ assertTrue(not h)
     fn pyheaders_set_overwrites_previous_values() {
         with_module(
             r#"
-from roxy import PyHeaders
-h = PyHeaders()
+from roxy import Headers
+h = Headers()
 h.append("x", "a")
 h.set("x", "b")      # must overwrite
 assertEqual(h.get("x"), "b")
@@ -171,8 +171,8 @@ assertEqual(h.get("x"), "b")
     fn pyheaders_delete_and_has() {
         with_module(
             r#"
-from roxy import PyHeaders
-h = PyHeaders()
+from roxy import Headers
+h = Headers()
 h.set("x-del", "z")
 assert h.has("x-del") is True
 h.delete("x-del")
@@ -186,8 +186,8 @@ assert h.get("x-del") is None
     fn pyheaders_clear_empties_all() {
         with_module(
             r#"
-from roxy import PyHeaders
-h = PyHeaders()
+from roxy import Headers
+h = Headers()
 h.set("a", "1")
 h.set("b", "2")
 h.clear()
@@ -203,8 +203,8 @@ assert h.has("b") is False
     fn pyheaders_invalid_header_name_errors() {
         with_module(
             r#"
-from roxy import PyHeaders
-h = PyHeaders()
+from roxy import Headers
+h = Headers()
 threw = False
 try:
     h.set("Bad Name", "x")     # space not allowed in header name
@@ -219,8 +219,8 @@ assert threw, "expected invalid header name to raise"
     fn pyheaders_invalid_header_value_errors() {
         with_module(
             r#"
-from roxy import PyHeaders
-h = PyHeaders()
+from roxy import Headers
+h = Headers()
 threw = False
 try:
     h.set("X-Thing", "line1\r\nline2")   # CRLF forbidden

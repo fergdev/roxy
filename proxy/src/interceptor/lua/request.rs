@@ -288,7 +288,7 @@ mod tests {
                 r#"
                 local req = Request.new()
                 local u = req.url
-                u.scheme = "https:"
+                u.protocol = "https:"
                 u.host = "example.org"
                 u.path = "/a/b"
                 u.search = "?x=1&x=2"

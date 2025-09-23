@@ -269,7 +269,7 @@ mod tests {
                 r#"
                 local u = Url.new("https://user:pass@example.com:8443/a/b?x=1")
                 assert(u.href == "https://user:pass@example.com:8443/a/b?x=1")
-                assert(u.scheme == "https")
+                assert(u.protocol == "https")
                 assert(u.authority == "user:pass@example.com:8443")
                 assert(u.username == "user")
                 assert(u.password == "pass")
@@ -291,7 +291,7 @@ mod tests {
             lua.load(
                 r#"
                 local u = Url.new("http://x/")
-                u.scheme   = "https"
+                u.protocol   = "https"
                 u.username = "me"
                 u.password = "pw"
                 u.host     = "example.org:444"
@@ -299,7 +299,7 @@ mod tests {
                 u.path     = "/p/q"
                 u.search   = "?a=1"
                 -- verify
-                assert(u.scheme == "https")
+                assert(u.protocol == "https")
                 assert(u.username == "me")
                 assert(u.password == "pw")
                 assert(u.host == "example.org:444")
@@ -384,7 +384,7 @@ mod tests {
                 r#"
                 local u = Url.new()
                 u.href = "https://a.example/alpha?z=9"
-                assert(u.scheme == "https")
+                assert(u.protocol == "https")
                 assert(u.host:match("^a%.example:?%d*$"))
                 assert(u.path == "/alpha")
                 assert(u.search == "?z=9")

@@ -19,8 +19,9 @@ use crate::{
         Error, FlowNotify, KEY_INTERCEPT_REQUEST, KEY_INTERCEPT_RESPONSE, KEY_NOTIFY, KEY_START,
         KEY_STOP, RoxyEngine,
         js::{
-            body::JsBody, flow::JsFlow, headers::JsHeaders, logger::JsLogger,
-            query::UrlSearchParams, request::JsRequest, response::JsResponse, url::JsUrl,
+            body::JsBody, constants::register_constants, flow::JsFlow, headers::JsHeaders,
+            logger::JsLogger, query::UrlSearchParams, request::JsRequest, response::JsResponse,
+            url::JsUrl,
         },
     },
 };
@@ -181,6 +182,8 @@ impl JsEngine {
             ) {
                 error!("Error register_global_property {err}");
             }
+
+            register_constants(&mut ctx);
 
             if let Ok(rt) = rt {
                 rt.block_on(async move {

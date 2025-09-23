@@ -8,7 +8,7 @@ use pyo3::{
     types::{PyBytes, PyBytesMethods},
 };
 
-#[pyclass]
+#[pyclass(name = "Body")]
 #[derive(Debug, Clone)]
 pub(crate) struct PyBody {
     pub(crate) inner: Arc<Mutex<Bytes>>,
@@ -100,14 +100,14 @@ mod tests {
     fn constructor() {
         with_module(
             r#"
-from roxy import PyBody
-b = PyBody()
+from roxy import Body
+b = Body()
 assertEqual(b.text, "")
 assertEqual(b.raw, b"")
 assertEqual(len(b), 0)
 assertTrue(not b)
 
-b = PyBody("seed")
+b = Body("seed")
 assertEqual(b.text, "seed")
 assertEqual(b.raw, b"seed")
 assertEqual(len(b), 4)
@@ -120,8 +120,8 @@ assertFalse(not b)
     fn pybody_text_to_raw_roundtrip() {
         with_module(
             r#"
-from roxy import PyBody
-b = PyBody()
+from roxy import Body
+b = Body()
 b.text = "abc\x00def"
 assertEqual(len(b), 7)
 assert isinstance(b.raw, (bytes, bytearray))
@@ -134,8 +134,8 @@ assertEqual(b.raw, b"abc\x00def")
     fn pybody_raw_to_text_roundtrip() {
         with_module(
             r#"
-from roxy import PyBody
-b = PyBody("x")
+from roxy import Body
+b = Body("x")
 b.raw = b"hi"
 assertEqual(b.text, "hi")
 assertEqual(len(b), 2)
@@ -147,10 +147,10 @@ assertEqual(len(b), 2)
     fn pybody_repr_contains_len_and_preview() {
         with_module(
             r#"
-from roxy import PyBody
-b = PyBody("hi")
+from roxy import Body
+b = Body("hi")
 r = repr(b)
-assert "PyBody" in r and "len=2" in r
+assert "Body" in r and "len=2" in r
 "#,
         );
     }

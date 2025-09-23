@@ -1,14 +1,14 @@
-use pyo3::{
-    exceptions::PyTypeError,
-    prelude::*,
-    types::{PyDict, PyList},
-};
+use http::StatusCode;
+use pyo3::{exceptions::PyTypeError, prelude::*, types::PyList};
 use roxy_shared::uri::RUri;
 use std::{ffi::CString, str::FromStr, sync::Arc};
 
 use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
-    interceptor::{KEY_REQUEST, KEY_RESPONSE, KEY_START, KEY_STOP, py::init_python},
+    interceptor::{
+        KEY_REQUEST, KEY_RESPONSE, KEY_START, KEY_STOP,
+        py::{init_python, notify},
+    },
 };
 
 use async_trait::async_trait;
@@ -26,11 +26,7 @@ pub(crate) struct PythonEngine {
 impl PythonEngine {
     pub fn new(notify_tx: Option<Sender<FlowNotify>>) -> Self {
         init_python();
-        if let Some(notify_tx) = notify_tx {
-            Python::attach(|py| {
-                let _ = inject_notify(py, notify_tx);
-            });
-        }
+        notify::init_notify(notify_tx);
         Self {
             addons: Arc::new(Mutex::new(Vec::new())),
         }
@@ -55,19 +51,6 @@ impl Notifier {
     fn notify(&self, level: i32, msg: String) -> PyResult<()> {
         self.__call__(level, msg)
     }
-}
-
-fn inject_notify(py: Python<'_>, tx: Sender<FlowNotify>) -> PyResult<()> {
-    let notifier = Py::new(py, Notifier { tx })?;
-    let builtins = py.import("builtins")?;
-    builtins.setattr("notify", notifier.clone_ref(py))?;
-    let roxy = PyModule::new(py, "Roxy")?;
-    roxy.add("notify", notifier)?;
-    let sys = py.import("sys")?;
-    sys.getattr("modules")?
-        .downcast::<PyDict>()?
-        .set_item("Roxy", roxy)?;
-    Ok(())
 }
 
 impl Default for PythonEngine {
@@ -196,11 +179,6 @@ fn update_request<'py>(
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
     let py_req = &flow_cell.borrow().request;
-    req.version = py_req
-        .inner
-        .lock()
-        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
-        .version;
     req.uri = RUri::from_str(
         py_req
             .url
@@ -211,14 +189,20 @@ fn update_request<'py>(
     )
     .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
+    let version = py_req
+        .version
+        .lock()
+        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
+        .clone();
+    info!("req.version {version:?}");
+    req.version = version.into();
+
     let method = py_req
         .method
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .clone();
-    info!("assigning {}", method);
     req.method = method.into();
-    info!("post assing {}", req.method);
 
     req.body = py_req
         .body
@@ -266,10 +250,6 @@ fn update_response<'py>(
 
     let resp = flow_cell.borrow();
     let resp = &resp.response;
-    let resp = resp
-        .inner
-        .lock()
-        .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
     res.body = flow_cell
         .borrow()
         .response
@@ -279,7 +259,15 @@ fn update_response<'py>(
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .clone();
     res.status = resp.status;
-    res.version = resp.version;
+
+    let version = flow_cell
+        .borrow()
+        .response
+        .version
+        .lock()
+        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
+        .clone();
+    res.version = version.into();
     res.headers = flow_cell
         .borrow()
         .response
