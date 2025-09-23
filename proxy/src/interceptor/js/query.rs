@@ -29,6 +29,10 @@ impl UrlSearchParams {
         })
     }
 
+    fn length(&self) -> usize {
+        self.url.borrow().query_pairs().count()
+    }
+
     fn write_pairs(&self, pairs: &[(String, String)]) -> JsResult<()> {
         self.with_url_mut(|u| {
             let mut s = Serializer::new(String::new());
@@ -47,6 +51,11 @@ impl UrlSearchParams {
 
 js_class! {
     class UrlSearchParams as "URLSearchParams" {
+        property length {
+            fn get(this: JsClass<UrlSearchParams>) -> JsResult<usize> {
+                Ok(this.borrow().length())
+            }
+        }
         constructor(query: Option<Convert<String>>) {
             if let Some(Convert(ref q)) = query {
                 let mut u = url::Url::parse("http://dummy/")
@@ -64,24 +73,17 @@ js_class! {
         }
 
         fn append(this: JsClass<UrlSearchParams>, key: Convert<String>, value: Convert<String>) -> JsResult<()> {
-            let mut pairs = this.borrow().read_pairs()?;
-            pairs.push((key.0.to_owned(), value.0.to_owned()));
-            this.borrow().write_pairs(&pairs)
+            this.borrow().with_url_mut(|url| {
+                url.query_pairs_mut().append_pair(&key.0, &value.0);
+            })
         }
 
         fn set(this: JsClass<UrlSearchParams>, key: Convert<String>, value: Convert<String>) -> JsResult<()> {
-            let mut pairs = this.borrow().read_pairs()?;
+            let pairs = this.borrow().read_pairs()?;
             let k = key.0.to_owned();
             let v = value.0.to_owned();
-            let mut found = false;
-            for (kk, vv) in pairs.iter_mut() {
-                if *kk == k {
-                    if !found { *vv = v.clone(); found = true; }
-                    else { *vv = String::new(); }
-                }
-            }
-            if !found { pairs.push((k.clone(), v)); }
-            pairs.retain(|(kk, vv)| !(kk == &k && vv.is_empty()));
+            let mut pairs = pairs.iter().filter(|(pk, _)| *pk != k).map(|kp| kp.to_owned()).collect::<Vec<_>>();
+            pairs.push((k, v));
             this.borrow().write_pairs(&pairs)
         }
 
@@ -125,21 +127,8 @@ js_class! {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use crate::interceptor::js::engine::register_classes;
-    use boa_engine::{Context, Source};
-
-    fn setup() -> Context {
-        let mut ctx = Context::default();
-        ctx.eval(Source::from_bytes(
-            r#"
-            function must(cond, msg) { if (!cond) throw new Error(msg || "assert failed"); }
-        "#,
-        ))
-        .unwrap();
-
-        register_classes(&mut ctx).unwrap();
-        ctx
-    }
+    use crate::interceptor::js::tests::setup;
+    use boa_engine::Source;
 
     #[test]
     fn urlsearchparams_constructor_from_string_parses_pairs() {
@@ -147,9 +136,9 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const sp = new URLSearchParams("a=1&b=2&a=3");
-            must(sp.get("a") === "1", "get returns first match");
-            must(sp.get("b") === "2", "single key parses");
-            must(sp.has("a") && sp.has("b"), "has() works");
+            assertEqual(sp.get("a"), "1", "get returns first match");
+            assertEqual(sp.get("b"), "2", "single key parses");
+            assertTrue(sp.has("a") && sp.has("b"), "has() works");
         "#,
         ))
         .unwrap();
@@ -161,8 +150,8 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const sp = new URLSearchParams("?x=10&y=20");
-            must(sp.get("x") === "10", "leading ? accepted");
-            must(sp.get("y") === "20", "both keys parse with ?");
+            assertEqual(sp.get("x"), "10", "leading ? accepted");
+            assertEqual(sp.get("y"), "20", "both keys parse with ?");
         "#,
         ))
         .unwrap();
@@ -175,7 +164,7 @@ mod tests {
             r#"
             let threw = false;
             try { new URLSearchParams(); } catch (e) { threw = true; }
-            must(threw, "no-arg constructor must throw");
+            assertTrue(threw, "no-arg constructor must throw");
         "#,
         ))
         .unwrap();
@@ -189,8 +178,7 @@ mod tests {
             const sp = new URLSearchParams("a=1");
             sp.append("a", "2");
             sp.append("b", "x");
-            // toString should keep order for our implementation
-            must(sp.toString() === "a=1&a=2&b=x", "append preserves existing and order");
+            assertEqual(sp.toString(), "a=1&a=2&b=x", "append preserves existing and order");
         "#,
         ))
         .unwrap();
@@ -203,9 +191,8 @@ mod tests {
             r#"
             const sp = new URLSearchParams("a=1&a=2&b=3");
             sp.set("a", "99");
-            must(sp.get("a") === "99", "set replaces first value");
-            // set should remove subsequent duplicates
-            must(sp.toString() === "a=99&b=3", "set dedupes subsequent entries");
+            assertEqual(sp.get("a"), "99", "set replaces first value");
+            assertEqual(sp.toString(), "b=3&a=99", "set dedupes subsequent entries");
         "#,
         ))
         .unwrap();
@@ -217,7 +204,7 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const sp = new URLSearchParams("a=1");
-            must(sp.get("b") === null, "missing key returns null");
+            assertEqual(sp.get("b"), null, "missing key returns null");
         "#,
         ))
         .unwrap();
@@ -229,10 +216,10 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const sp = new URLSearchParams("x=1&y=2&x=3");
-            must(sp.has("x") && sp.has("y"), "has before delete");
+            assertTrue(sp.has("x") && sp.has("y"), "has before delete");
             sp.delete("x");
-            must(!sp.has("x"), "delete removes all entries for key");
-            must(sp.toString() === "y=2", "only y remains");
+            assertTrue(!sp.has("x"), "delete removes all entries for key");
+            assertEqual(sp.toString(), "y=2", "only y remains");
         "#,
         ))
         .unwrap();
@@ -245,12 +232,12 @@ mod tests {
             r#"
             const sp = new URLSearchParams("p=1&q=hello+world&p=2");
             const s = sp.toString();
-            must(s === "p=1&q=hello+world&p=2", "toString preserves duplicates and encoding");
+            assertEqual(s, "p=1&q=hello+world&p=2", "toString preserves duplicates and encoding");
 
             // roundtrip: construct a new instance from the string
             const sp2 = new URLSearchParams(s);
-            must(sp2.get("p") === "1", "roundtrip first p");
-            must(sp2.get("q") === "hello world", "roundtrip decoded q");
+            assertEqual(sp2.get("p"), "1", "roundtrip first p");
+            assertEqual(sp2.get("q"), "hello world", "roundtrip decoded q");
         "#,
         ))
         .unwrap();

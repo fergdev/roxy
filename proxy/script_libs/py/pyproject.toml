@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "roxy"
+version = "0.1.0"
+description = "Roxy - Rust (mitm) Proxy"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Fergus Hewson", email = "ferg.dev@outlook.com" }]
+urls = { Homepage = "https://github.com/fergdev/roxy#readme" }
+requires-python = ">=3.8"

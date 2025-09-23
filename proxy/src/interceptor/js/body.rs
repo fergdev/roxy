@@ -50,7 +50,7 @@ impl JsBody {
         }
     }
 
-    fn len(&self) -> JsValue {
+    fn length(&self) -> JsValue {
         let len = self.inner.borrow().len();
         JsValue::Integer(len as i32)
     }
@@ -94,10 +94,10 @@ js_class! {
                 Ok(())
             }
         }
-        property len {
+        property length {
             fn get(this: JsClass<JsBody>) -> JsResult<JsValue> {
                 let this = this.borrow();
-                Ok(this.len())
+                Ok(this.length())
             }
         }
         property is_empty as "isEmpty" {
@@ -126,22 +126,8 @@ js_class! {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use crate::{init_test_logging, interceptor::js::engine::register_classes};
-
-    use boa_engine::{Context, Source};
-
-    fn setup() -> Context {
-        init_test_logging();
-        let mut ctx = Context::default();
-        ctx.eval(Source::from_bytes(
-            r#"
-            function must(c,m){ if(!c) throw new Error(m||"assert"); }
-        "#,
-        ))
-        .unwrap();
-        register_classes(&mut ctx).expect("register Body");
-        ctx
-    }
+    use crate::interceptor::js::tests::setup;
+    use boa_engine::Source;
 
     #[test]
     fn body_constructor_allows_string() {
@@ -149,7 +135,7 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const b = new Body("seed");
-            must(b.text === "seed", "ctor string -> text");
+            assertEqual(b.text, "seed", "ctor string -> text");
         "#,
         ))
         .unwrap();
@@ -161,7 +147,7 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const b = new Body(123);
-            must(b.text === "123", "ctor number coerces to string");
+            assertEqual(b.text, "123", "ctor number coerces to string");
         "#,
         ))
         .unwrap();
@@ -170,16 +156,13 @@ mod tests {
     #[test]
     fn body_constructor_allows_empty() {
         let mut ctx = setup();
-        let res = ctx.eval(Source::from_bytes(
+        ctx.eval(Source::from_bytes(
             r#"
             const b = new Body();
-            must(b.text === "", "Empty body should return empty string");
+            assertEqual(b.text, "", "Empty body should return empty string");
         "#,
-        ));
-        assert!(
-            res.is_ok(),
-            "expected constructor without arg return empty string"
-        );
+        ))
+        .unwrap();
     }
 
     #[test]
@@ -188,21 +171,19 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const b = new Body("x");
-            must(b.text === "x", "initial");
+            assertEqual(b.text, "x", "initial");
 
             b.text = "hello";
-            must(b.text === "hello", "text roundtrip");
+            assertEqual(b.text, "hello", "text roundtrip");
 
-            // Non-string should coerce via ToString
             b.text = 42;
-            must(b.text === "42", "number coerces");
+            assertEqual(b.text, "42", "number coerces");
 
             b.text = true;
-            must(b.text === "true", "boolean coerces");
+            assertEqual(b.text, "true", "boolean coerces");
 
-            // Objects: ToString is called (default "[object Object]")
             b.text = {};
-            must(b.text === "[object Object]", "object coerces");
+            assertEqual(b.text, "[object Object]", "object coerces");
         "#,
         ))
         .unwrap();
@@ -211,15 +192,21 @@ mod tests {
     #[test]
     fn body_raw_roundtrip_arraybuffer() {
         let mut ctx = setup();
-        ctx.eval(Source::from_bytes(r#"
+        ctx.eval(Source::from_bytes(
+            r#"
             const b = new Body("");
-            const bytes = new Uint8Array([0x61, 0x00, 0x62, 0xFF]); // a \0 b 0xFF
+            const bytes = new Uint8Array([0x61, 0x00, 0x62, 0xFF]);
             b.raw = bytes.buffer;
 
             const got = new Uint8Array(b.raw);
-            must(got.length === 4, "length");
-            must(got[0] === 0x61 && got[1] === 0x00 && got[2] === 0x62 && got[3] === 0xFF, "content");
-        "#)).unwrap();
+            assertEqual(got.length, 4, "length");
+            assertEqual(got[0], 0x61); 
+            assertEqual(got[1], 0x00);
+            assertEqual(got[2], 0x62);
+            assertEqual(got[3], 0xFF);
+        "#,
+        ))
+        .unwrap();
     }
 
     #[test]
@@ -230,7 +217,7 @@ mod tests {
             const b = new Body("abc");
             const before = b.text;
             b.raw = 123; // not an ArrayBuffer -> no change
-            must(b.text === before, "raw set with non-ArrayBuffer is no-op");
+            assertEqual(b.text, before, "raw set with non-ArrayBuffer is no-op");
         "#,
         ))
         .unwrap();
@@ -244,7 +231,7 @@ mod tests {
             const b = new Body("");
             const bad = new Uint8Array([0xFF, 0xFF]); // invalid UTF-8
             b.raw = bad.buffer;
-            must(typeof b.text === "string", "text readable even after invalid utf8");
+            assertTrue(typeof b.text === "string", "text readable even after invalid utf8");
         "#,
         ))
         .unwrap();
@@ -258,8 +245,8 @@ mod tests {
             const a = new Body("A");
             const b = new Body("B");
             a.text = "AA";
-            must(a.text === "AA", "a updated");
-            must(b.text === "B", "b unchanged");
+            assertEqual(a.text, "AA", "a updated");
+            assertEqual(b.text, "B", "b unchanged");
         "#,
         ))
         .unwrap();
@@ -272,9 +259,11 @@ mod tests {
             r#"
             const b = new Body("hi");
             const ab = b.raw;
-            must(ab instanceof ArrayBuffer, "raw is ArrayBuffer");
+            assertTrue(ab instanceof ArrayBuffer, "raw is ArrayBuffer");
             const view = new Uint8Array(ab);
-            must(view.length === 2 && view[0] === 0x68 && view[1] === 0x69, "raw content 'hi'");
+            assertEqual(view.length, 2);
+            assertEqual(view[0], 0x68);
+            assertEqual(view[1], 0x69);
         "#,
         ))
         .unwrap();
@@ -288,7 +277,7 @@ mod tests {
             const b = new Body("x");
             const arr = new Uint8Array([0x61,0x62,0x63]); // "abc"
             b.raw = arr.buffer;
-            must(b.text === "abc", "text reflects raw utf-8");
+            assertEqual(b.text, "abc", "text reflects raw utf-8");
         "#,
         ))
         .unwrap();

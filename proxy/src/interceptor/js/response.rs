@@ -154,21 +154,8 @@ js_class! {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use crate::interceptor::js::engine::register_classes;
-    use boa_engine::{Context, Source};
-
-    fn setup() -> Context {
-        crate::init_test_logging();
-        let mut ctx = Context::default();
-        ctx.eval(Source::from_bytes(
-            r#"
-            function must(cond, msg) { if (!cond) throw new Error(msg || "assert failed"); }
-            "#,
-        ))
-        .unwrap();
-        register_classes(&mut ctx).expect("register classes");
-        ctx
-    }
+    use crate::interceptor::js::tests::setup;
+    use boa_engine::Source;
 
     #[test]
     fn response_constructor_defaults() {
@@ -177,18 +164,18 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const r = new Response();
-            must(typeof r === "object", "Response constructed");
+            assertTrue(typeof r === "object", "Response constructed");
 
             // default status is 0 (meaning unset)
-            must(r.status === 0, "default status is 0");
+            assertEqual(r.status, 0, "default status is 0");
 
             // headers/trailers are objects
-            must(r.headers && typeof r.headers === "object", "headers object");
-            must(r.trailers && typeof r.trailers === "object", "trailers object");
+            assertTrue(r.headers && typeof r.headers === "object", "headers object");
+            assertTrue(r.trailers && typeof r.trailers === "object", "trailers object");
 
             // body exists and has text/raw accessors via Body
-            must(r.body && typeof r.body === "object", "body object");
-            must(typeof r.body.text === "string", "body.text readable (string)");
+            assertTrue(r.body && typeof r.body === "object", "body object");
+            assertTrue(typeof r.body.text === "string", "body.text readable (string)");
             "#,
         ))
         .unwrap();
@@ -202,9 +189,9 @@ mod tests {
             r#"
             const r = new Response();
             r.status = 201;
-            must(r.status === 201, "status roundtrip 201");
+            assertEqual(r.status, 201, "status roundtrip 201");
             r.status = 404;
-            must(r.status === 404, "status roundtrip 404");
+            assertEqual(r.status, 404, "status roundtrip 404");
             "#,
         ))
         .unwrap();
@@ -219,7 +206,7 @@ mod tests {
             const r = new Response();
             let threw = false;
             try { r.status = "nope"; } catch (e) { threw = true; }
-            must(threw, "setting status to non-number must throw");
+            assertTrue(threw, "setting status to non-number must throw");
         "#,
         ))
         .unwrap();
@@ -234,7 +221,7 @@ mod tests {
             const r = new Response();
             let threw = false;
             try { r.status = 9999; } catch (e) { threw = true; }
-            must(threw, "invalid HTTP status must throw");
+            assertTrue(threw, "invalid HTTP status must throw");
         "#,
         ))
         .unwrap();
@@ -248,14 +235,14 @@ mod tests {
             r#"
             const r = new Response();
             // initially empty string when no underlying response set
-            must(typeof r.version === "string", "version is string");
-            must(r.version === "", "default version empty");
+            assertTrue(typeof r.version === "string", "version is string");
+            assertEqual(r.version, "", "default version empty");
 
             r.version = "HTTP/1.1";
-            must(r.version === "HTTP/1.1", "version set/get HTTP/1.1");
+            assertEqual(r.version, "HTTP/1.1", "version set/get HTTP/1.1");
 
             r.version = "HTTP/2.0";
-            must(r.version === "HTTP/2.0", "version set/get HTTP/2.0");
+            assertEqual(r.version, "HTTP/2.0", "version set/get HTTP/2.0");
             "#,
         ))
         .unwrap();
@@ -269,23 +256,21 @@ mod tests {
             r#"
             const r = new Response();
             const h = r.headers;
-            must(typeof h === "object", "headers object");
+            assertTrue(typeof h === "object", "headers object");
 
-            // set & get
             h.set("X-Test", "v1");
-            must(h.get("X-Test") === "v1", "headers.set/get single value");
+            assertEqual(h.get("X-Test"), "v1", "headers.set/get single value");
 
-            // append additional values and get_all
             h.append("X-Test", "v2");
             const all = h.getAll("X-Test");
-            must(Array.isArray(all) && all.length === 2, "headers.getAll returns both values");
-            must(all[0] === "v1" && all[1] === "v2", "ordered values as appended");
+            assertTrue(Array.isArray(all) && all.length === 2, "headers.getAll returns both values");
+            assertEqual(all[0], "v1");
+            assertEqual(all[1], "v2", "ordered values as appended");
 
-            // has / delete
-            must(h.has("X-Test") === true, "has before delete");
+            assertEqual(h.has("X-Test"), true, "has before delete");
             h.delete("X-Test");
-            must(h.has("X-Test") === false, "has after delete");
-            must(h.get("X-Test") === null, "get returns null when missing");
+            assertFalse(h.has("X-Test"), "has after delete");
+            assertNull(h.get("X-Test"), "get returns null when missing");
             "#,
         ))
         .unwrap();
@@ -299,13 +284,13 @@ mod tests {
             r#"
             const r = new Response();
             const t = r.trailers;
-            must(typeof t === "object", "trailers object");
+            assertTrue(typeof t === "object", "trailers object");
 
             t.set("X-Trailer", "tv1");
-            must(t.get("X-Trailer") === "tv1", "trailers.set/get");
+            assertEqual(t.get("X-Trailer"), "tv1", "trailers.set/get");
             t.append("X-Trailer", "tv2");
             const all = t.getAll("X-Trailer");
-            must(Array.isArray(all) && all.length === 2, "trailers.getAll collects both");
+            assertTrue(Array.isArray(all) && all.length === 2, "trailers.getAll collects both");
             "#,
         ))
         .unwrap();
@@ -318,20 +303,20 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const r = new Response();
-            // text path
             r.body.text = "hello";
-            must(r.body.text === "hello", "body.text roundtrip");
+            assertEqual(r.body.text, "hello", "body.text roundtrip");
 
-            // raw path
-            const bytes = new Uint8Array([0x61, 0x00, 0x62, 0xFF]); // a \0 b 0xFF
+            const bytes = new Uint8Array([0x61, 0x00, 0x62, 0xFF]);
             r.body.raw = bytes.buffer;
 
             const got = new Uint8Array(r.body.raw);
-            must(got.length === 4, "raw length ok");
-            must(got[0] === 0x61 && got[1] === 0x00 && got[2] === 0x62 && got[3] === 0xFF, "raw content ok");
+            assertEqual(got.length, 4, "raw length ok");
+            assertEqual(got[0], 0x61);
+            assertEqual(got[1], 0x00);
+            assertEqual(got[2], 0x62);
+            assertEqual(got[3], 0xFF);
 
-            // after raw set, text is still a string (lossy decode is fine)
-            must(typeof r.body.text === "string", "text readable after raw set");
+            assertTrue(typeof r.body.text === "string", "text readable after raw set");
             "#,
         ))
         .unwrap();

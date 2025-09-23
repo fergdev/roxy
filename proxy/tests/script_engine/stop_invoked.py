@@ -1,8 +1,8 @@
 import json
-import sys
+from roxy import Extension
 
 
-class StopInvoked:
+class StopInvoked(Extension):
     def start(self):
         self.count = 10
         self.out_file = ""
@@ -17,12 +17,8 @@ class StopInvoked:
         self.count += 1
 
     def stop(self):
-        print("stop")
-        print(self.out_file)
         with open(self.out_file, "w") as f:
             json.dump({"stopped": True, "count": self.count}, f)
-        print("stop finish")
-        print("This is an error message.", file=sys.stderr)
 
 
 Extensions = [StopInvoked()]

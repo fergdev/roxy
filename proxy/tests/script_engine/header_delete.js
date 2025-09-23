@@ -1,4 +1,6 @@
-globalThis.Extensions = [{
+/// <reference path="../../script_libs/js/index.d.ts" />
+/** @type {Extension} */
+const headerAppend = {
   request(flow) {
     flow.request.headers.delete("X-header1");
     flow.request.headers.set("X-header2", undefined);
@@ -9,4 +11,5 @@ globalThis.Extensions = [{
     flow.response.headers.set("X-header2", undefined);
     flow.response.headers.set("X-header3", null);
   }
-}];
+};
+globalThis.extensions = [headerAppend];

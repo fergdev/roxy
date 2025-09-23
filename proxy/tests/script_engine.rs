@@ -11,8 +11,15 @@ use roxy_shared::{alpn::AlpnProtocol, uri::RUri};
 use strum::IntoEnumIterator;
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
+use url::Url;
 
 const SCRIPT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/script_engine");
+
+const TEST_URL: &str = "http://user:pass@localhost:1234/some/path?foo=bar&foo=bar+%26+baz&saison=%C3%89t%C3%A9%2Bhiver";
+
+fn default_url() -> Url {
+    Url::parse(TEST_URL).unwrap()
+}
 
 struct TestContext {
     engine: ScriptEngine,
@@ -25,7 +32,7 @@ impl TestContext {
         init_test_logging();
         let mut headers = HeaderMap::new();
         let mut trailers = HeaderMap::new();
-        for i in 1..=3 {
+        for i in 1..=4 {
             for j in &["a", "b", "c"] {
                 headers.append(
                     format!("X-Header{i}").parse::<HeaderName>().unwrap(),
@@ -38,9 +45,9 @@ impl TestContext {
             }
         }
 
-        let expect_req = InterceptedRequest {
+        let default_req = InterceptedRequest {
             timestamp: OffsetDateTime::now_utc(),
-            uri: "http://localhost".parse().unwrap(),
+            uri: TEST_URL.parse().unwrap(),
             alpn: AlpnProtocol::None,
             encoding: None,
             method: http::Method::GET,
@@ -50,7 +57,7 @@ impl TestContext {
             trailers: Some(trailers.clone()),
         };
 
-        let expect_resp = InterceptedResponse {
+        let default_resp = InterceptedResponse {
             status: StatusCode::OK,
             timestamp: OffsetDateTime::now_utc(),
             version: http::Version::HTTP_11.into(),
@@ -61,8 +68,8 @@ impl TestContext {
         };
         Self {
             engine,
-            default_req: expect_req,
-            default_resp: expect_resp,
+            default_req,
+            default_resp,
         }
     }
     async fn new() -> Self {
@@ -176,6 +183,31 @@ async fn test_header_append() {
 }
 
 #[tokio::test]
+async fn test_header_clear() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let init_res = cxt.default_resp.clone();
+
+    let expect_req = InterceptedRequest {
+        headers: HeaderMap::new(),
+        ..cxt.default_req.clone()
+    };
+    let expect_res = InterceptedResponse {
+        headers: HeaderMap::new(),
+        ..cxt.default_resp.clone()
+    };
+    cxt.run_test(
+        "header_clear",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn test_header_set() {
     let mut cxt = TestContext::new().await;
 
@@ -254,6 +286,56 @@ async fn test_header_has() {
 }
 
 #[tokio::test]
+async fn test_header_length() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let init_res = cxt.default_resp.clone();
+
+    let expect_req = InterceptedRequest {
+        headers: HeaderMap::new(),
+        ..cxt.default_req.clone()
+    };
+    let expect_res = InterceptedResponse {
+        headers: HeaderMap::new(),
+        ..cxt.default_resp.clone()
+    };
+    cxt.run_test(
+        "header_length",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_header_to_string() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let init_res = cxt.default_resp.clone();
+
+    let expect_req = InterceptedRequest {
+        body: Bytes::from_static(b"{\"x-header1\": \"a\", \"x-header1\": \"b\", \"x-header1\": \"c\", \"x-header2\": \"a\", \"x-header2\": \"b\", \"x-header2\": \"c\", \"x-header3\": \"a\", \"x-header3\": \"b\", \"x-header3\": \"c\", \"x-header4\": \"a\", \"x-header4\": \"b\", \"x-header4\": \"c\"}"),
+        ..cxt.default_req.clone()
+    };
+    let expect_res = InterceptedResponse {
+        body: Bytes::from_static(b"{\"x-header1\": \"a\", \"x-header1\": \"b\", \"x-header1\": \"c\", \"x-header2\": \"a\", \"x-header2\": \"b\", \"x-header2\": \"c\", \"x-header3\": \"a\", \"x-header3\": \"b\", \"x-header3\": \"c\", \"x-header4\": \"a\", \"x-header4\": \"b\", \"x-header4\": \"c\"}"),
+        ..cxt.default_resp.clone()
+    };
+    cxt.run_test(
+        "header_to_string",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn test_trailer_append() {
     let mut cxt = TestContext::new().await;
 
@@ -283,55 +365,192 @@ async fn test_trailer_append() {
     )
     .await;
 }
-
 #[tokio::test]
-async fn test_req_change_query() {
+async fn test_trailer_set() {
     let mut cxt = TestContext::new().await;
 
-    let init_req = InterceptedRequest {
-        uri: "http://localhost/?foo=bar+%26+baz&saison=%C3%89t%C3%A9%2Bhiver"
-            .parse()
-            .unwrap(),
-        ..cxt.default_req.clone()
-    };
-    let expect_req = InterceptedRequest {
-        uri: "http://localhost/?foo=bar&a=b".parse().unwrap(),
-        ..cxt.default_req.clone()
-    };
-    let expect_res = cxt.default_resp.clone();
+    let init_req = cxt.default_req.clone();
+    let init_res = cxt.default_resp.clone();
 
+    let mut req_trailers = init_req.trailers.clone().unwrap();
+    req_trailers.remove("X-Trailer1");
+    req_trailers.append("X-Trailer1", "request".parse().unwrap());
+    let expect_req = InterceptedRequest {
+        trailers: Some(req_trailers),
+        ..cxt.default_req.clone()
+    };
+    let mut res_trailers = init_res.trailers.clone().unwrap();
+    res_trailers.remove("X-Trailer1");
+    res_trailers.append("X-Trailer1", "response".parse().unwrap());
+    let expect_res = InterceptedResponse {
+        trailers: Some(res_trailers),
+        ..cxt.default_resp.clone()
+    };
     cxt.run_test(
-        "req_change_query",
+        "trailer_set",
         &init_req,
         &expect_req,
-        &expect_res,
+        &init_res,
         &expect_res,
     )
     .await;
 }
 
 #[tokio::test]
-async fn test_req_encode_query() {
+async fn test_trailer_has() {
     let mut cxt = TestContext::new().await;
 
-    let init_req = InterceptedRequest {
-        uri: "http://localhost".parse().unwrap(),
-        ..cxt.default_req.clone()
-    };
-    let expect_req = InterceptedRequest {
-        uri: "http://localhost/?foo=bar+%26+baz&saison=%C3%89t%C3%A9%2Bhiver"
-            .parse()
-            .unwrap(),
-        ..cxt.default_req.clone()
-    };
+    let init_req = cxt.default_req.clone();
     let init_res = cxt.default_resp.clone();
 
+    let expect_req = InterceptedRequest {
+        body: Bytes::from_static(b"has"),
+        ..cxt.default_req.clone()
+    };
+    let expect_res = InterceptedResponse {
+        body: Bytes::from_static(b"has"),
+        ..cxt.default_resp.clone()
+    };
     cxt.run_test(
-        "req_encode_query",
+        "trailer_has",
         &init_req,
         &expect_req,
         &init_res,
+        &expect_res,
+    )
+    .await;
+}
+#[tokio::test]
+async fn test_trailer_length() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let init_res = cxt.default_resp.clone();
+
+    let expect_req = InterceptedRequest {
+        trailers: None,
+        ..cxt.default_req.clone()
+    };
+    let expect_res = InterceptedResponse {
+        trailers: None,
+        ..cxt.default_resp.clone()
+    };
+    cxt.run_test(
+        "trailer_length",
+        &init_req,
+        &expect_req,
         &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_trailer_delete() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let init_res = cxt.default_resp.clone();
+    let mut req_trailers = init_req.trailers.clone().unwrap();
+    req_trailers.remove("X-Trailer1");
+    req_trailers.remove("X-Trailer2");
+    req_trailers.remove("X-Trailer3");
+
+    let expect_req = InterceptedRequest {
+        trailers: Some(req_trailers),
+        ..cxt.default_req.clone()
+    };
+    let mut res_trailers = init_res.trailers.clone().unwrap();
+    res_trailers.remove("X-Trailer1");
+    res_trailers.remove("X-Trailer2");
+    res_trailers.remove("X-Trailer3");
+    let expect_res = InterceptedResponse {
+        trailers: Some(res_trailers),
+        ..cxt.default_resp.clone()
+    };
+    cxt.run_test(
+        "trailer_delete",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_trailer_clear() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let init_res = cxt.default_resp.clone();
+
+    let expect_req = InterceptedRequest {
+        trailers: None,
+        ..cxt.default_req.clone()
+    };
+    let expect_res = InterceptedResponse {
+        trailers: None,
+        ..cxt.default_resp.clone()
+    };
+    cxt.run_test(
+        "trailer_clear",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_trailer_to_string() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let init_res = cxt.default_resp.clone();
+
+    let expect_req = InterceptedRequest {
+        body: Bytes::from_static(b"{\"x-trailer1\": \"a\", \"x-trailer1\": \"b\", \"x-trailer1\": \"c\", \"x-trailer2\": \"a\", \"x-trailer2\": \"b\", \"x-trailer2\": \"c\", \"x-trailer3\": \"a\", \"x-trailer3\": \"b\", \"x-trailer3\": \"c\", \"x-trailer4\": \"a\", \"x-trailer4\": \"b\", \"x-trailer4\": \"c\"}"),
+        ..cxt.default_req.clone()
+    };
+    let expect_res = InterceptedResponse {
+        body: Bytes::from_static(b"{\"x-trailer1\": \"a\", \"x-trailer1\": \"b\", \"x-trailer1\": \"c\", \"x-trailer2\": \"a\", \"x-trailer2\": \"b\", \"x-trailer2\": \"c\", \"x-trailer3\": \"a\", \"x-trailer3\": \"b\", \"x-trailer3\": \"c\", \"x-trailer4\": \"a\", \"x-trailer4\": \"b\", \"x-trailer4\": \"c\"}"),
+        ..cxt.default_resp.clone()
+    };
+    cxt.run_test(
+        "trailer_to_string",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_trailer_to_string_none() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = InterceptedRequest {
+        body: Bytes::from_static(b"{}"),
+        trailers: None,
+        ..cxt.default_req.clone()
+    };
+    let init_res = InterceptedResponse {
+        body: Bytes::from_static(b"{}"),
+        trailers: None,
+        ..cxt.default_resp.clone()
+    };
+
+    let expect_req = init_req.clone();
+    let expect_res = init_res.clone();
+    cxt.run_test(
+        "trailer_to_string",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
     )
     .await;
 }
@@ -508,13 +727,12 @@ async fn test_body_is_empty() {
 async fn test_url_host() {
     let mut cxt = TestContext::new().await;
 
-    let init_req = InterceptedRequest {
-        uri: RUri::from_str("http://localhost:1234").unwrap(),
-        ..cxt.default_req.clone()
-    };
+    let init_req = cxt.default_req.clone();
+    let mut url = default_url();
+    url::quirks::set_host(&mut url, "example.com:4321").unwrap();
 
     let expect_req = InterceptedRequest {
-        uri: RUri::from_str("http://example.com:4321").unwrap(),
+        uri: RUri::from_str(url.as_ref()).unwrap(),
         ..cxt.default_req.clone()
     };
 
@@ -556,8 +774,10 @@ async fn test_url_port() {
     let mut cxt = TestContext::new().await;
 
     let init_req = cxt.default_req.clone();
+    let mut url = default_url();
+    url::quirks::set_port(&mut url, "8080").unwrap();
     let expect_req = InterceptedRequest {
-        uri: RUri::from_str("http://localhost:8080").unwrap(),
+        uri: RUri::from_str(url.as_str()).unwrap(),
         ..cxt.default_req.clone()
     };
 
@@ -569,26 +789,36 @@ async fn test_url_port() {
 }
 
 #[tokio::test]
-async fn test_url_scheme() {
+async fn test_url_protocol() {
     let mut cxt = TestContext::new().await;
 
     let init_req = cxt.default_req.clone();
+
+    let mut url = default_url();
+    url::quirks::set_protocol(&mut url, "https").unwrap();
     let expect_req = InterceptedRequest {
-        uri: RUri::from_str("https://localhost").unwrap(),
+        uri: RUri::from_str(url.as_str()).unwrap(),
         ..cxt.default_req.clone()
     };
 
     let init_res = cxt.default_resp.clone();
     let expect_res = cxt.default_resp.clone();
 
-    cxt.run_test("url_scheme", &init_req, &expect_req, &init_res, &expect_res)
-        .await;
+    cxt.run_test(
+        "url_protocol",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn test_url_path() {
     let mut cxt = TestContext::new().await;
 
+    // TODO: rename user/password
     let init_req = InterceptedRequest {
         uri: RUri::from_str("https://localhost/some/path").unwrap(),
         ..cxt.default_req.clone()
@@ -609,6 +839,7 @@ async fn test_url_path() {
 async fn test_url_username() {
     let mut cxt = TestContext::new().await;
 
+    // TODO: rename user/password
     let init_req = InterceptedRequest {
         uri: RUri::from_str("https://dave@localhost").unwrap(),
         ..cxt.default_req.clone()
@@ -635,6 +866,7 @@ async fn test_url_username() {
 async fn test_url_passsword() {
     let mut cxt = TestContext::new().await;
 
+    // TODO: rename user/password
     let init_req = InterceptedRequest {
         uri: RUri::from_str("https://dave:1234@localhost").unwrap(),
         ..cxt.default_req.clone()
@@ -661,6 +893,7 @@ async fn test_url_passsword() {
 async fn test_url_authority() {
     let mut cxt = TestContext::new().await;
 
+    // TODO: rename user/password
     let init_req = InterceptedRequest {
         uri: RUri::from_str("https://dave:1234@localhost:1234").unwrap(),
         ..cxt.default_req.clone()
@@ -684,15 +917,12 @@ async fn test_url_authority() {
 }
 
 #[tokio::test]
-async fn test_url_query() {
+async fn test_url_to_string() {
     let mut cxt = TestContext::new().await;
 
-    let init_req = InterceptedRequest {
-        uri: RUri::from_str("https://dave:1234@localhost:1234").unwrap(),
-        ..cxt.default_req.clone()
-    };
+    let init_req = cxt.default_req.clone();
     let expect_req = InterceptedRequest {
-        uri: RUri::from_str("https://damo:abcd@localhost:4321").unwrap(),
+        body: Bytes::from(TEST_URL),
         ..cxt.default_req.clone()
     };
 
@@ -700,7 +930,122 @@ async fn test_url_query() {
     let expect_res = cxt.default_resp.clone();
 
     cxt.run_test(
-        "url_authority",
+        "url_to_string",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_query_append() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("http://user:pass@localhost:1234/some/path?foo=bar&foo=bar+%26+baz&saison=%C3%89t%C3%A9%2Bhiver&foo=baz").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test(
+        "query_append",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_query_set() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str(
+            "http://user:pass@localhost:1234/some/path?saison=%C3%89t%C3%A9%2Bhiver&foo=baz",
+        )
+        .unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test("query_set", &init_req, &expect_req, &init_res, &expect_res)
+        .await;
+}
+
+#[tokio::test]
+async fn test_query_delete() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str(
+            "http://user:pass@localhost:1234/some/path?saison=%C3%89t%C3%A9%2Bhiver",
+        )
+        .unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test(
+        "query_delete",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_query_clear() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let expect_req = InterceptedRequest {
+        uri: RUri::from_str("http://user:pass@localhost:1234/some/path").unwrap(),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test(
+        "query_clear",
+        &init_req,
+        &expect_req,
+        &init_res,
+        &expect_res,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_query_to_string() {
+    let mut cxt = TestContext::new().await;
+
+    let init_req = cxt.default_req.clone();
+    let expect_req = InterceptedRequest {
+        body: Bytes::from("foo=bar&foo=bar+%26+baz&saison=%C3%89t%C3%A9%2Bhiver"),
+        ..cxt.default_req.clone()
+    };
+
+    let init_res = cxt.default_resp.clone();
+    let expect_res = cxt.default_resp.clone();
+
+    cxt.run_test(
+        "query_to_string",
         &init_req,
         &expect_req,
         &init_res,
@@ -783,24 +1128,6 @@ async fn test_version_set() {
     .await;
 }
 
-#[tokio::test]
-async fn test_req_set_host() {
-    let mut cxt = TestContext::new().await;
-
-    let init_req = InterceptedRequest {
-        uri: "http://localhost".parse().unwrap(),
-        ..cxt.default_req.clone()
-    };
-    let expect_req = InterceptedRequest {
-        uri: "http://example.com".parse().unwrap(),
-        ..cxt.default_req.clone()
-    };
-
-    let init_res = cxt.default_resp.clone();
-
-    cxt.run_test("req_set_host", &init_req, &expect_req, &init_res, &init_res)
-        .await;
-}
 #[tokio::test]
 async fn test_resp_set_body_based_on_req() {
     let mut cxt = TestContext::new().await;

@@ -1,5 +1,7 @@
-let count = 0
-globalThis.Extensions = [{
+/// <reference path="../../script_libs/js/index.d.ts" />
+/** @type {Extension} */
+let count = 0;
+const start_invoked = {
   start() {
     count = 10
   },
@@ -10,4 +12,5 @@ globalThis.Extensions = [{
   response(flow) {
     flow.response.body.text = count;
   }
-}]
+}
+globalThis.extensions = [start_invoked];

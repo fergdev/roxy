@@ -21,6 +21,7 @@ boa_interop = { version = "0.20.0" }
 boa_gc = { version = "0.20.0" }
 pyo3 = "0.26.0"
 
+
 # Http
 h3 = { workspace = true }
 h3-quinn = { workspace = true }

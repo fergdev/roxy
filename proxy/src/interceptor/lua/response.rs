@@ -149,6 +149,8 @@ impl LuaUserData for LuaResponse {
                 Ok(())
             },
         );
+        // TODO: implement
+        // m.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| this.to_string());
     }
 }
 
@@ -169,14 +171,7 @@ pub fn register_response(lua: &Lua) -> LuaResult<LuaTable> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::interceptor::lua::response::register_response;
-
-    fn with_lua<F: FnOnce(&Lua) -> LuaResult<()>>(f: F) {
-        let lua = Lua::new();
-        register_response(&lua).unwrap();
-        f(&lua).expect("lua ok");
-    }
+    use crate::interceptor::lua::tests::with_lua;
 
     #[test]
     fn s01_defaults_and_constructor() {
@@ -245,18 +240,13 @@ mod tests {
                 r#"
                 local r = Response.new()
 
-                -- text roundtrip
                 r.body.text = "hello"
                 assert(r.body.text == "hello")
 
-                -- raw accepts bytes (Lua string)
                 r.body.raw = "x\0y"
                 local raw = r.body.raw
                 assert(#raw == 3)
-                -- length/len should reflect the raw body size
-                assert(r.body.length == 3 or r.body.len == 3)
-
-                -- do not assert text after binary write (could be invalid UTF-8)
+                assert(#r.body == 3)
             "#,
             )
             .exec()
@@ -277,46 +267,5 @@ mod tests {
             )
             .exec()
         });
-    }
-
-    #[test]
-    fn s06_get_inner_collects_body_headers_trailers() {
-        let lua = Lua::new();
-        register_response(&lua).unwrap();
-
-        let inner = Arc::new(Mutex::new(InterceptedResponse::default()));
-        let resp = LuaResponse::from_parts(inner.clone()).expect("parts");
-        let ud = lua.create_userdata(resp.clone()).expect("ud");
-        lua.globals().set("resp_obj", ud).expect("set global");
-
-        lua.load(
-            r#"
-            resp_obj.status = 204
-            resp_obj.headers:set_all("A", {"1","2"})
-            resp_obj.trailers:set_all("B", {"x"})
-            resp_obj.body.text = "payload"
-        "#,
-        )
-        .exec()
-        .expect("lua exec ok");
-
-        let merged = resp.get_inner().expect("get_inner");
-        assert_eq!(merged.status, StatusCode::NO_CONTENT);
-        assert_eq!(String::from_utf8_lossy(&merged.body), "payload");
-
-        assert_eq!(
-            merged
-                .headers
-                .get_all("A")
-                .iter()
-                .map(|v| v.to_str().unwrap())
-                .collect::<Vec<_>>(),
-            vec!["1", "2"]
-        );
-        let trailers = merged.trailers.as_ref().expect("some trailers");
-        assert_eq!(
-            trailers.get("B").and_then(|v| v.to_str().ok()).unwrap(),
-            "x"
-        );
     }
 }

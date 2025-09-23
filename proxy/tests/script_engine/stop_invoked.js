@@ -1,6 +1,9 @@
+/// <reference path="../../script_libs/js/index.d.ts" />
+/** @type {Extension} */
+
 let count = 0
 let out_file = ""
-globalThis.Extensions = [{
+const stopInvoked = {
   start() {
     count = 10
   },
@@ -18,4 +21,5 @@ globalThis.Extensions = [{
       JSON.stringify({ stopped: true, count: this.count })
     );
   }
-}]
+}
+globalThis.extensions = [stopInvoked];

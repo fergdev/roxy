@@ -1,4 +1,7 @@
-class SubBody:
+from roxy import Extension
+
+
+class SubBody(Extension):
     def request(self, flow):
         flow.request.body.text = flow.request.body.text.replace("replaceme", "gone")
 

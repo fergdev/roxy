@@ -53,6 +53,8 @@ impl LuaUserData for LuaFlow {
             }
             Ok(LuaValue::Nil)
         });
+        // TODO: implement
+        // m.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| this.get_text());
     }
 }
 
@@ -70,19 +72,7 @@ pub(crate) fn register_flow(lua: &Lua) -> LuaResult<LuaTable> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use crate::interceptor::lua::{
-        flow::register_flow, request::register_request, response::register_response,
-    };
-
-    fn with_lua<F: FnOnce(&Lua) -> LuaResult<()>>(f: F) {
-        let lua = Lua::new();
-        register_request(&lua).expect("register_request ok");
-        register_response(&lua).expect("register_response ok");
-        register_flow(&lua).expect("register_flow ok");
-        f(&lua).expect("lua ok");
-    }
+    use crate::interceptor::lua::tests::with_lua;
 
     #[test]
     fn f01_flow_has_request_and_response_userdata() {

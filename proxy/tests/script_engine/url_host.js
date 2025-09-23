@@ -1,9 +1,10 @@
-globalThis.Extensions = [{
+/// <reference path="../../script_libs/js/index.d.ts" />
+/** @type {Extension} */
+const url_host = {
   request(flow) {
-    console.log(flow.request.url.host);
     if (flow.request.url.host = "localhost:1234") {
       flow.request.url.host = "example.com:4321"
     }
-    console.log(flow.request.url.host);
   },
-}];
+};
+globalThis.extensions = [url_host]

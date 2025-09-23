@@ -16,11 +16,12 @@ use tracing::{debug, error, trace};
 use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
     interceptor::{
-        Error, FlowNotify, KEY_EXTENSIONS, KEY_INTERCEPT_REQUEST, KEY_INTERCEPT_RESPONSE,
-        KEY_NOTIFY, KEY_START, KEY_STOP, RoxyEngine,
+        Error, FlowNotify, KEY_INTERCEPT_REQUEST, KEY_INTERCEPT_RESPONSE, KEY_NOTIFY, KEY_START,
+        KEY_STOP, RoxyEngine,
         js::{
-            body::JsBody, flow::JsFlow, headers::JsHeaders, logger::JsLogger,
-            query::UrlSearchParams, request::JsRequest, response::JsResponse, url::Url,
+            body::JsBody, constants::register_constants, flow::JsFlow, headers::JsHeaders,
+            logger::JsLogger, query::UrlSearchParams, request::JsRequest, response::JsResponse,
+            url::JsUrl,
         },
     },
 };
@@ -87,7 +88,7 @@ enum Cmd {
 pub(crate) fn register_classes(ctx: &mut Context) -> JsResult<()> {
     Console::register_with_logger(ctx, JsLogger {})?;
     ctx.register_global_class::<UrlSearchParams>()?;
-    ctx.register_global_class::<Url>()?;
+    ctx.register_global_class::<JsUrl>()?;
     ctx.register_global_class::<JsBody>()?;
     ctx.register_global_class::<JsFlow>()?;
     ctx.register_global_class::<JsRequest>()?;
@@ -181,6 +182,8 @@ impl JsEngine {
             ) {
                 error!("Error register_global_property {err}");
             }
+
+            register_constants(&mut ctx);
 
             if let Ok(rt) = rt {
                 rt.block_on(async move {
@@ -276,7 +279,7 @@ pub async fn handle_intercept_req(
 
     let flow_arg = JsValue::Object(js_flow_obj.clone());
 
-    run_request_handlers(ctx, flow_arg).map_err(|_| Error::InterceptedRequest)?;
+    let _ = run_request_handlers(ctx, flow_arg);
     let trailers = {
         let m = trailers_handle.borrow().clone();
         if m.is_empty() { None } else { Some(m) }
@@ -287,7 +290,7 @@ pub async fn handle_intercept_req(
     final_req.body = body.inner.borrow().clone();
     final_req.headers = header_handle.borrow().clone();
     final_req.trailers = trailers;
-    if let Some(uri) = url.and_then(|u| u.downcast::<Url>().ok()).and_then(|u| {
+    if let Some(uri) = url.and_then(|u| u.downcast::<JsUrl>().ok()).and_then(|u| {
         let url_ref = u.borrow();
         let value = url_ref.data().to_string();
         RUri::from_str(&value).ok()
@@ -299,14 +302,19 @@ pub async fn handle_intercept_req(
     Ok((final_req, final_resp))
 }
 
-fn run_request_handlers(ctx: &mut Context, flow_arg: JsValue) -> JsResult<()> {
-    let ext_val = ctx.global_object().get(js_string!("Extensions"), ctx)?;
+fn get_extensions(ctx: &mut Context) -> JsResult<JsArray> {
+    let ext_val = ctx.global_object().get(js_string!("extensions"), ctx)?;
     let Some(ext_obj) = ext_val.as_object() else {
-        return Ok(());
+        return Err(js_error!(TypeError: "`extensions` must be an Array"));
     };
 
     let ext_arr = JsArray::from_object(ext_obj.clone())
-        .map_err(|_| js_error!(TypeError: "`Extensions` must be an Array"))?;
+        .map_err(|_| js_error!(TypeError: "`extensions` must be an Array"))?;
+    Ok(ext_arr)
+}
+
+fn run_request_handlers(ctx: &mut Context, flow_arg: JsValue) -> JsResult<()> {
+    let ext_arr = get_extensions(ctx)?;
 
     let len = ext_arr.length(ctx)?;
     for i in 0..len {
@@ -328,13 +336,7 @@ fn run_request_handlers(ctx: &mut Context, flow_arg: JsValue) -> JsResult<()> {
 }
 
 fn run_start_handles(ctx: &mut Context) -> JsResult<()> {
-    let ext_val = ctx.global_object().get(js_string!("Extensions"), ctx)?;
-    let Some(ext_obj) = ext_val.as_object() else {
-        return Ok(());
-    };
-
-    let ext_arr = JsArray::from_object(ext_obj.clone())
-        .map_err(|_| js_error!(TypeError: "`Extensions` must be an Array"))?;
+    let ext_arr = get_extensions(ctx)?;
 
     let len = ext_arr.length(ctx)?;
     for i in 0..len {
@@ -367,13 +369,7 @@ fn call_method_if_callable(
 }
 
 async fn on_stop(ctx: &mut Context) -> JsResult<()> {
-    let ext_val = ctx.global_object().get(js_string!(KEY_EXTENSIONS), ctx)?;
-    let Some(ext_obj) = ext_val.as_object() else {
-        return Ok(());
-    };
-    let ext_arr = JsArray::from_object(ext_obj.clone())
-        .map_err(|_| js_error!(TypeError: "`Extensions` must be an Array"))?;
-
+    let ext_arr = get_extensions(ctx)?;
     let len = ext_arr.length(ctx)?;
     for i in 0..len {
         let addon = ext_arr.get(i, ctx)?;
@@ -422,7 +418,7 @@ async fn handle_intercept_resp(
     let js_flow_obj = JsObject::from_proto_and_data(proto, flow);
     let flow_arg = JsValue::Object(js_flow_obj.clone());
 
-    run_response_handlers(ctx, flow_arg).map_err(|_| Error::InterceptedRequest)?;
+    let _ = run_response_handlers(ctx, flow_arg);
     let trailers = {
         let m = trailer_handle.borrow().clone();
         if m.is_empty() { None } else { Some(m) }
@@ -436,12 +432,7 @@ async fn handle_intercept_resp(
 }
 
 fn run_response_handlers(ctx: &mut Context, flow_arg: JsValue) -> JsResult<()> {
-    let ext_val = ctx.global_object().get(js_string!("Extensions"), ctx)?;
-    let Some(ext_obj) = ext_val.as_object() else {
-        return Ok(());
-    };
-    let ext_arr = JsArray::from_object(ext_obj.clone())
-        .map_err(|_| js_error!(TypeError: "`Extensions` must be an Array"))?;
+    let ext_arr = get_extensions(ctx)?;
 
     let len = ext_arr.length(ctx)?;
     for i in 0..len {

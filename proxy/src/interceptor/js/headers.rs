@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use boa_engine::{
-    Context, JsData, JsResult, JsValue, js_error, js_string, object::builtins::JsArray,
+    Context, JsData, JsResult, JsString, JsValue, js_error, js_string, object::builtins::JsArray,
     value::Convert,
 };
 use boa_gc::{Finalize, Trace};
@@ -37,6 +37,12 @@ impl Default for JsHeaders {
 
 js_class! {
     class JsHeaders as "Headers" {
+        property length {
+            fn get(this: JsClass<JsHeaders>) -> JsResult<usize> {
+                Ok(this.borrow().headers.borrow().len())
+            }
+        }
+
         constructor() {
             Ok(Self::default())
         }
@@ -106,27 +112,25 @@ js_class! {
                 .any(|(k, _)| k.eq(&name));
             Ok(has)
         }
+        fn clear(this: JsClass<JsHeaders>) -> JsResult<()> {
+            this.borrow_mut().headers
+                .borrow_mut().clear();
+            Ok(())
+        }
+
+        fn to_string as "toString"(this: JsClass<JsHeaders>) -> JsString {
+            let this = this.borrow();
+            JsString::from(format!("{:?}", this.headers.borrow()))
+        }
+
     }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use boa_engine::{Context, JsValue, Source};
-
-    fn setup() -> Context {
-        let mut ctx = Context::default();
-        ctx.eval(Source::from_bytes(
-            r#"
-            function must(cond, msg) { if (!cond) throw new Error(msg || "assert failed"); }
-            "#,
-        ))
-        .unwrap();
-        ctx.register_global_class::<JsHeaders>()
-            .expect("register Headers");
-        ctx
-    }
+    use crate::interceptor::js::tests::setup;
+    use boa_engine::{JsValue, Source};
 
     #[test]
     fn headers_constructor_creates_empty_map() {
@@ -135,9 +139,9 @@ mod tests {
             .eval(Source::from_bytes(
                 r#"
                 const h = new Headers();
-                must(typeof h === "object", "Headers should construct an object");
+                assertTrue(typeof h === "object", "Headers should construct an object");
                 // brand new: shouldn't have host
-                must(h.has("host") === false, "no host by default");
+                assertEqual(h.has("host"), false, "no host by default");
                 true
                 "#,
             ))
@@ -152,8 +156,8 @@ mod tests {
             r#"
             const h = new Headers();
             h.set("X-Trace", "abc123");
-            must(h.get("X-Trace") === "abc123", "set/get roundtrip");
-            must(h.has("X-Trace") === true, "has after set");
+            assertEqual(h.get("X-Trace"), "abc123", "set/get roundtrip");
+            assertEqual(h.has("X-Trace"), true, "has after set");
             "#,
         ))
         .unwrap();
@@ -169,15 +173,15 @@ mod tests {
             h.append("set-cookie", "b=2");
 
             const all = h.getAll("set-cookie");
-            must(Array.isArray(all), "getAll returns array");
-            must(all.length === 2, "two values");
+            assertTrue(Array.isArray(all), "getAll returns array");
+            assertEqual(all.length, 2, "two values");
             // Order is insertion order for http::HeaderMap iteration, which is typically the order inserted.
-            must(all.includes("a=1"), "contains a=1");
-            must(all.includes("b=2"), "contains b=2");
+            assertTrue(all.includes("a=1"), "contains a=1");
+            assertTrue(all.includes("b=2"), "contains b=2");
 
             // get() returns a single value (first)
             const first = h.get("set-cookie");
-            must(first === "a=1" || first === "b=2", "get returns one of values");
+            assertEqual(first, "a=1" || first === "b=2", "get returns one of values");
             "#,
         ))
         .unwrap();
@@ -191,12 +195,12 @@ mod tests {
             const h = new Headers();
             h.append("X-Foo", "1");
             h.append("X-Foo", "2");
-            must(h.has("X-Foo") === true, "precondition: has X-Foo");
+            assertEqual(h.has("X-Foo"), true, "precondition: has X-Foo");
             h.delete("X-Foo");
-            must(h.has("X-Foo") === false, "deleted all X-Foo");
-            must(h.get("X-Foo") === null, "get null after delete");
+            assertEqual(h.has("X-Foo"), false, "deleted all X-Foo");
+            assertEqual(h.get("X-Foo"), null, "get null after delete");
             const all = h.getAll("X-Foo");
-            must(Array.isArray(all) && all.length === 0, "getAll empty after delete");
+            assertTrue(Array.isArray(all) && all.length === 0, "getAll empty after delete");
             "#,
         ))
         .unwrap();
@@ -209,8 +213,8 @@ mod tests {
             r#"
             const h = new Headers();
             h.set("content-type", "text/plain");
-            must(h.has("Content-Type") === true, "has is case-insensitive");
-            must(h.get("CONTENT-TYPE") === "text/plain", "get is case-insensitive");
+            assertEqual(h.has("Content-Type"), true, "has is case-insensitive");
+            assertEqual(h.get("CONTENT-TYPE"), "text/plain", "get is case-insensitive");
             "#,
         ))
         .unwrap();
@@ -223,13 +227,13 @@ mod tests {
             r#"
             const h = new Headers();
             h.set("X-Num", 123);
-            must(h.get("X-Num") === "123", "number coerces to string");
+            assertEqual(h.get("X-Num"), "123", "number coerces to string");
 
             h.set("X-BoolTrue", true);
-            must(h.get("X-BoolTrue") === "true", "boolean true coerces");
+            assertEqual(h.get("X-BoolTrue"), "true", "boolean true coerces");
 
             h.set("X-BoolFalse", false);
-            must(h.get("X-BoolFalse") === "false", "boolean false coerces");
+            assertEqual(h.get("X-BoolFalse"), "false", "boolean false coerces");
             "#,
         ))
         .unwrap();
@@ -243,9 +247,9 @@ mod tests {
             try {
                 const h = new Headers();
                 h.set("Bad Name", "x"); // invalid due to space
-                must(false, "expected TypeError");
+                assertTrue(false, "expected TypeError");
             } catch (e) {
-                must(e instanceof TypeError, "TypeError for invalid header name");
+                assertTrue(e instanceof TypeError, "TypeError for invalid header name");
                 true
             }
             "#,
@@ -261,9 +265,9 @@ mod tests {
             try {
                 const h = new Headers();
                 h.set("X", "line1\r\nline2"); // CRLF not allowed
-                must(false, "expected TypeError");
+                assertTrue(false, "expected TypeError");
             } catch (e) {
-                must(e instanceof TypeError, "TypeError for invalid header value");
+                assertTrue(e instanceof TypeError, "TypeError for invalid header value");
                 true
             }
             "#,
@@ -280,7 +284,7 @@ mod tests {
             h.append("Set-Cookie", "a=1");
             h.append("set-cookie", "b=2");
             const all = h.getAll("SET-COOKIE");
-            must(Array.isArray(all) && all.length === 2, "both values under case-insensitive key");
+            assertTrue(Array.isArray(all) && all.length === 2, "both values under case-insensitive key");
             "#,
         ))
         .unwrap();
@@ -292,10 +296,10 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const h = new Headers();
-            must(h.has("Not-There") === false, "missing returns false");
-            must(h.get("Not-There") === null, "get null when missing");
+            assertEqual(h.has("Not-There"), false, "missing returns false");
+            assertEqual(h.get("Not-There"), null, "get null when missing");
             const all = h.getAll("Not-There");
-            must(Array.isArray(all) && all.length === 0, "empty getAll when missing");
+            assertTrue(Array.isArray(all) && all.length === 0, "empty getAll when missing");
             "#,
         ))
         .unwrap();

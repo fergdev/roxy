@@ -1,4 +1,7 @@
-class StartInvoked:
+from roxy import Flow, Extension
+
+
+class StartInvoked(Extension):
     def start(self):
         self.count = 10
 

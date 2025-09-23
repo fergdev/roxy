@@ -1,9 +1,10 @@
-globalThis.Extensions = [
-  {
-    request(flow) {
-      if (flow.request.url.port == 80) {
-        flow.request.url.port = 8080
-      }
-    },
-  }
-]
+/// <reference path="../../script_libs/js/index.d.ts" />
+/** @type {Extension} */
+const url_port = {
+  request(flow) {
+    if (flow.request.url.port == 1234) {
+      flow.request.url.port = 8080
+    }
+  },
+};
+globalThis.extensions = [url_port];

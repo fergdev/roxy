@@ -1,19 +1,20 @@
-use pyo3::{
-    exceptions::PyTypeError,
-    prelude::*,
-    types::{PyDict, PyList},
-};
-use std::{ffi::CString, sync::Arc};
+use http::StatusCode;
+use pyo3::{exceptions::PyTypeError, prelude::*, types::PyList};
+use roxy_shared::uri::RUri;
+use std::{ffi::CString, ops::Deref, str::FromStr, sync::Arc};
 
 use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
-    interceptor::{KEY_REQUEST, KEY_RESPONSE, KEY_START, KEY_STOP, py::init_python},
+    interceptor::{
+        KEY_REQUEST, KEY_RESPONSE, KEY_START, KEY_STOP,
+        py::{init_python, notify},
+    },
 };
 
 use async_trait::async_trait;
 use pyo3::ffi::c_str;
 use tokio::sync::{Mutex, mpsc::Sender};
-use tracing::{debug, error, trace};
+use tracing::{debug, error, info, trace};
 
 use crate::interceptor::{Error, FlowNotify, KEY_EXTENSIONS, RoxyEngine, py::flow::PyFlow};
 
@@ -25,11 +26,7 @@ pub(crate) struct PythonEngine {
 impl PythonEngine {
     pub fn new(notify_tx: Option<Sender<FlowNotify>>) -> Self {
         init_python();
-        if let Some(notify_tx) = notify_tx {
-            Python::attach(|py| {
-                let _ = inject_notify(py, notify_tx);
-            });
-        }
+        notify::init_notify(notify_tx);
         Self {
             addons: Arc::new(Mutex::new(Vec::new())),
         }
@@ -54,19 +51,6 @@ impl Notifier {
     fn notify(&self, level: i32, msg: String) -> PyResult<()> {
         self.__call__(level, msg)
     }
-}
-
-fn inject_notify(py: Python<'_>, tx: Sender<FlowNotify>) -> PyResult<()> {
-    let notifier = Py::new(py, Notifier { tx })?;
-    let builtins = py.import("builtins")?;
-    builtins.setattr("notify", notifier.clone_ref(py))?;
-    let roxy = PyModule::new(py, "Roxy")?;
-    roxy.add("notify", notifier)?;
-    let sys = py.import("sys")?;
-    sys.getattr("modules")?
-        .downcast::<PyDict>()?
-        .set_item("Roxy", roxy)?;
-    Ok(())
 }
 
 impl Default for PythonEngine {
@@ -195,24 +179,30 @@ fn update_request<'py>(
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
     let py_req = &flow_cell.borrow().request;
-    req.version = py_req
-        .inner
-        .lock()
-        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
-        .version;
-    req.uri = py_req
-        .url
-        .uri
-        .lock()
-        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
-        .clone();
+    req.uri = RUri::from_str(
+        py_req
+            .url
+            .inner
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("{e}")))?
+            .as_str(),
+    )
+    .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
-    req.method = py_req
-        .inner
+    let version = py_req
+        .version
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
-        .method
         .clone();
+    info!("req.version {version:?}");
+    req.version = version.into();
+
+    let method = py_req
+        .method
+        .lock()
+        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
+        .clone();
+    req.method = method.into();
 
     req.body = py_req
         .body
@@ -260,10 +250,6 @@ fn update_response<'py>(
 
     let resp = flow_cell.borrow();
     let resp = &resp.response;
-    let resp = resp
-        .inner
-        .lock()
-        .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
     res.body = flow_cell
         .borrow()
         .response
@@ -272,8 +258,22 @@ fn update_response<'py>(
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .clone();
-    res.status = resp.status;
-    res.version = resp.version;
+    let status = resp
+        .status
+        .lock()
+        .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
+    let a: u16 = status.deref().clone().into();
+    res.status = StatusCode::from_u16(a)
+        .map_err(|e| PyTypeError::new_err(format!("invalid status code: {e}")))?;
+
+    let version = flow_cell
+        .borrow()
+        .response
+        .version
+        .lock()
+        .map_err(|e| PyTypeError::new_err(format!("{e}")))?
+        .clone();
+    res.version = version.into();
     res.headers = flow_cell
         .borrow()
         .response

@@ -1,4 +1,7 @@
-class Counter:
+from roxy import Extension
+
+
+class Counter(Extension):
     def __init__(self):
         self.num = 0
 

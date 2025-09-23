@@ -1,17 +1,28 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 
-use pyo3::{PyResult, exceptions::PyTypeError, pyclass, pymethods};
+use pyo3::{
+    Bound, PyAny, PyResult, exceptions::PyTypeError, pyclass, pymethods, types::PyAnyMethods,
+};
 use roxy_shared::version::HttpVersion;
+use tracing::info;
 
 use crate::{
     flow::InterceptedResponse,
-    interceptor::py::{body::PyBody, headers::PyHeaders},
+    interceptor::py::{
+        body::PyBody,
+        constants::{PyStatus, PyVersion},
+        headers::PyHeaders,
+    },
 };
 
-#[pyclass]
+#[pyclass(name = "Response")]
 #[derive(Debug, Clone)]
 pub(crate) struct PyResponse {
-    pub(crate) inner: Arc<Mutex<InterceptedResponse>>,
+    pub(crate) status: Arc<Mutex<PyStatus>>,
+    pub(crate) version: Arc<Mutex<PyVersion>>,
     #[pyo3(get)]
     pub(crate) body: PyBody,
     #[pyo3(get)]
@@ -23,7 +34,8 @@ pub(crate) struct PyResponse {
 impl Default for PyResponse {
     fn default() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(InterceptedResponse::default())),
+            version: Arc::new(Mutex::new(PyVersion::default())),
+            status: Arc::new(Mutex::new(PyStatus::default())),
             body: PyBody::default(),
             headers: PyHeaders::default(),
             trailers: PyHeaders::default(),
@@ -34,16 +46,12 @@ impl Default for PyResponse {
 impl PyResponse {
     pub(crate) fn from_resp(resp: &InterceptedResponse) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(resp.clone())),
+            version: Arc::new(Mutex::new(PyVersion::from(&resp.version))),
+            status: Arc::new(Mutex::new(PyStatus::from(resp.status))),
             body: PyBody::new(resp.body.clone()),
             headers: PyHeaders::from_headers(resp.headers.clone()),
             trailers: PyHeaders::from_headers(resp.trailers.clone().unwrap_or_default()),
         }
-    }
-    fn lock(&self) -> PyResult<std::sync::MutexGuard<'_, InterceptedResponse>> {
-        self.inner
-            .lock()
-            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))
     }
 }
 
@@ -55,33 +63,74 @@ impl PyResponse {
     }
 
     #[getter]
-    fn status(&self) -> PyResult<u16> {
-        let res = self.lock()?;
-        Ok(res.status.as_u16())
+    fn status(&self) -> PyResult<PyStatus> {
+        let res = self
+            .status
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))?;
+        Ok(res.clone())
     }
 
     #[setter]
-    fn set_status(&self, value: u16) -> PyResult<()> {
-        let mut res = self.lock()?;
-        res.status =
-            http::StatusCode::from_u16(value).map_err(|e| PyTypeError::new_err(e.to_string()))?;
-        Ok(())
+    fn set_status(&self, value: Bound<PyAny>) -> PyResult<()> {
+        let mut g = self
+            .status
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))?;
+        if let Ok(version) = value.extract::<PyStatus>() {
+            *g = version.clone();
+            return Ok(());
+        }
+
+        if let Ok(s) = value.extract::<u16>() {
+            *g = PyStatus::try_from(s)?;
+            return Ok(());
+        }
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "invalid http status {value:?}"
+        )))
     }
 
     #[getter]
-    fn version(&self) -> PyResult<String> {
-        let res = self.lock()?;
-        Ok(res.version.to_string())
+    fn version(&self) -> PyResult<PyVersion> {
+        let res = self
+            .version
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))?;
+        Ok(res.clone())
     }
 
     #[setter]
-    fn set_version(&self, value: String) -> PyResult<()> {
-        let mut res = self.lock()?;
-        let value: HttpVersion = value
-            .parse()
-            .map_err(|_| PyTypeError::new_err(format!("Invalid HTTP version: {value}.")))?;
-        res.version = value;
-        Ok(())
+    fn set_version(&self, py_val: Bound<PyAny>) -> PyResult<()> {
+        info!("set version");
+        let mut g = self
+            .version
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))?;
+        if let Ok(version) = py_val.extract::<PyVersion>() {
+            info!("set py version");
+            *g = version.clone();
+            return Ok(());
+        }
+
+        if let Ok(s) = py_val.extract::<String>() {
+            info!("set py string");
+            *g = PyVersion::from(
+                &HttpVersion::from_str(&s)
+                    .map_err(|_| PyTypeError::new_err("Failed to convert version"))?,
+            );
+            return Ok(());
+        }
+
+        Err(pyo3::exceptions::PyTypeError::new_err(
+            "method must be Method enum or string",
+        ))
+    }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self:?}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("Response({:?})", self))
     }
 }
 
@@ -95,8 +144,8 @@ mod tests {
     fn pyresponse_constructor_defaults() {
         with_module(
             r#"
-from roxy import PyResponse
-r = PyResponse()
+from roxy import Response
+r = Response()
 # We don't assert a specific default status/version; just ensure they are readable.
 _ = r.status
 _ = r.version
@@ -108,12 +157,12 @@ _ = r.version
     fn pyresponse_status_get_set_valid() {
         with_module(
             r#"
-from roxy import PyResponse
-r = PyResponse()
+from roxy import Response
+r = Response()
 r.status = 204
-assert r.status == 204
+assertEqual(r.status, 204)
 r.status = 418
-assert r.status == 418
+assertEqual(r.status, 418)
 "#,
         );
     }
@@ -122,8 +171,8 @@ assert r.status == 418
     fn pyresponse_status_set_invalid_raises() {
         with_module(
             r#"
-from roxy import PyResponse
-r = PyResponse()
+from roxy import Response
+r = Response()
 threw = False
 try:
     r.status = 9999
@@ -138,14 +187,14 @@ assert threw, "setting invalid HTTP status should raise"
     fn pyresponse_version_get_set_valid() {
         with_module(
             r#"
-from roxy import PyResponse
-r = PyResponse()
+from roxy import Response
+r = Response()
 r.version = "HTTP/1.1"
-assert r.version == "HTTP/1.1"
+assertEqual(r.version, "HTTP/1.1")
 r.version = "HTTP/2.0"
-assert r.version == "HTTP/2.0"
+assertEqual(r.version, "HTTP/2.0")
 r.version = "HTTP/3.0"
-assert r.version == "HTTP/3.0"
+assertEqual(r.version, "HTTP/3.0")
 "#,
         );
     }
@@ -154,8 +203,8 @@ assert r.version == "HTTP/3.0"
     fn pyresponse_version_set_invalid_raises() {
         with_module(
             r#"
-from roxy import PyResponse
-r = PyResponse()
+from roxy import Response
+r = Response()
 threw = False
 try:
     r.version = "HTTP/9.9"

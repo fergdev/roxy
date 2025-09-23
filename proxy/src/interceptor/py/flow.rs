@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-#[pyclass]
+#[pyclass(name = "Flow")]
 #[derive(Default)]
 pub(crate) struct PyFlow {
     #[pyo3(get)]
@@ -37,6 +37,15 @@ impl PyFlow {
     fn new_py() -> Self {
         Self::default()
     }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self:?}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!(
+            "Flow(request={:?}, response={:?})",
+            self.request, self.response
+        ))
+    }
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -48,8 +57,8 @@ mod tests {
     fn pyflow_constructor_defaults() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
+from roxy import Flow
+f = Flow()
 # attributes exist
 assert hasattr(f, "request")
 assert hasattr(f, "response")
@@ -66,12 +75,12 @@ _ = f.response.version
     fn pyflow_request_set_method_and_version() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
+from roxy import Flow
+f = Flow()
 f.request.method = "POST"
-assert f.request.method == "POST"
+assertEqual(f.request.method, "POST")
 f.request.version = "HTTP/1.1"
-assert f.request.version == "HTTP/1.1"
+assertEqual(f.request.version, "HTTP/1.1")
 "#,
         );
     }
@@ -80,12 +89,12 @@ assert f.request.version == "HTTP/1.1"
     fn pyflow_response_set_status_and_version() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
+from roxy import Flow
+f = Flow()
 f.response.status = 201
-assert f.response.status == 201
+assertEqual(f.response.status, 201)
 f.response.version = "HTTP/2.0"
-assert f.response.version == "HTTP/2.0"
+assertEqual(f.response.version, "HTTP/2.0")
 "#,
         );
     }
@@ -94,22 +103,21 @@ assert f.response.version == "HTTP/2.0"
     fn pyflow_body_roundtrip_on_response() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
-# default body is empty
-assert f.response.body.is_empty()
-assert f.response.body.len() == 0
-# set text, read back raw and text
+from roxy import Flow
+f = Flow()
+assert not f.response.body
+assertEqual(len(f.response.body), 0)
+
 f.response.body.text = "hello"
-assert f.response.body.text == "hello"
-assert f.response.body.len() == 5
+assertEqual(f.response.body.text, "hello")
+assertEqual(len(f.response.body), 5)
+
 raw = f.response.body.raw
 assert isinstance(raw, (bytes, bytearray))
-assert raw == b"hello"
-# set raw, read text
+assertEqual(raw, b"hello")
+
 f.response.body.raw = b"abc\x00def"
-assert f.response.body.len() == 7
-# text decoding should succeed for valid prefix; we only assert type here
+assertEqual(len(f.response.body), 7)
 assert isinstance(f.response.body.text, str)
 "#,
         );
@@ -119,8 +127,8 @@ assert isinstance(f.response.body.text, str)
     fn pyflow_request_headers_and_url_present() {
         with_module(
             r#"
-from roxy import PyFlow
-f = PyFlow()
+from roxy import Flow
+f = Flow()
 # request sub-objects exist and are usable (minimal smoke)
 h = f.request.headers
 t = f.request.trailers

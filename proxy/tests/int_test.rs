@@ -579,8 +579,8 @@ static INTERCEPT_QUERY_SCRIPT: &str = r#"
 Extensions = {
   {
   function (flow) 
-      flow.request.url.searchParams["foo"] = "bar & baz"
-      flow.request.url.searchParams["saison"] = "Été+hiver"
+      flow.request.url.search_params["foo"] = "bar & baz"
+      flow.request.url.search_params["saison"] = "Été+hiver"
   end,
   function (flow) 
   end,
@@ -993,7 +993,7 @@ async fn test_redirect_scheme() {
 Extensions = {{
   {{
   function (flow) 
-    flow.request.url.scheme = "{}"
+    flow.request.url.protocol = "{}"
   end,
   function (flow) 
   end,

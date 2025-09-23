@@ -1,7 +1,10 @@
 pub mod body;
+mod constants;
 pub mod engine;
+mod extension;
 mod flow;
 mod headers;
+mod notify;
 mod query;
 mod request;
 mod response;
@@ -16,6 +19,9 @@ use tracing::error;
 use crate::interceptor::py::writer::{WriterStdErr, WriterStdOut};
 #[pymodule]
 mod roxy {
+
+    #[pymodule_export]
+    use super::extension::Extension;
 
     #[pymodule_export]
     use super::body::PyBody;
@@ -37,6 +43,21 @@ mod roxy {
 
     #[pymodule_export]
     use super::request::PyRequest;
+
+    #[pymodule_export]
+    use super::constants::PyMethod;
+
+    #[pymodule_export]
+    use super::constants::PyProtocol;
+
+    #[pymodule_export]
+    use super::constants::PyStatus;
+
+    #[pymodule_export]
+    use super::constants::PyVersion;
+
+    #[pymodule_export]
+    use super::notify::notify;
 }
 
 static INIT: Once = Once::new();
@@ -59,17 +80,50 @@ pub(crate) fn init_python() {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::panic, clippy::expect_used)]
 pub(crate) fn with_module(code: &str) {
+    use crate::init_test_logging;
+
+    init_test_logging();
     init_python();
-    Python::attach(|py| -> pyo3::PyResult<()> {
+    if let Err(e) = Python::attach(|py| -> pyo3::PyResult<()> {
         py.import("roxy")?;
+        py.run(
+            &std::ffi::CString::new(
+                "#
+def assertEqual(a, b, msg=None):
+    if a != b:
+        if msg is None:
+            msg = f\"Expected '{a}' to equal '{b}'\"
+        raise AssertionError(msg)
+
+
+def assertTrue(a, msg=None):
+    if not a:
+        if msg is None:
+            msg = f\"Expected '{a}' to be 'true'\"
+        raise AssertionError(msg)
+
+def assertFalse(a, msg=None):
+    if a:
+        if msg is None:
+            msg = f\"Expected '{a}' to be 'false'\"
+        raise AssertionError(msg)
+#",
+            )
+            .expect("Invalid cstring"),
+            None,
+            None,
+        )?;
+
         py.run(
             &std::ffi::CString::new(code).expect("Invalid cstring"),
             None,
             None,
         )?;
         Ok(())
-    })
-    .expect("python ok");
+    }) {
+        error!("Python error: {e:#?}");
+        panic!("Python code failed");
+    }
 }

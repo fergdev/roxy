@@ -10,6 +10,7 @@
   - [Body](./scripting/body.md)
   - [Url](./scripting/url.md)
     - [Query](./scripting/query.md)
+  - [Constants](./scripting/constants.md)
   - [Notify](./scripting/notify.md)
 
 ---

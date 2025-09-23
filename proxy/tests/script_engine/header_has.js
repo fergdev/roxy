@@ -1,4 +1,6 @@
-globalThis.Extensions = [{
+/// <reference path="../../script_libs/js/index.d.ts" />
+/** @type {Extension} */
+const headerHas = {
   request(flow) {
     if (flow.request.headers.has("X-Header1")) {
       flow.request.body.text = "has"
@@ -9,4 +11,5 @@ globalThis.Extensions = [{
       flow.response.body.text = "has"
     }
   }
-}];
+};
+globalThis.extensions = [headerHas];
