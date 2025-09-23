@@ -3,7 +3,6 @@ use std::sync::{Arc, Mutex};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use roxy_shared::uri::RUri;
-use tracing::info;
 use url::Url;
 
 use crate::interceptor::py::constants::PyProtocol;
@@ -72,15 +71,26 @@ impl PyUrl {
     #[getter]
     fn protocol(&self) -> PyResult<PyProtocol> {
         let g = self.lock()?;
-        info!("get protocol {}", g.scheme());
         Ok(PyProtocol::from(g.scheme()))
     }
     #[setter]
-    fn set_protocol(&self, proto: Bound<PyProtocol>) -> PyResult<()> {
-        info!("set protocol {proto:?}");
+    fn set_protocol(&self, py_val: Bound<PyAny>) -> PyResult<()> {
         let mut g = self.lock()?;
-        url::quirks::set_protocol(&mut g, &proto.unbind().to_string())
-            .map_err(|e| PyTypeError::new_err(format!("{e:#?}")))
+        if let Ok(proto) = py_val.extract::<PyProtocol>() {
+            url::quirks::set_protocol(&mut g, &proto.to_string())
+                .map_err(|e| PyTypeError::new_err(format!("{e:#?}")))?;
+            return Ok(());
+        }
+
+        if let Ok(s) = py_val.extract::<String>() {
+            url::quirks::set_protocol(&mut g, &s)
+                .map_err(|e| PyTypeError::new_err(format!("{e:#?}")))?;
+            return Ok(());
+        }
+
+        Err(pyo3::exceptions::PyTypeError::new_err(
+            "method must be Method enum or string",
+        ))
     }
 
     #[getter]
@@ -228,16 +238,31 @@ assertEqual(str(u), "https://example.org/zzz?q=1")
 "#,
         );
     }
-
     #[test]
-    fn pyurl_scheme_get_set() {
+    fn pyurl_protocol_get_set_str() {
         with_module(
             r#"
 from roxy import URL
 u = URL("http://example.com/")
+assertEqual(u.protocol, "HTTP")
 assertEqual(u.protocol, "http")
 u.protocol = "https"
 assertEqual(u.protocol, "https")
+assertEqual(u.protocol, "HTTPS")
+assert u.href.startswith("https://")
+"#,
+        );
+    }
+
+    #[test]
+    fn pyurl_protocol_get_set() {
+        with_module(
+            r#"
+from roxy import URL, Protocol
+u = URL("http://example.com/")
+assertEqual(u.protocol, Protocol.HTTP)
+u.protocol = Protocol.HTTPS
+assertEqual(u.protocol, Protocol.HTTPS)
 assert u.href.startswith("https://")
 "#,
         );

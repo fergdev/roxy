@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use cow_utils::CowUtils;
-use http::{Method, Version};
+use http::{Method, StatusCode, Version};
 use pyo3::{basic::CompareOp, prelude::*};
 use roxy_shared::version::HttpVersion;
 
@@ -101,7 +101,7 @@ impl PyMethod {
                     return Ok(self != &*other);
                 }
                 if let Ok(s) = other.extract::<String>() {
-                    return Ok(self.value() != s);
+                    return Ok(self.value().cow_to_lowercase() != s.cow_to_lowercase());
                 }
                 Ok(true)
             }
@@ -142,7 +142,7 @@ impl PyProtocol {
                     return Ok(self == &*other);
                 }
                 if let Ok(s) = other.extract::<String>() {
-                    return Ok(self.value() == s);
+                    return Ok(self.value().cow_to_lowercase() == s.cow_to_lowercase());
                 }
                 Ok(false)
             }
@@ -151,7 +151,7 @@ impl PyProtocol {
                     return Ok(self != &*other);
                 }
                 if let Ok(s) = other.extract::<String>() {
-                    return Ok(self.value() != s);
+                    return Ok(self.value().cow_to_lowercase() != s.cow_to_lowercase());
                 }
                 Ok(true)
             }
@@ -160,9 +160,15 @@ impl PyProtocol {
     }
 }
 
+impl Display for PyProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 impl From<&str> for PyProtocol {
     fn from(value: &str) -> Self {
-        match value {
+        match value.cow_to_lowercase().clone().as_ref() {
             "http" => PyProtocol::HTTP,
             "https" => PyProtocol::HTTPS,
             _ => PyProtocol::HTTP,
@@ -214,8 +220,8 @@ impl PyVersion {
             PyVersion::HTTP09 => "HTTP/0.9",
             PyVersion::HTTP10 => "HTTP/1.0",
             PyVersion::HTTP11 => "HTTP/1.1",
-            PyVersion::HTTP2 => "HTTP/2",
-            PyVersion::HTTP3 => "HTTP/3",
+            PyVersion::HTTP2 => "HTTP/2.0",
+            PyVersion::HTTP3 => "HTTP/3.0",
         }
     }
     fn __str__(&self) -> &'static str {
@@ -253,7 +259,7 @@ impl PyVersion {
 impl PyStatus {
     #[getter]
     fn value(&self) -> u16 {
-        to_u16(self)
+        self.clone().into()
     }
     fn __str__(&self) -> String {
         format!("{self:?}")
@@ -286,8 +292,8 @@ impl PyStatus {
     }
 }
 
-#[allow(clippy::upper_case_acronyms)]
-#[pyclass(name = "Version")]
+#[allow(clippy::upper_case_acronyms, non_camel_case_types)]
+#[pyclass(name = "Status")]
 #[derive(Debug, Clone, PartialEq, PartialOrd, Default)]
 pub(crate) enum PyStatus {
     CONTINUE,
@@ -354,9 +360,79 @@ pub(crate) enum PyStatus {
     NETWORK_AUTHENTICATION_REQUIRED,
 }
 
-impl From<u16> for PyStatus {
-    fn from(value: u16) -> Self {
-        match value {
+impl From<PyStatus> for u16 {
+    fn from(val: PyStatus) -> Self {
+        match val {
+            PyStatus::CONTINUE => 100,
+            PyStatus::SWITCHING_PROTOCOLS => 101,
+            PyStatus::PROCESSING => 102,
+            PyStatus::OK => 200,
+            PyStatus::CREATED => 201,
+            PyStatus::ACCEPTED => 202,
+            PyStatus::NON_AUTHORITATIVE_INFORMATION => 203,
+            PyStatus::NO_CONTENT => 204,
+            PyStatus::RESET_CONTENT => 205,
+            PyStatus::PARTIAL_CONTENT => 206,
+            PyStatus::MULTI_STATUS => 207,
+            PyStatus::ALREADY_REPORTED => 208,
+            PyStatus::IM_USED => 226,
+            PyStatus::MULTIPLE_CHOICES => 300,
+            PyStatus::MOVED_PERMANENTLY => 301,
+            PyStatus::FOUND => 302,
+            PyStatus::SEE_OTHER => 303,
+            PyStatus::NOT_MODIFIED => 304,
+            PyStatus::USE_PROXY => 305,
+            PyStatus::TEMPORARY_REDIRECT => 307,
+            PyStatus::PERMANENT_REDIRECT => 308,
+            PyStatus::BAD_REQUEST => 400,
+            PyStatus::UNAUTHORIZED => 401,
+            PyStatus::PAYMENT_REQUIRED => 402,
+            PyStatus::FORBIDDEN => 403,
+            PyStatus::NOT_FOUND => 404,
+            PyStatus::METHOD_NOT_ALLOWED => 405,
+            PyStatus::NOT_ACCEPTABLE => 406,
+            PyStatus::PROXY_AUTHENTICATION_REQUIRED => 407,
+            PyStatus::REQUEST_TIMEOUT => 408,
+            PyStatus::CONFLICT => 409,
+            PyStatus::GONE => 410,
+            PyStatus::LENGTH_REQUIRED => 411,
+            PyStatus::PRECONDITION_FAILED => 412,
+            PyStatus::PAYLOAD_TOO_LARGE => 413,
+            PyStatus::URI_TOO_LONG => 414,
+            PyStatus::UNSUPPORTED_MEDIA_TYPE => 415,
+            PyStatus::RANGE_NOT_SATISFIABLE => 416,
+            PyStatus::EXPECTATION_FAILED => 417,
+            PyStatus::IM_A_TEAPOT => 418,
+            PyStatus::MISDIRECTED_REQUEST => 421,
+            PyStatus::UNPROCESSABLE_ENTITY => 422,
+            PyStatus::LOCKED => 423,
+            PyStatus::FAILED_DEPENDENCY => 424,
+            PyStatus::TOO_EARLY => 425,
+            PyStatus::UPGRADE_REQUIRED => 426,
+            PyStatus::PRECONDITION_REQUIRED => 428,
+            PyStatus::TOO_MANY_REQUESTS => 429,
+            PyStatus::REQUEST_HEADER_FIELDS_TOO_LARGE => 431,
+            PyStatus::UNAVAILABLE_FOR_LEGAL_REASONS => 451,
+            PyStatus::INTERNAL_SERVER_ERROR => 500,
+            PyStatus::NOT_IMPLEMENTED => 501,
+            PyStatus::BAD_GATEWAY => 502,
+            PyStatus::SERVICE_UNAVAILABLE => 503,
+            PyStatus::GATEWAY_TIMEOUT => 504,
+            PyStatus::HTTP_VERSION_NOT_SUPPORTED => 505,
+            PyStatus::VARIANT_ALSO_NEGOTIATES => 506,
+            PyStatus::INSUFFICIENT_STORAGE => 507,
+            PyStatus::LOOP_DETECTED => 508,
+            PyStatus::NOT_EXTENDED => 510,
+            PyStatus::NETWORK_AUTHENTICATION_REQUIRED => 511,
+        }
+    }
+}
+
+impl TryFrom<u16> for PyStatus {
+    type Error = PyErr;
+
+    fn try_from(value: u16) -> Result<Self, PyErr> {
+        let v = match value {
             100 => PyStatus::CONTINUE,
             101 => PyStatus::SWITCHING_PROTOCOLS,
             102 => PyStatus::PROCESSING,
@@ -418,134 +494,86 @@ impl From<u16> for PyStatus {
             508 => PyStatus::LOOP_DETECTED,
             510 => PyStatus::NOT_EXTENDED,
             511 => PyStatus::NETWORK_AUTHENTICATION_REQUIRED,
-            _ => PyStatus::OK,
-        }
+            _ => {
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "method must be Method enum or string",
+                ));
+            }
+        };
+        Ok(v)
     }
 }
 
-fn to_u16(py_status: &PyStatus) -> u16 {
-    match py_status {
-        PyStatus::CONTINUE => 100,
-        PyStatus::SWITCHING_PROTOCOLS => 101,
-        PyStatus::PROCESSING => 102,
-        PyStatus::OK => 200,
-        PyStatus::CREATED => 201,
-        PyStatus::ACCEPTED => 202,
-        PyStatus::NON_AUTHORITATIVE_INFORMATION => 203,
-        PyStatus::NO_CONTENT => 204,
-        PyStatus::RESET_CONTENT => 205,
-        PyStatus::PARTIAL_CONTENT => 206,
-        PyStatus::MULTI_STATUS => 207,
-        PyStatus::ALREADY_REPORTED => 208,
-        PyStatus::IM_USED => 226,
-        PyStatus::MULTIPLE_CHOICES => 300,
-        PyStatus::MOVED_PERMANENTLY => 301,
-        PyStatus::FOUND => 302,
-        PyStatus::SEE_OTHER => 303,
-        PyStatus::NOT_MODIFIED => 304,
-        PyStatus::USE_PROXY => 305,
-        PyStatus::TEMPORARY_REDIRECT => 307,
-        PyStatus::PERMANENT_REDIRECT => 308,
-        PyStatus::BAD_REQUEST => 400,
-        PyStatus::UNAUTHORIZED => 401,
-        PyStatus::PAYMENT_REQUIRED => 402,
-        PyStatus::FORBIDDEN => 403,
-        PyStatus::NOT_FOUND => 404,
-        PyStatus::METHOD_NOT_ALLOWED => 405,
-        PyStatus::NOT_ACCEPTABLE => 406,
-        PyStatus::PROXY_AUTHENTICATION_REQUIRED => 407,
-        PyStatus::REQUEST_TIMEOUT => 408,
-        PyStatus::CONFLICT => 409,
-        PyStatus::GONE => 410,
-        PyStatus::LENGTH_REQUIRED => 411,
-        PyStatus::PRECONDITION_FAILED => 412,
-        PyStatus::PAYLOAD_TOO_LARGE => 413,
-        PyStatus::URI_TOO_LONG => 414,
-        PyStatus::UNSUPPORTED_MEDIA_TYPE => 415,
-        PyStatus::RANGE_NOT_SATISFIABLE => 416,
-        PyStatus::EXPECTATION_FAILED => 417,
-        PyStatus::IM_A_TEAPOT => 418,
-        PyStatus::MISDIRECTED_REQUEST => 421,
-        PyStatus::UNPROCESSABLE_ENTITY => 422,
-        PyStatus::LOCKED => 423,
-        PyStatus::FAILED_DEPENDENCY => 424,
-        PyStatus::TOO_EARLY => 425,
-        PyStatus::UPGRADE_REQUIRED => 426,
-        PyStatus::PRECONDITION_REQUIRED => 428,
-        PyStatus::TOO_MANY_REQUESTS => 429,
-        PyStatus::REQUEST_HEADER_FIELDS_TOO_LARGE => 431,
-        PyStatus::UNAVAILABLE_FOR_LEGAL_REASONS => 451,
-        PyStatus::INTERNAL_SERVER_ERROR => 500,
-        PyStatus::NOT_IMPLEMENTED => 501,
-        PyStatus::BAD_GATEWAY => 502,
-        PyStatus::SERVICE_UNAVAILABLE => 503,
-        PyStatus::GATEWAY_TIMEOUT => 504,
-        PyStatus::HTTP_VERSION_NOT_SUPPORTED => 505,
-        PyStatus::VARIANT_ALSO_NEGOTIATES => 506,
-        PyStatus::INSUFFICIENT_STORAGE => 507,
-        PyStatus::LOOP_DETECTED => 508,
-        PyStatus::NOT_EXTENDED => 510,
-        PyStatus::NETWORK_AUTHENTICATION_REQUIRED => 511,
+impl From<StatusCode> for PyStatus {
+    fn from(value: StatusCode) -> Self {
+        match value {
+            StatusCode::CONTINUE => PyStatus::CONTINUE,
+            StatusCode::SWITCHING_PROTOCOLS => PyStatus::SWITCHING_PROTOCOLS,
+            StatusCode::PROCESSING => PyStatus::PROCESSING,
+            StatusCode::OK => PyStatus::OK,
+            StatusCode::CREATED => PyStatus::CREATED,
+            StatusCode::ACCEPTED => PyStatus::ACCEPTED,
+            StatusCode::NON_AUTHORITATIVE_INFORMATION => PyStatus::NON_AUTHORITATIVE_INFORMATION,
+            StatusCode::NO_CONTENT => PyStatus::NO_CONTENT,
+            StatusCode::RESET_CONTENT => PyStatus::RESET_CONTENT,
+            StatusCode::PARTIAL_CONTENT => PyStatus::PARTIAL_CONTENT,
+            StatusCode::MULTI_STATUS => PyStatus::MULTI_STATUS,
+            StatusCode::ALREADY_REPORTED => PyStatus::ALREADY_REPORTED,
+            StatusCode::IM_USED => PyStatus::IM_USED,
+            StatusCode::MULTIPLE_CHOICES => PyStatus::MULTIPLE_CHOICES,
+            StatusCode::MOVED_PERMANENTLY => PyStatus::MOVED_PERMANENTLY,
+            StatusCode::FOUND => PyStatus::FOUND,
+            StatusCode::SEE_OTHER => PyStatus::SEE_OTHER,
+            StatusCode::NOT_MODIFIED => PyStatus::NOT_MODIFIED,
+            StatusCode::USE_PROXY => PyStatus::USE_PROXY,
+            StatusCode::TEMPORARY_REDIRECT => PyStatus::TEMPORARY_REDIRECT,
+            StatusCode::PERMANENT_REDIRECT => PyStatus::PERMANENT_REDIRECT,
+            StatusCode::BAD_REQUEST => PyStatus::BAD_REQUEST,
+            StatusCode::UNAUTHORIZED => PyStatus::UNAUTHORIZED,
+            StatusCode::PAYMENT_REQUIRED => PyStatus::PAYMENT_REQUIRED,
+            StatusCode::FORBIDDEN => PyStatus::FORBIDDEN,
+            StatusCode::NOT_FOUND => PyStatus::NOT_FOUND,
+            StatusCode::METHOD_NOT_ALLOWED => PyStatus::METHOD_NOT_ALLOWED,
+            StatusCode::NOT_ACCEPTABLE => PyStatus::NOT_ACCEPTABLE,
+            StatusCode::PROXY_AUTHENTICATION_REQUIRED => PyStatus::PROXY_AUTHENTICATION_REQUIRED,
+            StatusCode::REQUEST_TIMEOUT => PyStatus::REQUEST_TIMEOUT,
+            StatusCode::CONFLICT => PyStatus::CONFLICT,
+            StatusCode::GONE => PyStatus::GONE,
+            StatusCode::LENGTH_REQUIRED => PyStatus::LENGTH_REQUIRED,
+            StatusCode::PRECONDITION_FAILED => PyStatus::PRECONDITION_FAILED,
+            StatusCode::PAYLOAD_TOO_LARGE => PyStatus::PAYLOAD_TOO_LARGE,
+            StatusCode::URI_TOO_LONG => PyStatus::URI_TOO_LONG,
+            StatusCode::UNSUPPORTED_MEDIA_TYPE => PyStatus::UNSUPPORTED_MEDIA_TYPE,
+            StatusCode::RANGE_NOT_SATISFIABLE => PyStatus::RANGE_NOT_SATISFIABLE,
+            StatusCode::EXPECTATION_FAILED => PyStatus::EXPECTATION_FAILED,
+            StatusCode::IM_A_TEAPOT => PyStatus::IM_A_TEAPOT,
+            StatusCode::MISDIRECTED_REQUEST => PyStatus::MISDIRECTED_REQUEST,
+            StatusCode::UNPROCESSABLE_ENTITY => PyStatus::UNPROCESSABLE_ENTITY,
+            StatusCode::LOCKED => PyStatus::LOCKED,
+            StatusCode::FAILED_DEPENDENCY => PyStatus::FAILED_DEPENDENCY,
+            StatusCode::TOO_EARLY => PyStatus::TOO_EARLY,
+            StatusCode::UPGRADE_REQUIRED => PyStatus::UPGRADE_REQUIRED,
+            StatusCode::PRECONDITION_REQUIRED => PyStatus::PRECONDITION_REQUIRED,
+            StatusCode::TOO_MANY_REQUESTS => PyStatus::TOO_MANY_REQUESTS,
+            StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE => {
+                PyStatus::REQUEST_HEADER_FIELDS_TOO_LARGE
+            }
+            StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS => PyStatus::UNAVAILABLE_FOR_LEGAL_REASONS,
+            StatusCode::INTERNAL_SERVER_ERROR => PyStatus::INTERNAL_SERVER_ERROR,
+            StatusCode::NOT_IMPLEMENTED => PyStatus::NOT_IMPLEMENTED,
+            StatusCode::BAD_GATEWAY => PyStatus::BAD_GATEWAY,
+            StatusCode::SERVICE_UNAVAILABLE => PyStatus::SERVICE_UNAVAILABLE,
+            StatusCode::GATEWAY_TIMEOUT => PyStatus::GATEWAY_TIMEOUT,
+            StatusCode::HTTP_VERSION_NOT_SUPPORTED => PyStatus::HTTP_VERSION_NOT_SUPPORTED,
+            StatusCode::VARIANT_ALSO_NEGOTIATES => PyStatus::VARIANT_ALSO_NEGOTIATES,
+            StatusCode::INSUFFICIENT_STORAGE => PyStatus::INSUFFICIENT_STORAGE,
+            StatusCode::LOOP_DETECTED => PyStatus::LOOP_DETECTED,
+            StatusCode::NOT_EXTENDED => PyStatus::NOT_EXTENDED,
+            StatusCode::NETWORK_AUTHENTICATION_REQUIRED => {
+                PyStatus::NETWORK_AUTHENTICATION_REQUIRED
+            }
+            // If new codes appear in http crate but not in your enum
+            _ => PyStatus::INTERNAL_SERVER_ERROR,
+        }
     }
 }
-// (100, CONTINUE, "Continue");
-// (101, SWITCHING_PROTOCOLS, "Switching Protocols");
-// (102, PROCESSING, "Processing");
-// (200, OK, "OK");
-// (201, CREATED, "Created");
-// (202, ACCEPTED, "Accepted");
-// (203, NON_AUTHORITATIVE_INFORMATION, "Non Authoritative Information");
-// (204, NO_CONTENT, "No Content");
-// (205, RESET_CONTENT, "Reset Content");
-// (206, PARTIAL_CONTENT, "Partial Content");
-// (207, MULTI_STATUS, "Multi-Status");
-// (208, ALREADY_REPORTED, "Already Reported");
-// (226, IM_USED, "IM Used");
-// (300, MULTIPLE_CHOICES, "Multiple Choices");
-// (301, MOVED_PERMANENTLY, "Moved Permanently");
-// (302, FOUND, "Found");
-// (303, SEE_OTHER, "See Other");
-// (304, NOT_MODIFIED, "Not Modified");
-// (305, USE_PROXY, "Use Proxy");
-// (307, TEMPORARY_REDIRECT, "Temporary Redirect");
-// (308, PERMANENT_REDIRECT, "Permanent Redirect");
-// (400, BAD_REQUEST, "Bad Request");
-// (401, UNAUTHORIZED, "Unauthorized");
-// (402, PAYMENT_REQUIRED, "Payment Required");
-// (403, FORBIDDEN, "Forbidden");
-// (404, NOT_FOUND, "Not Found");
-// (405, METHOD_NOT_ALLOWED, "Method Not Allowed");
-// (406, NOT_ACCEPTABLE, "Not Acceptable");
-// (407, PROXY_AUTHENTICATION_REQUIRED, "Proxy Authentication Required");
-// (408, REQUEST_TIMEOUT, "Request Timeout");
-// (409, CONFLICT, "Conflict");
-// (410, GONE, "Gone");
-// (411, LENGTH_REQUIRED, "Length Required");
-// (412, PRECONDITION_FAILED, "Precondition Failed");
-// (413, PAYLOAD_TOO_LARGE, "Payload Too Large");
-// (414, URI_TOO_LONG, "URI Too Long");
-// (415, UNSUPPORTED_MEDIA_TYPE, "Unsupported Media Type");
-// (416, RANGE_NOT_SATISFIABLE, "Range Not Satisfiable");
-// (417, EXPECTATION_FAILED, "Expectation Failed");
-// (418, IM_A_TEAPOT, "I'm a teapot");
-// (421, MISDIRECTED_REQUEST, "Misdirected Request");
-// (422, UNPROCESSABLE_ENTITY, "Unprocessable Entity");
-// (423, LOCKED, "Locked");
-// (424, FAILED_DEPENDENCY, "Failed Dependency");
-// (425, TOO_EARLY, "Too Early");
-// (426, UPGRADE_REQUIRED, "Upgrade Required");
-// (428, PRECONDITION_REQUIRED, "Precondition Required");
-// (429, TOO_MANY_REQUESTS, "Too Many Requests");
-// (431, REQUEST_HEADER_FIELDS_TOO_LARGE, "Request Header Fields Too Large");
-// (451, UNAVAILABLE_FOR_LEGAL_REASONS, "Unavailable For Legal Reasons");
-// (500, INTERNAL_SERVER_ERROR, "Internal Server Error");
-// (501, NOT_IMPLEMENTED, "Not Implemented");
-// (502, BAD_GATEWAY, "Bad Gateway");
-// (503, SERVICE_UNAVAILABLE, "Service Unavailable");
-// (504, GATEWAY_TIMEOUT, "Gateway Timeout");
-// (505, HTTP_VERSION_NOT_SUPPORTED, "HTTP Version Not Supported");
-// (506, VARIANT_ALSO_NEGOTIATES, "Variant Also Negotiates");
-// (507, INSUFFICIENT_STORAGE, "Insufficient Storage");
-// (508, LOOP_DETECTED, "Loop Detected");
-// (510, NOT_EXTENDED, "Not Extended");
-// (511, NETWORK_AUTHENTICATION_REQUIRED, "Network Authentication Required");

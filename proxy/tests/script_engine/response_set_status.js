@@ -2,7 +2,7 @@
 /** @type {Extension} */
 const responseSetStatus = {
   response(flow) {
-    flow.response.status = 404;
+    flow.response.status = Status.NOT_FOUND;
   }
 };
 globalThis.extensions = [responseSetStatus];

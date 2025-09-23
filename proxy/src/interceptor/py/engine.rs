@@ -1,7 +1,7 @@
 use http::StatusCode;
 use pyo3::{exceptions::PyTypeError, prelude::*, types::PyList};
 use roxy_shared::uri::RUri;
-use std::{ffi::CString, str::FromStr, sync::Arc};
+use std::{ffi::CString, ops::Deref, str::FromStr, sync::Arc};
 
 use crate::{
     flow::{InterceptedRequest, InterceptedResponse},
@@ -258,7 +258,13 @@ fn update_response<'py>(
         .lock()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?
         .clone();
-    res.status = resp.status;
+    let status = resp
+        .status
+        .lock()
+        .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
+    let a: u16 = status.deref().clone().into();
+    res.status = StatusCode::from_u16(a)
+        .map_err(|e| PyTypeError::new_err(format!("invalid status code: {e}")))?;
 
     let version = flow_cell
         .borrow()

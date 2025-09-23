@@ -51,6 +51,9 @@ mod roxy {
     use super::constants::PyProtocol;
 
     #[pymodule_export]
+    use super::constants::PyStatus;
+
+    #[pymodule_export]
     use super::constants::PyVersion;
 
     #[pymodule_export]

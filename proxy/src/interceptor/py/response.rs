@@ -35,6 +35,7 @@ impl Default for PyResponse {
     fn default() -> Self {
         Self {
             version: Arc::new(Mutex::new(PyVersion::default())),
+            status: Arc::new(Mutex::new(PyStatus::default())),
             body: PyBody::default(),
             headers: PyHeaders::default(),
             trailers: PyHeaders::default(),
@@ -46,6 +47,7 @@ impl PyResponse {
     pub(crate) fn from_resp(resp: &InterceptedResponse) -> Self {
         Self {
             version: Arc::new(Mutex::new(PyVersion::from(&resp.version))),
+            status: Arc::new(Mutex::new(PyStatus::from(resp.status))),
             body: PyBody::new(resp.body.clone()),
             headers: PyHeaders::from_headers(resp.headers.clone()),
             trailers: PyHeaders::from_headers(resp.trailers.clone().unwrap_or_default()),
@@ -61,17 +63,32 @@ impl PyResponse {
     }
 
     #[getter]
-    fn status(&self) -> PyResult<u16> {
-        let res = self.lock()?;
-        Ok(res.status.as_u16())
+    fn status(&self) -> PyResult<PyStatus> {
+        let res = self
+            .status
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))?;
+        Ok(res.clone())
     }
 
     #[setter]
-    fn set_status(&self, value: u16) -> PyResult<()> {
-        let mut res = self.lock()?;
-        res.status =
-            http::StatusCode::from_u16(value).map_err(|e| PyTypeError::new_err(e.to_string()))?;
-        Ok(())
+    fn set_status(&self, value: Bound<PyAny>) -> PyResult<()> {
+        let mut g = self
+            .status
+            .lock()
+            .map_err(|e| PyTypeError::new_err(format!("lock poisoned: {e}")))?;
+        if let Ok(version) = value.extract::<PyStatus>() {
+            *g = version.clone();
+            return Ok(());
+        }
+
+        if let Ok(s) = value.extract::<u16>() {
+            *g = PyStatus::try_from(s)?;
+            return Ok(());
+        }
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "invalid http status {value:?}"
+        )))
     }
 
     #[getter]
@@ -113,8 +130,7 @@ impl PyResponse {
         Ok(format!("{self:?}"))
     }
     fn __repr__(&self) -> PyResult<String> {
-        let g = self.lock()?;
-        Ok(format!("Response({:?})", g))
+        Ok(format!("Response({:?})", self))
     }
 }
 
