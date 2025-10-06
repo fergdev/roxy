@@ -34,7 +34,7 @@ unicode-segmentation = "1"
 unicode-truncate = { version = "2", default-features = false }
 unicode-width = "=0.2.0" # See <https://github.com/ratatui/ratatui/issues/1271> for information about why we pin unicode-width
 tui-big-text = "0.7.1"
-rat-focus = "1.0.2"
+rat-focus = "1.2.0"
 
 # Util
 cow-utils = { workspace = true }
