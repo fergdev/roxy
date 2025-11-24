@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -34,7 +34,7 @@ jobs:
       checks: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -47,7 +47,7 @@ jobs:
     name: doc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
       - name: Run cargo doc
@@ -62,7 +62,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: cargo generate-lockfile
