@@ -22,7 +22,7 @@ Full docs are available here:
 Run with
 
 ```bash
-cargo run -- --port 6969 --script scripts/logger.lua
+cargo run --bin roxy-cli -- --port 3002 --script scripts/logger.lua
 ```
 
 Or with debug logging:
