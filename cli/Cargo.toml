@@ -38,7 +38,7 @@ rat-focus = "1.2.0"
 
 # Util
 cow-utils = { workspace = true }
-notify = "8.0.0"
+notify = "8.2.0"
 pkcs12 = { workspace = true }
 once_cell = { workspace = true }
 dirs = { workspace = true }
