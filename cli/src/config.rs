@@ -43,7 +43,6 @@ pub struct AppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProxyConfig {
-    pub enabled: bool,
     pub port: u16,
     pub ca_cert_path: Option<PathBuf>,
     pub script_path: Option<PathBuf>,

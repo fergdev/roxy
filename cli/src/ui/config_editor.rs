@@ -248,11 +248,6 @@ impl From<&RoxyConfig> for HashMap<ConfigTab, Vec<EditableConfigField>> {
 
         let proxy_fields = vec![
             EditableConfigField {
-                key: "enabled".into(),
-                value: ConfigValue::Bool(cfg.app.proxy.enabled),
-                editing: false,
-            },
-            EditableConfigField {
                 key: "port".into(),
                 value: ConfigValue::U16(cfg.app.proxy.port),
                 editing: false,
@@ -398,11 +393,6 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                 ConfigTab::Proxy => {
                     for field in fields {
                         match field.key.as_str() {
-                            "enabled" => {
-                                if let ConfigValue::Bool(b) = field.value {
-                                    config.app.proxy.enabled = b;
-                                }
-                            }
                             "port" => {
                                 if let ConfigValue::U16(n) = field.value {
                                     config.app.proxy.port = n;
