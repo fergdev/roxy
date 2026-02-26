@@ -3898,9 +3898,9 @@ dependencies = [
 
 [[package]]
 name = "rat-focus"
-version = "1.0.2"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b4866c2abcc7b8c8744548b4849c67b654d2dd28ee118fcc9b65979c96247cb"
+checksum = "c65b591b37844e4f307f8e7055aaf78b971103d5622dd022548755884c480e71"
 dependencies = [
  "crossterm 0.28.1",
  "fxhash",
@@ -3912,11 +3912,10 @@ dependencies = [
 
 [[package]]
 name = "rat-reloc"
-version = "1.1.2"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbddcf2d92aae0efb227180c07d8fbbb4480cd30318e4e6f5825aae8f6dc5ba5"
+checksum = "cfeb35cdf37493906c6dc67675843f00da512373f45beec5e264a6a0ea84e4a1"
 dependencies = [
- "log",
  "ratatui",
 ]
 
