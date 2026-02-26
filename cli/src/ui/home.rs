@@ -176,6 +176,7 @@ impl Component for HomeComponent {
                 }
                 _ => {
                     self.active_popup = Some(ActivePopup::QuitPopup);
+                    self.quit_popup.reset();
                     ActionResult::Consumed
                 }
             },
