@@ -1,9 +1,7 @@
 use color_eyre::Result;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
-    Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::Style,
+    prelude::{Constraint, Direction, Frame, Layout, Rect, Style},
     widgets::Block,
 };
 use tui_big_text::{BigText, PixelSize};
@@ -19,7 +17,7 @@ impl Splash {
     pub fn new(port: u16) -> Self {
         Self {
             port,
-            focus: FocusFlag::named("Splash"),
+            focus: FocusFlag::new().with_name("Splash"),
         }
     }
 }
@@ -53,25 +51,25 @@ impl Component for Splash {
             ])
             .split(area);
 
-        let text_style = Style::default().fg(colors.primary);
+        let text_style = Style::new().fg(colors.primary);
 
         let name = BigText::builder()
             .pixel_size(PixelSize::Full)
-            .alignment(Alignment::Center)
-            .lines(vec!["Roxy".into()])
+            .centered()
             .style(text_style)
+            .lines(vec!["Roxy".into()])
             .build();
 
         let desc = BigText::builder()
             .pixel_size(PixelSize::Sextant)
-            .alignment(Alignment::Center)
+            .centered()
             .lines(vec!["Rust MITM proxy".into()])
             .style(text_style)
             .build();
 
         let addr = BigText::builder()
             .pixel_size(PixelSize::Sextant)
-            .alignment(Alignment::Center)
+            .centered()
             .lines(vec![format!("127.0.0.1:{}", self.port).into()])
             .style(text_style)
             .build();

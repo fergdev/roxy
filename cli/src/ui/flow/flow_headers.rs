@@ -1,7 +1,7 @@
 use hyper::HeaderMap;
 use ratatui::{
     layout::{Constraint, Rect},
-    style::{Style, Stylize},
+    style::Style,
     text::Span,
     widgets::{Cell, Clear, Row, TableState},
 };
@@ -39,7 +39,7 @@ impl FlowDetailsHeaders {
 
         Self {
             headers: headers_rx,
-            focus: rat_focus::FocusFlag::named("FlowHeaders"),
+            focus: rat_focus::FocusFlag::new().with_name("FlowHeaders"),
             table_state: TableState::default(),
         }
     }

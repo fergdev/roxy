@@ -70,7 +70,7 @@ impl FlowList {
         let (ui_tx, ui_rx) = watch::channel(UiState::default());
 
         let mut instance = Self {
-            focus: FocusFlag::named("FlowList"),
+            focus: FocusFlag::new().with_name("FlowList"),
             flow_store,
             state: TableState::default().with_selected(0),
             scroll_state: ScrollbarState::new(0),

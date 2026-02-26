@@ -285,7 +285,7 @@ impl FlowDetailsCerts {
 
         Self {
             state: ui_rx,
-            focus: rat_focus::FocusFlag::named("FlowCerts"),
+            focus: rat_focus::FocusFlag::new().with_name("FlowCerts"),
             handle,
             tab: TabComponent::new("FlowTabCerts"),
             client_tab_cmp: TabComponent::new("ClientTab"),

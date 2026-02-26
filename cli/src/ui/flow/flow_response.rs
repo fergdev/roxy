@@ -45,7 +45,7 @@ impl FlowDetailsResponse {
         let body = FlowDetailsBody::new(body_rx);
 
         let this = Self {
-            focus: rat_focus::FocusFlag::named("FlowResponse"),
+            focus: rat_focus::FocusFlag::new().with_name("FlowResponse"),
             ui_state: ui_rx,
             line_component: LineComponent::new("ResponseLine"),
             headers: flow_headers,

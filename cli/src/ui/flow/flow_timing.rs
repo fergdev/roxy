@@ -53,7 +53,7 @@ impl FlowTiming {
 
         Self {
             state: ui_rx,
-            focus: rat_focus::FocusFlag::named("FlowTiming"),
+            focus: rat_focus::FocusFlag::new().with_name("FlowTiming"),
         }
     }
 }

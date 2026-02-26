@@ -8,7 +8,7 @@ pub struct TabComponent {
 impl TabComponent {
     pub fn new(title: &str) -> Self {
         Self {
-            focus: rat_focus::FocusFlag::named(title),
+            focus: rat_focus::FocusFlag::new().with_name(title),
         }
     }
 }
@@ -34,7 +34,7 @@ pub struct LineComponent {
 impl LineComponent {
     pub fn new(name: &str) -> Self {
         Self {
-            focus: rat_focus::FocusFlag::named(name),
+            focus: rat_focus::FocusFlag::new().with_name(name),
         }
     }
 }

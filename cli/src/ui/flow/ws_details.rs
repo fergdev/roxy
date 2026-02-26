@@ -47,7 +47,7 @@ impl FlowDetailsWs {
 
         Self {
             state: ui_rx,
-            focus: rat_focus::FocusFlag::named("FlowWsDetails"),
+            focus: rat_focus::FocusFlag::new().with_name("FlowWsDetails"),
             table_state: ratatui::widgets::TableState::default(),
         }
     }
