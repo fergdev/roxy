@@ -22,7 +22,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-#[pyclass(name = "Request")]
+#[pyclass(from_py_object, name = "Request")]
 pub(crate) struct PyRequest {
     pub(crate) method: Arc<Mutex<PyMethod>>,
     pub(crate) version: Arc<Mutex<PyVersion>>,

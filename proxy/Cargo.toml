@@ -19,8 +19,7 @@ boa_engine = { version = "0.20.0" }
 boa_runtime = { version = "0.20.0" }
 boa_interop = { version = "0.20.0" }
 boa_gc = { version = "0.20.0" }
-pyo3 = "0.26.0"
-
+pyo3 = "0.28.2"
 
 # Http
 h3 = { workspace = true }
