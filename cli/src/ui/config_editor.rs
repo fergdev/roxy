@@ -1,7 +1,7 @@
 use color_eyre::Result;
 use rat_focus::{FocusFlag, HasFocus};
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
-use tracing::{debug, info};
+use tracing::{debug, error};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
@@ -118,7 +118,7 @@ impl ConfigEditor {
         let fields: HashMap<ConfigTab, Vec<EditableConfigField>> = (&*cfg).into();
 
         Self {
-            focus: FocusFlag::named("ConfigEditor"),
+            focus: FocusFlag::new().with_name("ConfigEditor"),
             config_manager,
             curr_tab: ConfigTab::App,
             fields,
@@ -143,7 +143,6 @@ impl ConfigEditor {
     }
 
     fn on_select(&mut self) {
-        debug!("on_select called");
         let Some(selected) = self.table_state.selected() else {
             return;
         };
@@ -158,7 +157,6 @@ impl ConfigEditor {
         let field = &mut fields[selected];
         field.editing = !field.editing;
         if field.editing {
-            debug!("Entering edit mode for field: {}", field.key);
             field.editing = true;
             self.input_buffer = match &field.value {
                 ConfigValue::String(s) => s.clone(),
@@ -166,6 +164,7 @@ impl ConfigEditor {
                 ConfigValue::Bool(b) => {
                     field.value = ConfigValue::Bool(!*b);
                     field.editing = false;
+                    self.update_config();
                     return;
                 }
                 ConfigValue::Color(c) => c.to_string(),
@@ -174,7 +173,6 @@ impl ConfigEditor {
             self.is_editing = true;
         } else {
             field.editing = false;
-            debug!("Exiting edit mode for field: {}", field.key);
             field.value = match &field.value {
                 ConfigValue::String(_) => ConfigValue::String(new_val),
                 ConfigValue::U16(_) => new_val
@@ -189,13 +187,19 @@ impl ConfigEditor {
             };
 
             self.is_editing = false;
+            self.update_config();
+        }
+    }
 
-            let cfg = RoxyConfig::try_from(self.fields.clone());
-            if let Ok(cfg) = cfg {
-                info!("Updating config with new values");
+    fn update_config(&mut self) {
+        debug!("Writing config");
+        let cfg = RoxyConfig::try_from(self.fields.clone());
+        match cfg {
+            Ok(cfg) => {
                 let _ = self.config_manager.update(cfg);
-            } else {
-                debug!("Failed to convert fields to RoxyConfig");
+            }
+            Err(e) => {
+                error!("Error writing config: '${e}'");
             }
         }
     }
@@ -232,7 +236,13 @@ impl From<&RoxyConfig> for HashMap<ConfigTab, Vec<EditableConfigField>> {
     fn from(cfg: &RoxyConfig) -> Self {
         let mut fields = HashMap::new();
 
+        debug!("Setting confirm_quit");
         let app_fieldds = vec![
+            EditableConfigField {
+                key: "confirm_quit".into(),
+                value: ConfigValue::Bool(cfg.app.confirm_quit),
+                editing: false,
+            },
             EditableConfigField {
                 key: "data_dir".into(),
                 value: ConfigValue::Path(cfg.app.data_dir.clone()),
@@ -369,12 +379,19 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
 
     fn try_from(map: HashMap<ConfigTab, Vec<EditableConfigField>>) -> Result<Self, Self::Error> {
         let mut config = RoxyConfig::default();
+        debug!("Try from map");
 
         for (tab, fields) in map {
             match tab {
                 ConfigTab::App => {
                     for field in fields {
                         match field.key.as_str() {
+                            "confirm_quit" => {
+                                debug!("Writing confirm quit");
+                                if let ConfigValue::Bool(p) = field.value {
+                                    config.app.confirm_quit = p;
+                                }
+                            }
                             "data_dir" => {
                                 if let ConfigValue::Path(p) = field.value.clone() {
                                     config.app.data_dir = p;
@@ -425,7 +442,6 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                             "background" => config.theme.colors.background = color,
                             "on_background" => config.theme.colors.on_background = color,
                             "outline" => config.theme.colors.outline = color,
-
                             "error" => config.theme.colors.error = color,
                             "success" => config.theme.colors.success = color,
                             "warn" => config.theme.colors.warn = color,
