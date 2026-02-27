@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-#[pyclass(name = "Response")]
+#[pyclass(from_py_object, name = "Response")]
 #[derive(Debug, Clone)]
 pub(crate) struct PyResponse {
     pub(crate) status: Arc<Mutex<PyStatus>>,

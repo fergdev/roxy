@@ -175,7 +175,7 @@ fn update_request<'py>(
     req: &mut InterceptedRequest,
 ) -> Result<Option<InterceptedResponse>, Error> {
     let flow_cell = flow_obj
-        .downcast::<PyFlow>()
+        .cast::<PyFlow>()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
     let py_req = &flow_cell.borrow().request;
@@ -245,7 +245,7 @@ fn update_response<'py>(
     res: &mut InterceptedResponse,
 ) -> Result<(), Error> {
     let flow_cell = flow_obj
-        .downcast::<PyFlow>()
+        .cast::<PyFlow>()
         .map_err(|e| PyTypeError::new_err(format!("{e}")))?;
 
     let resp = flow_cell.borrow();

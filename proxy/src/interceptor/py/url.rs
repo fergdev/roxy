@@ -10,7 +10,7 @@ use crate::interceptor::py::query::PyURLSearchParams;
 use crate::interceptor::util::set_url_authority;
 
 #[derive(Debug, Clone)]
-#[pyclass(name = "URL")]
+#[pyclass(from_py_object, name = "URL")]
 pub(crate) struct PyUrl {
     pub(crate) inner: Arc<Mutex<Url>>,
 }

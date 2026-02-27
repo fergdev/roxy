@@ -8,7 +8,7 @@ use pyo3::{
     types::{PyBytes, PyBytesMethods},
 };
 
-#[pyclass(name = "Body")]
+#[pyclass(from_py_object, name = "Body")]
 #[derive(Debug, Clone)]
 pub(crate) struct PyBody {
     pub(crate) inner: Arc<Mutex<Bytes>>,

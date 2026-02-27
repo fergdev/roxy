@@ -15,7 +15,7 @@ fn to_header_value(val: &str) -> PyResult<HeaderValue> {
 pub(crate) type HeaderList = Arc<Mutex<HeaderMap>>;
 
 #[derive(Debug, Clone)]
-#[pyclass(name = "Headers")]
+#[pyclass(from_py_object, name = "Headers")]
 pub(crate) struct PyHeaders {
     pub(crate) inner: HeaderList,
 }

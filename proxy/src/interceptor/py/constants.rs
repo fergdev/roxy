@@ -6,7 +6,7 @@ use pyo3::{basic::CompareOp, prelude::*};
 use roxy_shared::version::HttpVersion;
 
 #[allow(clippy::upper_case_acronyms)]
-#[pyclass(name = "Method")]
+#[pyclass(from_py_object, name = "Method")]
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) enum PyMethod {
     CONNECT,
@@ -111,7 +111,7 @@ impl PyMethod {
 }
 
 #[allow(clippy::upper_case_acronyms)]
-#[pyclass(name = "Protocol")]
+#[pyclass(from_py_object, name = "Protocol")]
 #[derive(Debug, Clone, PartialEq, PartialOrd, Default)]
 pub enum PyProtocol {
     #[default]
@@ -176,7 +176,7 @@ impl From<&str> for PyProtocol {
     }
 }
 
-#[pyclass(name = "Version")]
+#[pyclass(from_py_object, name = "Version")]
 #[derive(Debug, Clone, PartialEq, PartialOrd, Default)]
 pub enum PyVersion {
     HTTP09,
@@ -293,7 +293,7 @@ impl PyStatus {
 }
 
 #[allow(clippy::upper_case_acronyms, non_camel_case_types)]
-#[pyclass(name = "Status")]
+#[pyclass(from_py_object, name = "Status")]
 #[derive(Debug, Clone, PartialEq, PartialOrd, Default)]
 pub(crate) enum PyStatus {
     CONTINUE,
