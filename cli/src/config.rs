@@ -34,6 +34,8 @@ pub struct RoxyArgs {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(default)]
+    pub confirm_quit: bool,
+    #[serde(default)]
     pub data_dir: PathBuf,
     #[serde(default)]
     pub config_dir: PathBuf,

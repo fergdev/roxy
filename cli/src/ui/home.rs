@@ -36,6 +36,7 @@ pub struct HomeComponent {
     log_viewer: LogViewer,
     fps_counter: FpsCounter,
     notifier: Notifier,
+    config_manager: ConfigManager,
 }
 
 impl HomeComponent {
@@ -55,19 +56,20 @@ impl HomeComponent {
             active_popup: None,
             splash,
             flow_list,
-            config_editor: ConfigEditor::new(config_manager),
+            config_editor: ConfigEditor::new(config_manager.clone()),
             quit_popup: QuitPopup::default(),
             flow_details: FlowDetails::new(flow_store.clone()),
             log_viewer: LogViewer::new(log_buffer),
             fps_counter: FpsCounter::new(),
             notifier,
+            config_manager,
         }
     }
 }
 
 impl HasFocus for HomeComponent {
     fn build(&self, builder: &mut rat_focus::FocusBuilder) {
-        let tag = builder.start(self); // mark this node as a container
+        let tag = builder.start(self);
 
         match self.active_view {
             ActiveView::Splash => {
@@ -175,9 +177,13 @@ impl Component for HomeComponent {
                     ActionResult::Consumed
                 }
                 _ => {
-                    self.active_popup = Some(ActivePopup::QuitPopup);
-                    self.quit_popup.reset();
-                    ActionResult::Consumed
+                    if !self.config_manager.rx.borrow().app.confirm_quit {
+                        ActionResult::Action(Action::Quit)
+                    } else {
+                        self.active_popup = Some(ActivePopup::QuitPopup);
+                        self.quit_popup.reset();
+                        ActionResult::Consumed
+                    }
                 }
             },
             Action::Select => {
