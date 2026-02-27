@@ -94,7 +94,7 @@ impl HasFocus for LogViewer {
 impl LogViewer {
     pub fn new(logs: Arc<Mutex<VecDeque<LogLine>>>) -> Self {
         Self {
-            focus: rat_focus::FocusFlag::named("LogViewer"),
+            focus: rat_focus::FocusFlag::new().with_name("LogViewer"),
             logs,
             v_scroll_offset: 0,
             h_scroll_offset: 0,

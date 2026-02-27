@@ -49,7 +49,7 @@ impl HomeComponent {
         let splash = Splash::new(port);
         let flow_list = FlowList::new(flow_store.clone());
         Self {
-            focus: FocusFlag::named("Home"),
+            focus: FocusFlag::new().with_name("Home"),
             flow_store: flow_store.clone(),
             active_view: ActiveView::Splash,
             active_popup: None,
@@ -176,6 +176,7 @@ impl Component for HomeComponent {
                 }
                 _ => {
                     self.active_popup = Some(ActivePopup::QuitPopup);
+                    self.quit_popup.reset();
                     ActionResult::Consumed
                 }
             },

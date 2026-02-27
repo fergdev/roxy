@@ -37,7 +37,7 @@ impl HasFocus for QuitPopup {
 impl QuitPopup {
     pub fn new() -> Self {
         Self {
-            focus: FocusFlag::named("QuitPopup"),
+            focus: FocusFlag::new().with_name("QuitPopup"),
             selected: false,
         }
     }

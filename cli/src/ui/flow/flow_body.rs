@@ -136,7 +136,7 @@ impl FlowDetailsBody {
         Self {
             state: ui_rx,
             image_cache: ic,
-            focus: rat_focus::FocusFlag::named("FlowBody"),
+            focus: rat_focus::FocusFlag::new().with_name("FlowBody"),
             scroll: 0,
         }
     }
@@ -241,7 +241,7 @@ impl ImageCache {
         if let Ok(image) = image::load_from_memory(raw) {
             debug!("Loaded image with size: ");
             // TODO: make this configurable
-            let mut picker = Picker::from_fontsize((9, 20));
+            let mut picker = Picker::halfblocks();
             picker.set_protocol_type(ratatui_image::picker::ProtocolType::Kitty);
             let proto = picker.new_resize_protocol(image);
 

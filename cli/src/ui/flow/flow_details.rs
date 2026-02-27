@@ -9,7 +9,6 @@ use ratatui::{
 use roxy_proxy::flow::{
     FlowCerts, FlowStore, InterceptedRequest, InterceptedResponse, Timing, WsMessage,
 };
-use strum::EnumIter;
 use tokio::{
     sync::{mpsc, watch},
     task::JoinHandle,
@@ -86,13 +85,6 @@ impl Tab {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
-enum FocusedComponent {
-    Tabs,
-    Headers,
-    Body,
-}
-
 pub struct FlowDetails {
     focus: rat_focus::FocusFlag,
     tabs: TabComponent,
@@ -146,7 +138,7 @@ impl FlowDetails {
         });
 
         Self {
-            focus: rat_focus::FocusFlag::named("FlowDetails"),
+            focus: rat_focus::FocusFlag::new().with_name("FlowDetails"),
             tabs: TabComponent::new(),
             selected_flow: None,
             tab: Tab::Request,
@@ -228,7 +220,7 @@ struct TabComponent {
 impl TabComponent {
     pub fn new() -> Self {
         Self {
-            focus: rat_focus::FocusFlag::named("FlowDetailsTabs"),
+            focus: rat_focus::FocusFlag::new().with_name("FlowDetailsTabs"),
         }
     }
 }
