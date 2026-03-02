@@ -3,7 +3,7 @@ resolver = "3"
 members = ["proxy", "cli", "servers", "shared"]
 
 [workspace.dependencies]
-rcgen = { version = "0.14.1", default-features = false, features = [
+rcgen = { version = "0.14.7", default-features = false, features = [
   "crypto",
   "aws_lc_rs",
   "pem",
