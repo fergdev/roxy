@@ -1,11 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
 use boa_engine::{
-    Context, JsData, JsResult, JsString, JsValue, js_error, js_string, object::builtins::JsArray,
-    value::Convert,
+    Context, JsData, JsResult, JsValue, boa_class, js_error, js_string, object::builtins::JsArray,
 };
 use boa_gc::{Finalize, Trace};
-use boa_interop::{JsClass, js_class};
 use http::{HeaderMap, HeaderName, HeaderValue};
 
 fn to_header_name(name: &str) -> JsResult<HeaderName> {
@@ -35,94 +33,84 @@ impl Default for JsHeaders {
     }
 }
 
-js_class! {
-    class JsHeaders as "Headers" {
-        property length {
-            fn get(this: JsClass<JsHeaders>) -> JsResult<usize> {
-                Ok(this.borrow().headers.borrow().len())
+#[boa_class(rename = "Headers")]
+impl JsHeaders {
+    #[boa(constructor)]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    #[boa(getter)]
+    fn length(&self) -> usize {
+        self.headers.borrow().len()
+    }
+
+    fn get(&self, name: String) -> JsResult<JsValue> {
+        let found = self
+            .headers
+            .borrow()
+            .get(&name)
+            .and_then(|v| v.to_str().ok().map(ToString::to_string));
+
+        Ok(match found {
+            Some(v) => JsValue::new(js_string!(v)),
+            None => JsValue::null(),
+        })
+    }
+
+    #[boa(rename = "getAll")]
+    fn get_all(&self, name: String, context: &mut Context) -> JsResult<JsValue> {
+        let name = to_header_name(&name)?;
+        let arr = JsArray::new(context);
+        for (_, v) in self.headers.borrow().iter().filter(|(k, _)| name.eq(k)) {
+            if let Ok(v) = v.to_str() {
+                arr.push(JsValue::new(js_string!(v)), context)?;
             }
         }
+        Ok(arr.into())
+    }
 
-        constructor() {
-            Ok(Self::default())
+    fn set(&self, name: String, value: JsValue, context: &mut Context) -> JsResult<()> {
+        let name = to_header_name(&name)?;
+        let mut list = self.headers.borrow_mut();
+        list.remove(&name);
+        if !value.is_null() && !value.is_undefined() {
+            let js_string = value.to_string(context)?;
+            let a = js_string.to_std_string_lossy();
+            let value = to_header_value(&a)?;
+            list.insert(name, value);
         }
+        Ok(())
+    }
 
-        init(_class: &mut ClassBuilder) -> JsResult<()> {
-            Ok(())
-        }
+    fn append(&self, name: String, value: JsValue, context: &mut Context) -> JsResult<()> {
+        let name = to_header_name(&name)?;
+        let value = to_header_value(&value.to_string(context)?.to_std_string_lossy())?;
+        self.headers.borrow_mut().append(name, value);
+        Ok(())
+    }
 
-        fn get(this: JsClass<JsHeaders>, name: Convert<String>) -> JsResult<JsValue> {
-            let name = name.0.clone();
-            let found = this.borrow().headers
-                .borrow()
-                .get(&name)
-                .and_then(|v| v.to_str().ok().map(ToString::to_string));
+    fn delete(&self, name: String) -> JsResult<()> {
+        let name = to_header_name(&name)?;
+        let mut list = self.headers.borrow_mut();
+        list.remove(name);
+        Ok(())
+    }
+    fn has(&self, name: String) -> JsResult<bool> {
+        let name: HeaderName = name
+            .parse()
+            .map_err(|e| js_error!(TypeError: "Invalid header name: {}", e))?;
+        let has = self.headers.borrow().iter().any(|(k, _)| k.eq(&name));
+        Ok(has)
+    }
+    fn clear(&self) {
+        self.headers.borrow_mut().clear();
+    }
 
-            Ok(match found {
-                Some(v) => JsValue::String(js_string!(v)),
-                None => JsValue::Null,
-            })
-        }
-
-        fn get_all as "getAll" (this: JsClass<JsHeaders>, name: Convert<String>, context: &mut Context) -> JsResult<JsValue> {
-            let name = to_header_name(&name.0)?;
-            let arr = JsArray::new(context);
-            for (_, v) in this.borrow().headers.borrow().iter().filter(|(k, _)| name.eq(k)) {
-                if let Ok(v) = v.to_str() {
-                    arr.push(JsValue::String(js_string!(v)), context)?;
-                }
-            }
-            Ok(arr.into())
-        }
-
-        fn set(this: JsClass<JsHeaders>, name: Convert<String>, value: JsValue, context: &mut Context) -> JsResult<()> {
-            let name = to_header_name(&name.0)?;
-            let this = this.borrow();
-            let mut list = this.headers.borrow_mut();
-            list.remove(&name);
-            if !value.is_null() && !value.is_undefined() {
-                let js_string = value.to_string(context)?;
-                let a = js_string.to_std_string_lossy();
-                let value = to_header_value(&a)?;
-                list.insert(name, value);
-            }
-            Ok(())
-        }
-
-        fn append(this: JsClass<JsHeaders>, name: Convert<String>, value: Convert<String>) -> JsResult<()> {
-            let name = to_header_name(&name.0)?;
-            let value = to_header_value(&value.0)?;
-            this.borrow().headers.borrow_mut().append(name, value);
-            Ok(())
-        }
-
-        fn delete(this: JsClass<JsHeaders>, name: Convert<String>) -> JsResult<()> {
-            let name = to_header_name(&name.0)?;
-            let this = this.borrow();
-            let mut list = this.headers.borrow_mut();
-            list.remove(name);
-            Ok(())
-        }
-
-        fn has(this: JsClass<JsHeaders>, name: Convert<String>) -> JsResult<bool> {
-            let name : HeaderName = name.0.clone().parse().map_err(|e| js_error!(TypeError: "Invalid header name: {}", e))?;
-            let has = this.borrow().headers
-                .borrow()
-                .iter()
-                .any(|(k, _)| k.eq(&name));
-            Ok(has)
-        }
-        fn clear(this: JsClass<JsHeaders>) -> JsResult<()> {
-            this.borrow_mut().headers
-                .borrow_mut().clear();
-            Ok(())
-        }
-
-        fn to_string as "toString"(this: JsClass<JsHeaders>) -> JsString {
-            let this = this.borrow();
-            JsString::from(format!("{:?}", this.headers.borrow()))
-        }
-
+    #[boa(rename = "toString")]
+    fn print(&self) -> String {
+        let headers = self.headers.borrow();
+        format!("{headers:?}")
     }
 }
 
@@ -130,7 +118,7 @@ js_class! {
 #[cfg(test)]
 mod tests {
     use crate::interceptor::js::tests::setup;
-    use boa_engine::{JsValue, Source};
+    use boa_engine::Source;
 
     #[test]
     fn headers_constructor_creates_empty_map() {
@@ -175,6 +163,7 @@ mod tests {
             const all = h.getAll("set-cookie");
             assertTrue(Array.isArray(all), "getAll returns array");
             assertEqual(all.length, 2, "two values");
+
             // Order is insertion order for http::HeaderMap iteration, which is typically the order inserted.
             assertTrue(all.includes("a=1"), "contains a=1");
             assertTrue(all.includes("b=2"), "contains b=2");
@@ -203,7 +192,7 @@ mod tests {
             assertTrue(Array.isArray(all) && all.length === 0, "getAll empty after delete");
             "#,
         ))
-        .unwrap();
+        .unwrap_or_else(|e| panic!("JS failed {e:?}"));
     }
 
     #[test]
@@ -242,8 +231,9 @@ mod tests {
     #[test]
     fn invalid_header_name_throws_type_error() {
         let mut ctx = setup();
-        let res = ctx.eval(Source::from_bytes(
-            r#"
+        let res = ctx
+            .eval(Source::from_bytes(
+                r#"
             try {
                 const h = new Headers();
                 h.set("Bad Name", "x"); // invalid due to space
@@ -253,15 +243,17 @@ mod tests {
                 true
             }
             "#,
-        ));
-        assert!(matches!(res, Ok(JsValue::Boolean(true))));
+            ))
+            .unwrap();
+        assert!(res.is_boolean() && res.as_boolean().unwrap());
     }
 
     #[test]
     fn invalid_header_value_throws_type_error() {
         let mut ctx = setup();
-        let res = ctx.eval(Source::from_bytes(
-            r#"
+        let res = ctx
+            .eval(Source::from_bytes(
+                r#"
             try {
                 const h = new Headers();
                 h.set("X", "line1\r\nline2"); // CRLF not allowed
@@ -271,8 +263,9 @@ mod tests {
                 true
             }
             "#,
-        ));
-        assert!(matches!(res, Ok(JsValue::Boolean(true))));
+            ))
+            .unwrap();
+        assert!(res.is_boolean() && res.as_boolean().unwrap());
     }
 
     #[test]
@@ -284,10 +277,11 @@ mod tests {
             h.append("Set-Cookie", "a=1");
             h.append("set-cookie", "b=2");
             const all = h.getAll("SET-COOKIE");
-            assertTrue(Array.isArray(all) && all.length === 2, "both values under case-insensitive key");
+            assertTrue(Array.isArray(all), "Is array");
+            assertTrue(all.length === 2, "both values under case-insensitive key");
             "#,
         ))
-        .unwrap();
+        .unwrap_or_else(|e| panic!("JS failed {e:?}"));
     }
 
     #[test]
@@ -300,6 +294,22 @@ mod tests {
             assertEqual(h.get("Not-There"), null, "get null when missing");
             const all = h.getAll("Not-There");
             assertTrue(Array.isArray(all) && all.length === 0, "empty getAll when missing");
+            "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn clear_empties_headers() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const h = new Headers();
+            h.append("Set-Cookie", "a=1");
+            h.append("set-cookie", "b=2");
+            assertTrue(h.length === 2, "length should be 2");
+            h.clear();
+            assertTrue(h.length === 0, "length should be 0");
             "#,
         ))
         .unwrap();

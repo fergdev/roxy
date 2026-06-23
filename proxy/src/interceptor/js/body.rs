@@ -1,11 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
 use boa_engine::{
-    Context, JsData, JsResult, JsString, JsValue, js_error, js_string,
-    object::builtins::JsArrayBuffer, value::TryFromJs,
+    Context, JsData, JsResult, JsValue, boa_class, js_error,
+    object::builtins::{AlignedVec, JsArrayBuffer},
+    value::TryFromJs,
 };
 use boa_gc::{Finalize, Trace};
-use boa_interop::{JsClass, js_class};
 use bytes::Bytes;
 
 #[derive(Debug, Clone, Trace, Finalize, JsData)]
@@ -16,109 +16,96 @@ pub(crate) struct JsBody {
 
 impl Default for JsBody {
     fn default() -> Self {
-        Self::new(Bytes::new())
+        Self::from_bytes(Bytes::new())
+    }
+}
+
+#[boa_class(rename = "Body")]
+#[boa(rename_all = "camelCase")]
+impl JsBody {
+    #[boa(constructor)]
+    fn new(js_value: JsValue) -> JsResult<Self> {
+        if js_value.is_undefined() || js_value.is_null() {
+            return Ok(Self::default());
+        }
+        if let Some(s) = js_value.as_string() {
+            return Ok(Self::from_bytes(Bytes::from(
+                s.to_std_string_escaped().into_bytes(),
+            )));
+        }
+        if let Some(n) = js_value.as_number() {
+            return Ok(Self::from_bytes(Bytes::from(n.to_string().into_bytes())));
+        }
+        Err(js_error!(TypeError: "Invalid type {value} has no data"))
+    }
+
+    #[boa(getter)]
+    pub fn length(&self) -> usize {
+        self.inner.borrow().len()
+    }
+
+    #[boa(rename = "isEmpty")]
+    pub fn is_empty(&self) -> bool {
+        self.inner.borrow().is_empty()
+    }
+
+    #[boa(getter)]
+    pub fn text(&self) -> String {
+        String::from_utf8_lossy(&self.inner.borrow()).to_string()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "text")]
+    pub fn set_text(&self, js_value: JsValue, context: &mut Context) -> JsResult<()> {
+        *self.inner.borrow_mut() =
+            Bytes::from(js_value.to_string(context)?.to_std_string_escaped());
+        Ok(())
+    }
+
+    #[boa(method)]
+    pub fn bytes(&self) -> Vec<u8> {
+        self.inner.borrow().to_vec()
+    }
+
+    #[boa(getter)]
+    fn raw(&self, context: &mut Context) -> JsResult<JsValue> {
+        let bytes = self.inner.borrow();
+        let mut aligned = AlignedVec::<u8>::new(0);
+        aligned.extend_from_slice(bytes.as_ref());
+        let buf = JsArrayBuffer::from_byte_block(aligned, context)?;
+        Ok(buf.into())
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "raw")]
+    fn set_raw(&self, value: JsValue, context: &mut Context) -> JsResult<()> {
+        if let Ok(buf) = JsArrayBuffer::try_from_js(&value, context) {
+            let data = buf
+                .data()
+                .ok_or(js_error!(TypeError: "ArrayBuffer has no data"))?;
+            *self.inner.borrow_mut() = Bytes::from(data.to_vec());
+        }
+
+        Ok(())
+    }
+
+    fn clear(&self) {
+        self.inner.borrow_mut().clear();
+    }
+
+    #[boa(method)]
+    #[boa(rename = "toString")]
+    pub fn to_string_js(&self) -> String {
+        self.text()
     }
 }
 
 impl JsBody {
-    pub(crate) fn new(data: Bytes) -> Self {
+    pub fn from_bytes(bytes: Bytes) -> Self {
         Self {
-            inner: Rc::new(RefCell::new(data)),
-        }
-    }
-    fn new_value(value: &JsValue) -> JsResult<Self> {
-        if value.is_undefined() || value.is_null() {
-            return Ok(Self::new(Bytes::new()));
-        }
-
-        match value {
-            JsValue::Object(o) => {
-                let buf = JsArrayBuffer::from_object(o.clone())?;
-                return Ok(Self::new(Bytes::from(
-                    buf.data()
-                        .ok_or(js_error!(TypeError: "ArrayBuffer has no data"))?
-                        .to_owned(),
-                )));
-            }
-            JsValue::Integer(integer) => {
-                Ok(Self::new(Bytes::from(integer.to_string().into_bytes())))
-            }
-            JsValue::String(string) => Ok(Self::new(Bytes::from(
-                string.to_std_string_escaped().into_bytes(),
-            ))),
-            _ => Err(js_error!(TypeError: "Invalid type {value} has no data")),
-        }
-    }
-
-    fn length(&self) -> JsValue {
-        let len = self.inner.borrow().len();
-        JsValue::Integer(len as i32)
-    }
-
-    fn is_empty(&self) -> JsValue {
-        JsValue::Boolean(self.inner.borrow().is_empty())
-    }
-}
-
-js_class! {
-    class JsBody as "Body" {
-        property text {
-            fn get(this: JsClass<JsBody>) -> JsString {
-                let this = this.borrow();
-                let bytes = this.inner.borrow();
-                let s = String::from_utf8_lossy(&bytes).to_string();
-                js_string!(s)
-            }
-
-            fn set(this: JsClass<JsBody>, value: JsValue, context: &mut Context) -> JsResult<()> {
-                let s = value.to_string(context)?.to_std_string_escaped();
-                *this.borrow().inner.borrow_mut() = Bytes::from(s.into_bytes());
-                Ok(())
-            }
-        }
-
-        property raw {
-            fn get(this: JsClass<JsBody>, context: &mut Context) -> JsResult<JsValue> {
-                let this = this.borrow();
-                let bytes = this.inner.borrow();
-                let buf = JsArrayBuffer::from_byte_block(bytes.to_vec(), context)?;
-                Ok(buf.into())
-            }
-
-            fn set(this: JsClass<JsBody>, value: JsValue, context: &mut Context) -> JsResult<()> {
-                if let Ok(buf) = JsArrayBuffer::try_from_js(&value, context){
-                    let data = buf.data().ok_or(js_error!(TypeError: "ArrayBuffer has no data"))?;
-                    *this.borrow().inner.borrow_mut() = Bytes::from(data.to_vec());
-                }
-
-                Ok(())
-            }
-        }
-        property length {
-            fn get(this: JsClass<JsBody>) -> JsResult<JsValue> {
-                let this = this.borrow();
-                Ok(this.length())
-            }
-        }
-        property is_empty as "isEmpty" {
-            fn get(this: JsClass<JsBody>) -> JsResult<JsValue> {
-                let this = this.borrow();
-                Ok(this.is_empty())
-            }
-        }
-
-
-        constructor(value: JsValue) {
-            JsBody::new_value(&value)
-        }
-
-        init(_class: &mut ClassBuilder) -> JsResult<()> {
-            Ok(())
-        }
-
-        fn clear(this: JsClass<JsBody>) -> JsResult<()> {
-            *this.borrow().inner.borrow_mut() = Bytes::new();
-            Ok(())
+            inner: Rc::new(RefCell::new(bytes)),
         }
     }
 }
@@ -278,6 +265,45 @@ mod tests {
             const arr = new Uint8Array([0x61,0x62,0x63]); // "abc"
             b.raw = arr.buffer;
             assertEqual(b.text, "abc", "text reflects raw utf-8");
+        "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn body_clear_removes_body() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const b = new Body("x");
+            b.clear();
+            assertEqual(b.text, "", "clear removes text");
+            assertEqual(b.length, 0, "clear length is 0");
+            assertEqual(b.isEmpty(), true, "clear length is 0");
+        "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn body_is_empty_true_by_default() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const b = new Body();
+            assertEqual(b.isEmpty(), true, "empty by default");
+        "#,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn body_is_empty_false_with_data() {
+        let mut ctx = setup();
+        ctx.eval(Source::from_bytes(
+            r#"
+            const b = new Body("data");
+            assertEqual(b.isEmpty(), false, "false with data");
         "#,
         ))
         .unwrap();

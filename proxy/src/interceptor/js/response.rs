@@ -1,7 +1,8 @@
-use std::{cell::RefCell, ops::Deref, rc::Rc};
+use std::ops::Deref;
+use std::{cell::RefCell, rc::Rc};
 
-use boa_engine::{Context, JsObject, JsResult, JsString, JsValue, js_error, js_string};
-use boa_interop::{JsClass, js_class};
+use boa_engine::class::Class;
+use boa_engine::{Context, JsObject, JsResult, JsValue, boa_class, js_error};
 use bytes::Bytes;
 use http::StatusCode;
 use roxy_shared::version::HttpVersion;
@@ -37,120 +38,116 @@ impl Default for JsResponse {
     }
 }
 
+#[boa_class(rename = "Response")]
+#[boa(rename_all = "camelCase")]
 impl JsResponse {
-    pub fn into_intercepted(self) -> Option<InterceptedResponse> {
-        let mut resp = self.resp.borrow().clone().unwrap_or_default();
+    #[boa(constructor)]
+    fn constructor() -> Self {
+        Self::default()
+    }
 
-        let body_bytes = self.body.inner.borrow();
-        if !body_bytes.is_empty() {
-            resp.body = body_bytes.clone();
-        }
-
-        let headers = self.headers.borrow();
-        if !headers.is_empty() {
-            resp.headers = headers.clone();
-        }
-
-        let trailers = self.trailers.borrow();
-        if !trailers.is_empty() {
-            resp.trailers = Some(trailers.clone());
-        }
-
-        if resp.status != 0
-            || !resp.body.is_empty()
-            || !resp.headers.is_empty()
-            || resp.trailers.is_some()
-        {
-            Some(resp)
+    #[boa(getter)]
+    fn version(&self) -> String {
+        if let Some(res) = self.resp.borrow().deref() {
+            res.version.to_string()
         } else {
-            None
+            String::new()
         }
+    }
+
+    #[boa(setter)]
+    #[boa(rename = "version")]
+    fn set_version(&self, value: String) -> JsResult<()> {
+        let version: HttpVersion = value
+            .parse()
+            .map_err(|_| js_error!(TypeError: "Invalid HTTP version"))?;
+        let mut opt = self.resp.borrow_mut();
+        let resp = opt.get_or_insert_with(InterceptedResponse::default);
+        resp.version = version;
+        Ok(())
+    }
+
+    #[boa(getter)]
+    fn headers(&self, context: &mut Context) -> JsResult<JsValue> {
+        let list = self.headers.clone();
+        JsHeaders::from_data(JsHeaders { headers: list }, context).map(JsValue::from)
+    }
+
+    #[boa(getter)]
+    fn trailers(&self, context: &mut Context) -> JsResult<JsValue> {
+        let list = self.trailers.clone();
+        JsHeaders::from_data(JsHeaders { headers: list }, context).map(JsValue::from)
+    }
+
+    #[boa(getter)]
+    fn status(&self) -> JsResult<JsValue> {
+        let status = if let Some(res) = self.resp.borrow().deref() {
+            res.status.as_u16() as i32
+        } else {
+            0
+        };
+        Ok(JsValue::new(status))
+    }
+
+    #[boa(setter)]
+    #[boa(rename = "status")]
+    fn set_status(&self, code: i32) -> JsResult<()> {
+        let mut opt = self.resp.borrow_mut();
+        let resp = opt.get_or_insert_with(InterceptedResponse::default);
+
+        resp.status = StatusCode::from_u16(code as u16)
+            .map_err(|_| js_error!(TypeError: "invalid HTTP status code"))?;
+        Ok(())
+    }
+
+    #[boa(setter)]
+    fn set_headers(&self, value: i32) -> JsResult<()> {
+        let mut opt = self.resp.borrow_mut();
+        let resp = opt.get_or_insert_with(InterceptedResponse::default);
+
+        resp.status = StatusCode::from_u16(value as u16)
+            .map_err(|_| js_error!(TypeError: "invalid HTTP status code"))?;
+        Ok(())
+    }
+
+    #[boa(getter)]
+    fn body(&self, context: &mut Context) -> JsResult<JsValue> {
+        let proto = class_proto(context, JsBody::NAME)?;
+        let h = self.body.clone();
+        let obj = JsObject::from_proto_and_data(proto, h);
+        Ok(JsValue::new(obj))
     }
 }
 
-js_class! {
-    class JsResponse as "Response" {
-        property version {
-            fn get(this: JsClass<JsResponse>) -> JsString {
-                let version = if let Some(res) = this.borrow().resp.borrow().deref() {
-                    res.version.to_string()
-                } else {
-                    String::new()
-                };
-                js_string!(version)
-            }
+pub fn into_intercepted(js_response: &JsResponse) -> Option<InterceptedResponse> {
+    let mut resp = js_response.resp.borrow().clone().unwrap_or_default();
 
-            fn set(this: JsClass<JsResponse>, value: JsValue, context: &mut Context) -> JsResult<()> {
-                if value.is_string() {
-                    let version : HttpVersion = value.to_string(context)?.to_std_string_escaped().parse()
-                        .map_err(|_| js_error!(TypeError: "Invalid HTTP version"))?;
-                    let this = this.borrow();
-                    let mut opt = this.resp.borrow_mut();
-                    let resp = opt.get_or_insert_with(InterceptedResponse::default);
-                    resp.version = version;
-                    return Ok(());
-                }
-                Err(js_error!(TypeError: "Request.method must be a string"))
-            }
-        }
-        property headers {
-            fn get(this: JsClass<JsResponse>, context: &mut Context) -> JsResult<JsValue> {
-                let list = this.borrow().headers.clone();
-                JsHeaders::from_data(JsHeaders { headers: list }, context).map(JsValue::from)
-            }
-        }
+    let body_bytes = js_response.body.inner.borrow();
+    if !body_bytes.is_empty() {
+        resp.body = body_bytes.clone();
+    }
 
-        property trailers {
-            fn get(this: JsClass<JsResponse>, context: &mut Context) -> JsResult<JsValue> {
-                let list = this.borrow().trailers.clone();
-                JsHeaders::from_data(JsHeaders { headers: list }, context).map(JsValue::from)
-            }
-        }
+    let headers = js_response.headers.borrow();
+    if !headers.is_empty() {
+        resp.headers = headers.clone();
+    }
 
-        property status {
-            fn get(this: JsClass<JsResponse>) -> JsResult<JsValue> {
-                let status = if let Some(res) = this.borrow().resp.borrow().deref() {
-                    res.status.as_u16() as i32
-                } else {
-                    0
-                };
-                Ok(JsValue::Integer(status))
-            }
+    let trailers = js_response.trailers.borrow();
+    if !trailers.is_empty() {
+        resp.trailers = Some(trailers.clone());
+    }
 
-            fn set(this: JsClass<JsResponse>, value: JsValue, context: &mut Context) -> JsResult<()> {
-                let this = this.borrow();
-                let mut opt = this.resp.borrow_mut();
-                let resp = opt.get_or_insert_with(InterceptedResponse::default);
-
-                let code = if value.is_integer() || value.is_number() {
-                    value.to_i32(context)?
-                } else {
-                    return Err(js_error!(TypeError: "status must be a number"));
-                };
-
-                resp.status = StatusCode::from_u16(code as u16)
-                    .map_err(|_| js_error!(TypeError: "invalid HTTP status code"))?;
-                Ok(())
-            }
-        }
-
-        property body {
-            fn get(this: JsClass<JsResponse>, context: &mut Context) -> JsResult<JsValue> {
-                let proto = class_proto(context, JsBody::NAME)?;
-                let h = this.borrow().body.clone();
-                let obj = JsObject::from_proto_and_data(proto, h);
-                Ok(JsValue::Object(obj))
-            }
-        }
-        constructor() {
-            Ok(Self::default())
-        }
-
-        init(_class: &mut ClassBuilder) -> JsResult<()> {
-            Ok(())
-        }
+    if resp.status != 0
+        || !resp.body.is_empty()
+        || !resp.headers.is_empty()
+        || resp.trailers.is_some()
+    {
+        Some(resp)
+    } else {
+        None
     }
 }
+
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {

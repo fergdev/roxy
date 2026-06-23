@@ -1,11 +1,11 @@
 use boa_engine::object::builtins::JsArray;
-use boa_engine::value::Convert;
 use boa_engine::{
-    Context, Finalize, JsData, JsResult, JsString, JsValue, Trace, js_error, js_string,
+    Context, Finalize, JsData, JsResult, JsString, JsValue, Trace, boa_class, js_error,
 };
-use boa_interop::{JsClass, js_class};
 use std::cell::RefCell;
+use std::fmt::Display;
 use std::rc::Rc;
+use tracing::info;
 use url::form_urlencoded::Serializer;
 
 #[derive(Debug, Clone, JsData, Trace, Finalize)]
@@ -15,113 +15,134 @@ pub(crate) struct UrlSearchParams {
     pub(crate) url: Rc<RefCell<url::Url>>,
 }
 
+#[boa_class(rename = "URLSearchParams")]
+#[boa(rename_all = "camelCase")]
 impl UrlSearchParams {
-    fn with_url_mut<R>(&self, f: impl FnOnce(&mut url::Url) -> R) -> JsResult<R> {
-        let mut u = self.url.borrow_mut();
-        Ok(f(&mut u))
+    #[boa(constructor)]
+    fn new(query: JsValue) -> JsResult<Self> {
+        if let Some(query) = query.as_string() {
+            let query = query.to_std_string_escaped();
+            let mut u = url::Url::parse("http://dummy/")
+                .map_err(|_| js_error!(TypeError: "Invalid query string"))?;
+            let clean = query.strip_prefix('?').unwrap_or(&query);
+            if clean.is_empty() {
+                u.set_query(None);
+            } else {
+                u.set_query(Some(clean));
+            }
+            Ok(Self {
+                url: Rc::new(RefCell::new(u)),
+            })
+        } else {
+            Err(js_error!(TypeError: "Illegal constructor"))
+        }
     }
 
-    fn read_pairs(&self) -> JsResult<Vec<(String, String)>> {
-        self.with_url_mut(|u| {
-            u.query_pairs()
-                .map(|(k, v)| (k.into_owned(), v.into_owned()))
-                .collect()
-        })
-    }
-
-    fn length(&self) -> usize {
+    #[boa(getter)]
+    pub fn length(&self) -> usize {
         self.url.borrow().query_pairs().count()
     }
 
-    fn write_pairs(&self, pairs: &[(String, String)]) -> JsResult<()> {
-        self.with_url_mut(|u| {
-            let mut s = Serializer::new(String::new());
-            for (k, v) in pairs {
-                s.append_pair(k, v);
-            }
-            let new_q = s.finish();
-            if new_q.is_empty() {
-                u.set_query(None);
-            } else {
-                u.set_query(Some(&new_q));
-            }
+    fn append(&self, key: String, value: String) -> JsResult<()> {
+        info!("appending pair {}={}", key, value);
+        with_url_mut(self, |url| {
+            url.query_pairs_mut().append_pair(&key, &value);
         })
+    }
+
+    fn set(&self, key: String, value: String) -> JsResult<()> {
+        let pairs = read_pairs(self)?;
+        let mut pairs = pairs
+            .iter()
+            .filter(|(pk, _)| *pk != key)
+            .map(|kp| kp.to_owned())
+            .collect::<Vec<_>>();
+        pairs.push((key, value));
+        write_pairs(self, &pairs)
+    }
+
+    fn get(&self, key: String) -> JsResult<JsValue> {
+        info!("get pair {}", key);
+        for (k, v) in read_pairs(self)? {
+            if k == key {
+                info!("yep {v}");
+                return Ok(JsValue::from(JsString::from(v)));
+            }
+        }
+        info!("nope");
+        Ok(JsValue::null())
+    }
+
+    #[boa(rename = "getAll")]
+    fn get_all(&self, key: String, context: &mut Context) -> JsResult<JsArray> {
+        let mut out: Vec<JsValue> = vec![];
+        for (k, v) in read_pairs(self)? {
+            if k == key {
+                out.push(JsString::from(v).into());
+            }
+        }
+        Ok(JsArray::from_iter(out, context))
+    }
+
+    fn has(&self, key: String) -> JsResult<bool> {
+        Ok(read_pairs(self)?.iter().any(|(k, _)| *k == key))
+    }
+
+    fn delete(&self, key: String) -> JsResult<()> {
+        let mut pairs = read_pairs(self)?;
+        pairs.retain(|(k, _)| *k != key);
+        write_pairs(self, &pairs)
+    }
+
+    fn clear(&self) -> JsResult<()> {
+        write_pairs(self, &[])
+    }
+
+    #[boa(rename = "toString")]
+    fn to_string(&self) -> JsResult<JsString> {
+        let mut s = Serializer::new(String::new());
+        for (k, v) in read_pairs(self)? {
+            s.append_pair(&k, &v);
+        }
+        Ok(JsString::from(s.finish()))
     }
 }
 
-js_class! {
-    class UrlSearchParams as "URLSearchParams" {
-        property length {
-            fn get(this: JsClass<UrlSearchParams>) -> JsResult<usize> {
-                Ok(this.borrow().length())
-            }
-        }
-        constructor(query: Option<Convert<String>>) {
-            if let Some(Convert(ref q)) = query {
-                let mut u = url::Url::parse("http://dummy/")
-                    .map_err(|_| js_error!(TypeError: "Invalid query string"))?;
-                let clean = q.strip_prefix('?').unwrap_or(q);
-                if clean.is_empty() {
-                    u.set_query(None);
-                } else {
-                    u.set_query(Some(clean));
-                }
-                Ok(Self { url: Rc::new(RefCell::new(u)) })
-            } else {
-                Err(js_error!(TypeError: "Illegal constructor"))
-            }
-        }
-
-        fn append(this: JsClass<UrlSearchParams>, key: Convert<String>, value: Convert<String>) -> JsResult<()> {
-            this.borrow().with_url_mut(|url| {
-                url.query_pairs_mut().append_pair(&key.0, &value.0);
-            })
-        }
-
-        fn set(this: JsClass<UrlSearchParams>, key: Convert<String>, value: Convert<String>) -> JsResult<()> {
-            let pairs = this.borrow().read_pairs()?;
-            let k = key.0.to_owned();
-            let v = value.0.to_owned();
-            let mut pairs = pairs.iter().filter(|(pk, _)| *pk != k).map(|kp| kp.to_owned()).collect::<Vec<_>>();
-            pairs.push((k, v));
-            this.borrow().write_pairs(&pairs)
-        }
-
-        fn get(this: JsClass<UrlSearchParams>, key: Convert<String>) -> JsResult<JsValue> {
-            for (k, v) in this.borrow().read_pairs()? {
-                if k == key.0 { return Ok(JsValue::from(JsString::from(v))); }
-            }
-            Ok(JsValue::null())
-        }
-
-        fn get_all as "getAll" (this: JsClass<UrlSearchParams>, key: Convert<String>, context: &mut Context) -> JsResult<JsArray> {
-            let mut out :Vec<JsValue> = vec![];
-            for (k, v) in this.borrow().read_pairs()? {
-                if k == key.0 { out.push(JsValue::from(js_string!(v))) }
-            }
-            Ok(JsArray::from_iter(out, context))
-        }
-
-        fn has(this: JsClass<UrlSearchParams>, key: Convert<String>) -> JsResult<bool> {
-            Ok(this.borrow().read_pairs()?.iter().any(|(k, _)| *k == key.0))
-        }
-
-        fn delete(this: JsClass<UrlSearchParams>, key: Convert<String>) -> JsResult<()> {
-            let mut pairs = this.borrow().read_pairs()?;
-            pairs.retain(|(k, _)| *k != key.0);
-            this.borrow().write_pairs(&pairs)
-        }
-
-        fn clear(this: JsClass<UrlSearchParams>) -> JsResult<()> {
-            this.borrow().write_pairs(&[])
-        }
-
-        fn to_string as "toString"(this: JsClass<UrlSearchParams>) -> JsResult<JsString> {
-            let mut s = Serializer::new(String::new());
-            for (k, v) in this.borrow().read_pairs()? { s.append_pair(&k, &v); }
-            Ok(JsString::from(s.finish()))
-        }
+impl Display for UrlSearchParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "URLSearchParams({})",
+            self.url.borrow().query().unwrap_or("")
+        )
     }
+}
+
+fn with_url_mut<R>(params: &UrlSearchParams, f: impl FnOnce(&mut url::Url) -> R) -> JsResult<R> {
+    let mut u = params.url.borrow_mut();
+    Ok(f(&mut u))
+}
+
+fn read_pairs(params: &UrlSearchParams) -> JsResult<Vec<(String, String)>> {
+    with_url_mut(params, |u| {
+        u.query_pairs()
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect()
+    })
+}
+fn write_pairs(params: &UrlSearchParams, pairs: &[(String, String)]) -> JsResult<()> {
+    with_url_mut(params, |u| {
+        let mut s = Serializer::new(String::new());
+        for (k, v) in pairs {
+            s.append_pair(k, v);
+        }
+        let new_q = s.finish();
+        if new_q.is_empty() {
+            u.set_query(None);
+        } else {
+            u.set_query(Some(&new_q));
+        }
+    })
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -131,7 +152,7 @@ mod tests {
     use boa_engine::Source;
 
     #[test]
-    fn urlsearchparams_constructor_from_string_parses_pairs() {
+    fn constructor_from_string_parses_pairs() {
         let mut ctx = setup();
         ctx.eval(Source::from_bytes(
             r#"
@@ -145,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn urlsearchparams_constructor_strips_leading_question_mark() {
+    fn constructor_strips_leading_question_mark() {
         let mut ctx = setup();
         ctx.eval(Source::from_bytes(
             r#"
@@ -171,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn urlsearchparams_append_adds_pairs_and_preserves_existing() {
+    fn append_adds_pairs_and_preserves_existing() {
         let mut ctx = setup();
         ctx.eval(Source::from_bytes(
             r#"
@@ -199,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn urlsearchparams_get_returns_null_when_missing() {
+    fn get_returns_null_when_missing() {
         let mut ctx = setup();
         ctx.eval(Source::from_bytes(
             r#"
@@ -226,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn urlsearchparams_to_string_roundtrip() {
+    fn to_string_roundtrip() {
         let mut ctx = setup();
         ctx.eval(Source::from_bytes(
             r#"

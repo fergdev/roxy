@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -27,6 +27,7 @@ jobs:
         run: cargo fmt -- --check
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+
   clippy:
     name: clippy
     runs-on: ubuntu-latest
@@ -34,7 +35,7 @@ jobs:
       checks: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -43,34 +44,90 @@ jobs:
         uses: clechasseur/rs-clippy-check@v5
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+
   doc:
     name: doc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
       - name: Run cargo doc
         run: cargo doc --no-deps --all-features
         env:
           RUSTDOCFLAGS: --cfg docsrs
-  test:
-    runs-on: ${{ matrix.os }}
-    name: test ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
+
+  test-linux:
+    runs-on: ubuntu-latest
+    name: test linux
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
+
       - name: cargo test --locked
         run: cargo test --locked --all-features --all-targets
         env:
           RUST_TEST_THREADS: 1
+
+  test-macos:
+    runs-on: macos-latest
+    name: test macos
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+
+      - name: cargo generate-lockfile
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+
+      - name: cargo test --locked
+        run: cargo test --locked --all-features --all-targets
+        env:
+          RUST_TEST_THREADS: 1
+
+  test-windows:
+    runs-on: windows-latest
+    name: test windows
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Install ninja
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo generate-lockfile
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+
+      - name: cargo test --locked
+        shell: pwsh
+        run: cargo test --locked --all-features --all-targets
+        env:
+          RUST_TEST_THREADS: 1
+          CMAKE_GENERATOR: Ninja
+          CFLAGS: /std:c11 /experimental:c11atomics

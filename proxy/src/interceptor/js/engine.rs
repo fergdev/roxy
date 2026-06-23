@@ -1,14 +1,13 @@
 use std::{cell::RefCell, rc::Rc, str::FromStr};
 
 use boa_engine::{
-    Context, JsObject, JsResult, JsValue, NativeFunction, Source,
+    Context, JsObject, JsResult, JsValue, JsVariant, NativeFunction, Source,
     class::Class,
     js_error, js_string,
     object::{FunctionObjectBuilder, builtins::JsArray},
     property::Attribute,
 };
 use boa_runtime::Console;
-use bytes::Bytes;
 use http::HeaderMap;
 use roxy_shared::uri::RUri;
 use tracing::{debug, error, trace};
@@ -19,8 +18,14 @@ use crate::{
         Error, FlowNotify, KEY_INTERCEPT_REQUEST, KEY_INTERCEPT_RESPONSE, KEY_NOTIFY, KEY_START,
         KEY_STOP, RoxyEngine,
         js::{
-            body::JsBody, constants::register_constants, flow::JsFlow, headers::JsHeaders,
-            logger::JsLogger, query::UrlSearchParams, request::JsRequest, response::JsResponse,
+            body::JsBody,
+            constants::register_constants,
+            flow::JsFlow,
+            headers::JsHeaders,
+            logger::JsLogger,
+            query::UrlSearchParams,
+            request::JsRequest,
+            response::{JsResponse, into_intercepted},
             url::JsUrl,
         },
     },
@@ -86,7 +91,7 @@ enum Cmd {
 }
 
 pub(crate) fn register_classes(ctx: &mut Context) -> JsResult<()> {
-    Console::register_with_logger(ctx, JsLogger {})?;
+    Console::register_with_logger(JsLogger {}, ctx)?;
     ctx.register_global_class::<UrlSearchParams>()?;
     ctx.register_global_class::<JsUrl>()?;
     ctx.register_global_class::<JsBody>()?;
@@ -139,7 +144,8 @@ impl JsEngine {
                             msg,
                         });
                     }
-                    Ok(JsValue::Undefined)
+                    Ok(JsVariant::Undefined.into())
+                    // Ok(JsValue::Undefined)
                 })
             })
             .length(2)
@@ -245,7 +251,7 @@ pub async fn handle_intercept_req(
     let header_cell = Rc::new(RefCell::new(req.headers.clone()));
     let trailers_cell = Rc::new(RefCell::new(req.trailers.clone().unwrap_or_default()));
 
-    let body = JsBody::new(req.body.clone());
+    let body = JsBody::from_bytes(req.body.clone());
     let req_cell = Rc::new(RefCell::new(req));
     let resp_cell = Rc::new(RefCell::new(None));
     let url_cell: Rc<RefCell<Option<JsObject>>> = Rc::new(RefCell::new(None));
@@ -264,7 +270,7 @@ pub async fn handle_intercept_req(
     };
     let response = JsResponse {
         resp: resp_cell,
-        body: JsBody::new(Bytes::new()),
+        body: JsBody::default(),
         headers: Rc::new(RefCell::new(HeaderMap::default())),
         trailers: Rc::new(RefCell::new(HeaderMap::default())),
     };
@@ -277,9 +283,10 @@ pub async fn handle_intercept_req(
         .map_err(|_| Error::InterceptedRequest)?;
     let js_flow_obj = JsObject::from_proto_and_data(proto, flow);
 
-    let flow_arg = JsValue::Object(js_flow_obj.clone());
+    let flow_arg = JsVariant::Object(js_flow_obj.clone());
+    // let flow_arg = JsValue::Object(js_flow_obj.clone());
 
-    let _ = run_request_handlers(ctx, flow_arg);
+    let _ = run_request_handlers(ctx, flow_arg.into());
     let trailers = {
         let m = trailers_handle.borrow().clone();
         if m.is_empty() { None } else { Some(m) }
@@ -292,12 +299,12 @@ pub async fn handle_intercept_req(
     final_req.trailers = trailers;
     if let Some(uri) = url.and_then(|u| u.downcast::<JsUrl>().ok()).and_then(|u| {
         let url_ref = u.borrow();
-        let value = url_ref.data().to_string();
+        let value = url_ref.data().print();
         RUri::from_str(&value).ok()
     }) {
         final_req.uri = uri;
     }
-    let final_resp = response.into_intercepted();
+    let final_resp = into_intercepted(&response);
 
     Ok((final_req, final_resp))
 }
@@ -390,7 +397,7 @@ async fn handle_intercept_resp(
 ) -> Result<InterceptedResponse, Error> {
     trace!("handle_intercept_req");
     let header_cell = Rc::new(RefCell::new(res.headers.clone()));
-    let body = JsBody::new(res.body.clone());
+    let body = JsBody::from_bytes(res.body.clone());
     let trailers_cell = Rc::new(RefCell::new(res.trailers.clone().unwrap_or_default()));
     let req_cell = Rc::new(RefCell::new(req));
     let resp_cell = Rc::new(RefCell::new(Some(res)));
@@ -400,7 +407,7 @@ async fn handle_intercept_resp(
 
     let request = JsRequest {
         req: req_cell,
-        body: JsBody::new(Bytes::new()),
+        body: JsBody::default(),
         url_obj: Rc::new(RefCell::new(None)),
         headers: Rc::new(RefCell::new(HeaderMap::default())),
         trailers: Rc::new(RefCell::new(HeaderMap::default())),
@@ -416,9 +423,9 @@ async fn handle_intercept_resp(
     let proto = crate::interceptor::js::util::class_proto(ctx, JsFlow::NAME)
         .map_err(|_| Error::InterceptedRequest)?;
     let js_flow_obj = JsObject::from_proto_and_data(proto, flow);
-    let flow_arg = JsValue::Object(js_flow_obj.clone());
+    let flow_arg = JsVariant::Object(js_flow_obj.clone());
 
-    let _ = run_response_handlers(ctx, flow_arg);
+    let _ = run_response_handlers(ctx, flow_arg.into());
     let trailers = {
         let m = trailer_handle.borrow().clone();
         if m.is_empty() { None } else { Some(m) }

@@ -1,6 +1,5 @@
-use boa_engine::{Context, JsData, JsResult, JsValue};
+use boa_engine::{Context, JsData, JsResult, JsValue, boa_class, class::Class};
 use boa_gc::{Finalize, Trace};
-use boa_interop::{JsClass, js_class};
 
 use crate::interceptor::js::{request::JsRequest, response::JsResponse};
 
@@ -10,28 +9,21 @@ pub(crate) struct JsFlow {
     pub(crate) response: JsResponse,
 }
 
-js_class! {
-    class JsFlow as "Flow" {
-        property request {
-            fn get(this: JsClass<JsFlow>, context: &mut Context) -> JsResult<JsValue> {
-                let req = this.borrow().request.clone();
-                JsRequest::from_data(req, context).map(JsValue::from)
-            }
-        }
-
-        property response {
-            fn get(this: JsClass<JsFlow>, context: &mut Context) -> JsResult<JsValue> {
-                let res = this.borrow().response.clone();
-                JsResponse::from_data(res, context).map(JsValue::from)
-            }
-        }
-
-        constructor() {
-            Ok(Self::default())
-        }
-        init(_class: &mut ClassBuilder) -> JsResult<()> {
-            Ok(())
-        }
+#[boa_class(rename = "Flow")]
+impl JsFlow {
+    #[boa(constructor)]
+    fn new() -> Self {
+        Self::default()
+    }
+    #[boa(getter)]
+    fn request(&self, context: &mut Context) -> JsResult<JsValue> {
+        let req = self.request.clone();
+        JsRequest::from_data(req, context).map(JsValue::from)
+    }
+    #[boa(getter)]
+    fn response(&self, context: &mut Context) -> JsResult<JsValue> {
+        let res = self.response.clone();
+        JsResponse::from_data(res, context).map(JsValue::from)
     }
 }
 
@@ -63,6 +55,8 @@ mod tests {
         ctx.eval(Source::from_bytes(
             r#"
             const flow = new Flow();
+            console.log(flow);
+            console.log(flow.request);
             assertTrue(typeof flow.request === "object", "flow.request is object");
             assertTrue(typeof flow.response === "object", "flow.response is object");
             "#,
