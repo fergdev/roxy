@@ -9,7 +9,7 @@ tokio = { workspace = true }
 futures-util = { workspace = true }
 
 # Tls
-p12-keystore = "0.2.0"
+p12-keystore = "0.3.1"
 rustls = { workspace = true }
 rcgen = { workspace = true }
 tokio-rustls = { workspace = true }

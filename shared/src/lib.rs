@@ -335,12 +335,9 @@ fn generate(
     let mut key_store = KeyStore::new();
     let certificate = p12_keystore::Certificate::from_der(ca_cert.der())?;
 
-    let mut local_key_id = vec![0u8; 20];
-    rand::fill(&mut local_key_id)
-        .map_err(|e| CaError::Io(std::io::Error::other(format!("rand fill error {e}"))))?;
+    let pk = p12_keystore::PrivateKey::from_der(key_pair.serialized_der())?;
 
-    let key_chain =
-        PrivateKeyChain::new(key_pair.serialized_der(), local_key_id, vec![certificate]);
+    let key_chain = PrivateKeyChain::new(key_pair.serialized_der(), pk, vec![certificate]);
     let key_entry = KeyStoreEntry::PrivateKeyChain(key_chain);
 
     key_store.add_entry(ROXYMITM, key_entry);
