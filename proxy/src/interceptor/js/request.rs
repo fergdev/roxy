@@ -160,17 +160,6 @@ impl JsRequest {
     }
 }
 
-fn make_url_for_request2(ctx: &mut Context) -> JsResult<JsObject> {
-    let base = "http://localhost";
-
-    let url_ctor = ctx.global_object().get(js_string!(JsUrl::NAME), ctx)?;
-    let url_obj = url_ctor
-        .as_object()
-        .ok_or_else(|| js_error!("URL constructor missing"))?
-        .construct(&[js_string!(base).into()], None, ctx)?;
-    Ok(url_obj)
-}
-
 fn make_url_for_request(ctx: &mut Context, req: &InterceptedRequest) -> JsResult<JsObject> {
     let href = req.uri.to_string();
     info!("href for request URL: {href}");
