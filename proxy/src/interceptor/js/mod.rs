@@ -25,7 +25,7 @@ mod tests {
             function assertEqual(a, b, msg) {
                 if (a !== b) {
                     msg = msg || `assertEqual failed: ${a} !== ${b}`
-                    console.log(msg);
+                    console.log(msg + ` assertEqual failed: ${a} !== ${b}`);
                     throw new Error(msg);
                 }
             }

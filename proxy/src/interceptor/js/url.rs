@@ -1,10 +1,10 @@
-use boa_engine::value::Convert;
-use boa_engine::{Context, Finalize, JsData, JsResult, JsString, JsValue, Trace, js_error};
-use boa_interop::{JsClass, js_class};
+use boa_engine::{
+    Context, Finalize, JsData, JsResult, JsString, JsValue, Trace, boa_class, js_error, js_string,
+};
 use cow_utils::CowUtils;
 use std::cell::RefCell;
-use std::fmt::Display;
 use std::rc::Rc;
+use tracing::info;
 
 use crate::interceptor::js::query::UrlSearchParams;
 use crate::interceptor::util::set_url_authority;
@@ -13,30 +13,199 @@ use crate::interceptor::util::set_url_authority;
 #[boa_gc(unsafe_no_drop)]
 pub(crate) struct JsUrl(#[unsafe_ignore_trace] Rc<RefCell<url::Url>>);
 
+#[boa_class(rename = "URL")]
+#[boa(rename_all = "camelCase")]
 impl JsUrl {
-    fn js_new(Convert(ref url): Convert<String>, base: Option<&Convert<String>>) -> JsResult<Self> {
-        if let Some(Convert(base)) = base {
-            let base_url = url::Url::parse(base)
+    #[boa(constructor)]
+    fn new(url: String, base: JsValue) -> JsResult<Self> {
+        if let Some(base) = base.as_string() {
+            let base = base.to_std_string_lossy();
+            let base_url = url::Url::parse(&base)
                 .map_err(|e| js_error!(TypeError: "Failed to parse base URL: {}", e))?;
             if base_url.cannot_be_a_base() {
                 return Err(js_error!(TypeError: "Base URL {} cannot be a base", base));
             }
 
             let url = base_url
-                .join(url)
+                .join(&url)
                 .map_err(|e| js_error!(TypeError: "Failed to parse URL: {}", e))?;
             Ok(Self(Rc::new(RefCell::new(url))))
         } else {
-            let url = url::Url::parse(url)
+            let url = url::Url::parse(&url)
                 .map_err(|e| js_error!(TypeError: "Failed to parse URL: {}", e))?;
             Ok(Self(Rc::new(RefCell::new(url))))
         }
     }
-}
 
-impl Display for JsUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.borrow())
+    #[boa(getter)]
+    pub fn hash(&self) -> String {
+        url::quirks::hash(&self.0.borrow()).to_string()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "hash")]
+    pub fn set_hash(&self, value: String) {
+        url::quirks::set_hash(&mut self.0.borrow_mut(), &value);
+    }
+
+    #[boa(getter)]
+    pub fn host(&self) -> JsString {
+        js_string!(url::quirks::host(&self.0.borrow()))
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "host")]
+    pub fn set_host(&self, value: String) -> JsResult<()> {
+        url::quirks::set_host(&mut self.0.borrow_mut(), &value)
+            .map_err(|_| js_error!(TypeError: "Failed to set host with value '{}'", value))
+    }
+
+    #[boa(getter)]
+    #[boa(rename = "hostname")]
+    pub fn host_name(&self) -> String {
+        url::quirks::hostname(&self.0.borrow()).into()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "hostname")]
+    pub fn set_host_name(&self, value: String) -> JsResult<()> {
+        url::quirks::set_hostname(&mut self.0.borrow_mut(), &value)
+            .map_err(|_| js_error!(TypeError: "Failed to set hostname with value '{}'", value))
+    }
+
+    #[boa(getter)]
+    pub fn href(&self) -> String {
+        url::quirks::href(&self.0.borrow()).into()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "href")]
+    pub fn set_href(&self, value: String) -> JsResult<()> {
+        url::quirks::set_href(&mut self.0.borrow_mut(), &value)
+            .map_err(|_| js_error!(TypeError: "Failed to set href with value '{}'", value))
+    }
+
+    #[boa(getter)]
+    pub fn authority(&self) -> String {
+        self.0.borrow().authority().to_string()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "authority")]
+    pub fn set_authority(&self, value: String) -> JsResult<()> {
+        let mut url = self.0.borrow_mut();
+        set_url_authority(&mut url, &value)
+            .map_err(|e| js_error!(TypeError: "Failed to set authority: {}", e))
+    }
+
+    #[boa(getter)]
+    pub fn password(&self) -> String {
+        url::quirks::password(&self.0.borrow()).into()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "password")]
+    pub fn set_password(&self, value: String) -> JsResult<()> {
+        let mut url = self.0.borrow_mut();
+        url::quirks::set_password(&mut url, &value)
+            .map_err(|_| js_error!(TypeError: "Failed to set password: {value}"))
+    }
+
+    #[boa(getter)]
+    pub fn path(&self) -> String {
+        url::quirks::pathname(&self.0.borrow()).into()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "path")]
+    pub fn set_path(&self, value: String) -> JsResult<()> {
+        url::quirks::set_pathname(&mut self.0.borrow_mut(), &value);
+        Ok(())
+    }
+
+    #[boa(getter)]
+    pub fn port(&self) -> i32 {
+        url::quirks::port(&self.0.borrow())
+            .parse::<i32>()
+            .unwrap_or(0)
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "port")]
+    pub fn set_port(&self, value: JsValue, context: &mut Context) -> JsResult<()> {
+        info!("set port {value:?}");
+        url::quirks::set_port(
+            &mut self.0.borrow_mut(),
+            &value.to_string(context)?.to_std_string_lossy(),
+        )
+        .map_err(|_| js_error!(TypeError: "Failed to set port with value '{:?}'", value))
+    }
+
+    #[boa(getter)]
+    pub fn protocol(&self) -> String {
+        url::quirks::protocol(&self.0.borrow())
+            .cow_replace(":", "")
+            .into()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "protocol")]
+    pub fn set_protocol(&self, value: String) -> JsResult<()> {
+        url::quirks::set_protocol(&mut self.0.borrow_mut(), &value)
+            .map_err(|_| js_error!(TypeError: "Failed to set port with value '{}'", value))
+    }
+
+    #[boa(getter)]
+    pub fn search(&self) -> String {
+        url::quirks::search(&self.0.borrow()).into()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "search")]
+    pub fn set_search(&self, value: String) -> JsResult<()> {
+        url::quirks::set_search(&mut self.0.borrow_mut(), &value);
+        Ok(())
+    }
+
+    #[boa(getter)]
+    #[boa(rename = "searchParams")]
+    pub fn search_params(&self) -> JsResult<UrlSearchParams> {
+        let url = self.0.clone();
+        let params = UrlSearchParams { url };
+        // let obj = UrlSearchParams::from_data(params, context)?;
+        // Ok(obj.into())
+        Ok(params)
+    }
+
+    #[boa(getter)]
+    pub fn username(&self) -> String {
+        self.0.borrow().username().into()
+    }
+
+    #[boa(setter)]
+    #[boa(method)]
+    #[boa(rename = "username")]
+    pub fn set_username(&self, value: String) -> JsResult<()> {
+        // url::quirks::set_username(&mut self.0.borrow_mut(), &value);
+        self.0
+            .borrow_mut()
+            .set_username(&value)
+            .map_err(|_| js_error!(TypeError: "Failed to set username with value '{}'", value))
+    }
+
+    #[boa(rename = "toString")]
+    pub fn print(&self) -> String {
+        format!("{}", self.0.borrow())
     }
 }
 
@@ -49,142 +218,6 @@ impl From<url::Url> for JsUrl {
 impl From<JsUrl> for url::Url {
     fn from(url: JsUrl) -> url::Url {
         url.0.borrow().clone()
-    }
-}
-
-js_class! {
-    class JsUrl as "URL" {
-        property hash {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                JsString::from(url::quirks::hash(&this.borrow().0.borrow()))
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) {
-                url::quirks::set_hash(&mut this.borrow_mut().0.borrow_mut(), &value.0);
-            }
-        }
-
-        property host {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                JsString::from(url::quirks::host(&this.borrow().0.borrow()))
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) {
-                let _ = url::quirks::set_host(&mut this.borrow_mut().0.borrow_mut(), &value.0);
-            }
-        }
-
-        property host_name as "hostname" {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                JsString::from(url::quirks::hostname(&this.borrow().0.borrow()))
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) {
-                let _ = url::quirks::set_hostname(&mut this.borrow_mut().0.borrow_mut(), &value.0);
-            }
-        }
-
-        property href {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                JsString::from(url::quirks::href(&this.borrow().0.borrow()))
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) -> JsResult<()> {
-                url::quirks::set_href(&mut this.borrow_mut().0.borrow_mut(), &value.0)
-                    .map_err(|e| js_error!(TypeError: "Failed to set href: {}", e))
-            }
-        }
-
-        property authority {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                let auth = this.borrow().0.borrow().authority().to_string();
-                JsString::from(auth)
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) -> JsResult<()> {
-                let url = this.borrow_mut();
-                set_url_authority(&mut url.0.borrow_mut(), &value.0)
-                    .map_err(|e| js_error!(TypeError: "Failed to set authority: {}", e))
-            }
-        }
-
-        property password {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                JsString::from(url::quirks::password(&this.borrow().0.borrow()))
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) {
-                let _ = url::quirks::set_password(&mut this.borrow_mut().0.borrow_mut(), &value.0);
-            }
-        }
-
-        property path {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                JsString::from(url::quirks::pathname(&this.borrow().0.borrow()))
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) {
-                let () = url::quirks::set_pathname(&mut this.borrow_mut().0.borrow_mut(), &value.0);
-            }
-        }
-
-        property port {
-            fn get(this: JsClass<JsUrl>) -> JsValue {
-                let port = this.borrow().0.borrow().port_or_known_default();
-                JsValue::Integer(port.map(|p| p as i32).unwrap_or(0))
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) {
-                let _ = url::quirks::set_port(&mut this.borrow_mut().0.borrow_mut(), &value.0.to_string());
-            }
-        }
-
-        property protocol {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                JsString::from(url::quirks::protocol(&this.borrow().0.borrow()).cow_replace(":", "").to_string())
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) {
-                let _ = url::quirks::set_protocol(&mut this.borrow_mut().0.borrow_mut(), &value.0);
-            }
-        }
-
-        property search {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                JsString::from(url::quirks::search(&this.borrow().0.borrow()))
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) {
-                url::quirks::set_search(&mut this.borrow_mut().0.borrow_mut(), &value.0);
-            }
-        }
-
-        property search_params as "searchParams" {
-            fn get(this: JsClass<JsUrl>, context: &mut Context) -> JsResult<JsValue> {
-                let url = this.borrow().0.clone();
-                let params = UrlSearchParams { url };
-                let obj = UrlSearchParams::from_data(params, context)?;
-                Ok(obj.into())
-            }
-        }
-
-        property username {
-            fn get(this: JsClass<JsUrl>) -> JsString {
-                JsString::from(this.borrow().0.borrow().username())
-            }
-
-            fn set(this: JsClass<JsUrl>, value: Convert<String>) {
-                let _ = this.borrow_mut().0.borrow_mut().set_username(&value.0);
-            }
-        }
-
-        constructor(url: Convert<String>, base: Option<Convert<String>>) {
-            Self::js_new(url, base.as_ref())
-        }
-
-        fn to_string as "toString"(this: JsClass<JsUrl>) -> JsString {
-            JsString::from(format!("{}", this.borrow().0.borrow()))
-        }
     }
 }
 
@@ -274,17 +307,14 @@ mod tests {
         let mut ctx = setup();
         ctx.eval(Source::from_bytes(
             r#"
-            console.log("Starting test");
             const u = new URL("http://x/");
             u.host = "example.com:8080";
             assertEqual(u.host, "example.com:8080", "host with port");
             assertEqual(u.port, 8080, "port getter string");
             u.port = 9090;
-            console.log("assertTrue2");
             assertEqual(u.host, "example.com:9090", "host updated via port");
             assertEqual(u.port, 9090, "host updated via port");
             assertEqual(u.href, "http://example.com:9090/", "href reflects port");
-            console.log("assertTrue3");
         "#,
         ))
         .unwrap();
