@@ -58,7 +58,7 @@ cow-utils = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.7", features = ["async_tokio"] }
+criterion = { version = "0.8", features = ["async_tokio"] }
 tempfile = "3.22.0"
 roxy-servers = { path = "../servers" }
 

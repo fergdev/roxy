@@ -424,7 +424,6 @@ async fn handle_intercept_resp(
         .map_err(|_| Error::InterceptedRequest)?;
     let js_flow_obj = JsObject::from_proto_and_data(proto, flow);
     let flow_arg = JsVariant::Object(js_flow_obj.clone());
-    // let flow_arg = JsValue::Object(js_flow_obj.clone());
 
     let _ = run_response_handlers(ctx, flow_arg.into());
     let trailers = {
