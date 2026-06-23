@@ -129,4 +129,5 @@ jobs:
         run: cargo test --locked --all-features --all-targets
         env:
           RUST_TEST_THREADS: 1
-          CFLAGS: /std:c11
+          CMAKE_GENERATOR: Ninja
+          CFLAGS: /std:c11 /experimental:c11atomics
