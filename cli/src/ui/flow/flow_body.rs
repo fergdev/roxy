@@ -11,7 +11,7 @@ use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulPro
 use roxy_shared::content::ContentType;
 use snowflake::SnowflakeIdGenerator;
 use tokio::sync::{mpsc, watch};
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 use x509_parser::nom::HexDisplay;
 
 use std::{
@@ -176,6 +176,14 @@ impl Component for FlowDetailsBody {
                     }
                     ActionResult::Consumed
                 }
+                Action::Top => {
+                    self.scroll = 0;
+                    ActionResult::Consumed
+                }
+                Action::Bottom => {
+                    self.scroll = u16::MAX;
+                    ActionResult::Consumed
+                }
                 _ => ActionResult::Ignored,
             }
         } else {
@@ -196,9 +204,8 @@ impl Component for FlowDetailsBody {
             }
             Body::Text(ref lines) => {
                 let len = lines.len() as u16;
-                let height = frame.area().height;
+                // let height = frame.area().height;
                 let clamped_scroll = self.scroll.clamp(0, len);
-                info!("{len} {height}");
                 self.scroll = clamped_scroll;
                 let para = Paragraph::new(lines.to_owned())
                     .wrap(Wrap { trim: false })

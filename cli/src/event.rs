@@ -25,14 +25,20 @@ pub enum Action {
 
     Top,
     Bottom,
+    // TODO: add these actions
+    Start,
+    End,
 
     EditConfig,
     LogView,
     FpsView,
+
+    Add,
+    Delete,
 }
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Mode {
+pub enum KeyInputMode {
     #[default]
     Normal,
     Insert,

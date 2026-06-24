@@ -14,11 +14,18 @@
       "l": "Right",
       "i": "EditConfig",
       "d": "LogView",
+
+      "gg": "Top",
+      "aa": "Top",
+
       "G": "Bottom",
-      "g": "Top",
+
       "f": "FpsView",
       "<Tab>": "FocusNext",
-      "<S-Tab>": "FocusPrev"
+      "<S-Tab>": "FocusPrev",
+
+      "e": "Delete",
+      "a": "Add"
     },
     "Insert": {
       "<C-]>": "Back",

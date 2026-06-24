@@ -94,15 +94,19 @@ where
 {
     let colors = with_theme(|t| t.colors.clone());
 
-    let hl_style = Style::default()
-        .fg(colors.on_primary)
-        .bg(colors.primary)
-        .add_modifier(Modifier::BOLD);
+    let row_highlight_style = if has_focus {
+        Style::default()
+            .fg(colors.on_primary)
+            .bg(colors.primary)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
 
     Table::new(rows, widths)
         .block(themed_block(title, has_focus))
         .column_spacing(2)
-        .row_highlight_style(hl_style)
+        .row_highlight_style(row_highlight_style)
 }
 
 pub fn themed_button(label: &str, selected: bool) -> Paragraph<'_> {

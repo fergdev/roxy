@@ -1,4 +1,4 @@
-pub mod config_editor;
+pub mod config;
 pub mod flow;
 mod fps_counter;
 pub mod framework;

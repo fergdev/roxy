@@ -8,7 +8,7 @@ use std::{
 
 use roxy_cli::{
     app,
-    config::ConfigManager,
+    config::manager::ConfigManager,
     logging, notify_debug, notify_error, notify_info, notify_trace, notify_warn,
     ui::{framework::notify::Notifier, log::UiLogLayer},
 };
@@ -36,7 +36,7 @@ async fn main() -> color_eyre::Result<()> {
     let config_manager = match ConfigManager::new() {
         Ok(config) => config,
         Err(err) => {
-            eprintln!("Err {err}");
+            eprintln!("Error creating config manager '{err}'");
             return Ok(());
         }
     };

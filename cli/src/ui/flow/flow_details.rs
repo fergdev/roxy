@@ -9,6 +9,7 @@ use ratatui::{
 use roxy_proxy::flow::{
     FlowCerts, FlowStore, InterceptedRequest, InterceptedResponse, Timing, WsMessage,
 };
+use strum::EnumIter;
 use tokio::{
     sync::{mpsc, watch},
     task::JoinHandle,
@@ -28,7 +29,7 @@ use super::flow_response::FlowDetailsResponse;
 use super::{flow_certs::FlowDetailsCerts, flow_timing::FlowTiming};
 use super::{flow_request::FlowDetailsRequest, ws_details::FlowDetailsWs};
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
 enum Tab {
     #[default]
     Request,

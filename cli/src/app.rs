@@ -2,15 +2,15 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::Result;
-use crossterm::event::KeyEvent;
 use rat_focus::{Focus, FocusBuilder};
 use ratatui::layout::Rect;
 use roxy_proxy::flow::FlowStore;
 use roxy_proxy::proxy::ProxyManager;
 use tokio::sync::mpsc;
 
-use crate::config::ConfigManager;
-use crate::event::{Action, Mode};
+use crate::config::manager::ConfigManager;
+use crate::event::Action;
+use crate::key_handler::KeyHandler;
 use crate::tui::{Event, Tui};
 use crate::ui::framework::component::{ActionResult, Component, KeyEventResult};
 use crate::ui::framework::notify::Notifier;
@@ -26,8 +26,7 @@ pub struct App {
     home: HomeComponent,
     should_quit: bool,
     should_suspend: bool,
-    mode: Mode,
-    last_tick_key_events: Vec<KeyEvent>,
+    key_handler: KeyHandler,
     action_tx: mpsc::UnboundedSender<Action>,
     action_rx: mpsc::UnboundedReceiver<Action>,
 }
@@ -47,14 +46,14 @@ impl App {
             log_buffer.clone(),
             notifier,
         );
+        let key_handler = KeyHandler::new(config_manager.clone(), action_tx.clone());
         Self {
             _proxy_manager: proxy_manager,
             config_manager,
             home,
             should_quit: false,
             should_suspend: false,
-            mode: Mode::Normal,
-            last_tick_key_events: Vec::new(),
+            key_handler,
             action_tx,
             action_rx,
         }
@@ -97,7 +96,20 @@ impl App {
             Event::Tick => action_tx.send(Action::Tick)?,
             Event::Render => action_tx.send(Action::Render)?,
             Event::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
-            Event::Key(key) => self.handle_key_event(key)?,
+            Event::Key(key) => {
+                // Send raw key events to the component heighrarchy first
+                // so they can intercept and react to them before the key_handler
+                match self.home.handle_key_event(&key) {
+                    KeyEventResult::Consumed => {
+                        return Ok(());
+                    }
+                    KeyEventResult::Ignored => {}
+                    KeyEventResult::Action(action) => {
+                        self.action_tx.send(action)?;
+                    }
+                }
+                self.key_handler.handle_key_event(key)?
+            }
             _ => {}
         }
         if let Some(action) = self.home.handle_events(event.clone())? {
@@ -106,42 +118,10 @@ impl App {
         Ok(())
     }
 
-    fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
-        let action_tx = self.action_tx.clone();
-        match self.home.handle_key_event(&key) {
-            KeyEventResult::Consumed => {
-                return Ok(());
-            }
-            KeyEventResult::Ignored => {}
-            KeyEventResult::Action(action) => {
-                action_tx.send(action)?;
-            }
-        }
-
-        let cfg = self.config_manager.rx.borrow();
-        let Some(keymap) = cfg.keybindings.get(&self.mode) else {
-            return Ok(());
-        };
-        match keymap.get(&vec![key]) {
-            Some(action) => {
-                action_tx.send(action.clone())?;
-            }
-            _ => {
-                self.last_tick_key_events.push(key);
-                if let Some(action) = keymap.get(&self.last_tick_key_events) {
-                    action_tx.send(action.clone())?;
-                }
-            }
-        }
-        Ok(())
-    }
-
     fn handle_actions(&mut self, tui: &mut Tui, focus: &mut Focus) -> Result<()> {
         while let Ok(action) = self.action_rx.try_recv() {
             match action {
-                Action::Tick => {
-                    self.last_tick_key_events.drain(..);
-                }
+                Action::Tick => {}
                 Action::Quit => self.should_quit = true,
                 Action::Suspend => self.should_suspend = true,
                 Action::Resume => self.should_suspend = false,

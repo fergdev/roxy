@@ -2,6 +2,8 @@
 pub mod app;
 pub mod config;
 pub mod event;
+pub mod key_handler;
+pub mod key_trie;
 pub mod logging;
 pub mod tui;
 pub mod ui;

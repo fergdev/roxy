@@ -3,10 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{config::ConfigManager, event::Action, tui::Event};
+use crate::{config::manager::ConfigManager, event::Action, tui::Event};
 
 use super::{
-    config_editor::ConfigEditor,
+    config::ConfigEditor,
     flow::{flow_details::FlowDetails, flow_list::FlowList},
     fps_counter::FpsCounter,
     framework::{
@@ -171,6 +171,7 @@ impl Component for HomeComponent {
             }
             Action::EditConfig => {
                 self.active_popup = Some(ActivePopup::ConfigEditor);
+                self.config_editor.shown();
                 ActionResult::Consumed
             }
             Action::Back => match self.active_popup {

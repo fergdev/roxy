@@ -1,25 +1,16 @@
 use std::collections::HashMap;
 
-use cow_utils::CowUtils;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeMap};
-use tracing::error;
 
 use crate::{
-    event::{Action, Mode},
+    event::{Action, KeyInputMode},
     notify_error,
 };
 
 #[derive(Clone, Debug, Default, Deref, DerefMut)]
-pub struct KeyBindings(pub HashMap<Mode, HashMap<Vec<KeyEvent>, Action>>);
-
-pub fn format_key_sequence(seq: &[KeyEvent]) -> String {
-    seq.iter()
-        .map(key_event_to_string)
-        .collect::<Vec<_>>()
-        .join(", ")
-}
+pub struct KeyBindings(pub HashMap<KeyInputMode, HashMap<Vec<KeyEvent>, Action>>);
 
 impl Serialize for KeyBindings {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -32,7 +23,12 @@ impl Serialize for KeyBindings {
             let mut inner = HashMap::new();
 
             for (key_seq, action) in bindings {
-                inner.insert(format_key_sequence(key_seq), action);
+                let keys = key_seq
+                    .iter()
+                    .map(key_event_to_string)
+                    .collect::<Vec<_>>()
+                    .join("");
+                inner.insert(keys, action);
             }
 
             map.serialize_entry(&mode_key, &inner)?;
@@ -47,12 +43,13 @@ impl<'de> Deserialize<'de> for KeyBindings {
     where
         D: serde::Deserializer<'de>,
     {
-        let parsed_map = HashMap::<Mode, HashMap<String, Action>>::deserialize(deserializer)?;
+        let parsed_map =
+            HashMap::<KeyInputMode, HashMap<String, Action>>::deserialize(deserializer)?;
 
         let keybindings = parsed_map
             .into_iter()
-            .map(|(mode, inner_map)| {
-                let converted_inner_map = inner_map
+            .map(|(mode, key_sequence_to_actions)| {
+                let converted_inner_map = key_sequence_to_actions
                     .into_iter()
                     .filter_map(|(key_str, cmd)| match parse_key_sequence(&key_str) {
                         Ok(seq) => Some((seq, cmd)),
@@ -72,116 +69,88 @@ impl<'de> Deserialize<'de> for KeyBindings {
 
 pub fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
     if raw.chars().filter(|c| *c == '>').count() != raw.chars().filter(|c| *c == '<').count() {
-        error!("Error parsing {raw}");
-        return Err(format!("Unable to parse `{raw}`"));
+        return Err(format!(
+            "Unable to parse `{raw}` inconsistent opening and closing <>"
+        ));
     }
-    let raw = if !raw.contains("><") {
-        raw.strip_prefix('<').unwrap_or(raw)
-    } else {
-        raw
-    };
-    let sequences = raw
-        .split("><")
-        .map(|seq| {
-            if let Some(s) = seq.strip_prefix('<') {
-                s
-            } else if let Some(s) = seq.strip_suffix('>') {
-                s
+    let sequences = raw.split_inclusive(">").collect::<Vec<_>>();
+
+    let sequences = sequences
+        .iter()
+        .flat_map(|f| {
+            if f.contains(">") {
+                vec![f.to_string()]
             } else {
-                seq
+                f.chars()
+                    .map(|c| format!("{c}").to_string())
+                    .collect::<Vec<_>>()
             }
         })
         .collect::<Vec<_>>();
 
-    sequences.into_iter().map(parse_key_event).collect()
+    sequences.into_iter().map(|s| parse_key_code(&s)).collect()
 }
 
-pub fn parse_key_event(raw: &str) -> Result<KeyEvent, String> {
-    let raw_lower = raw.cow_to_ascii_lowercase();
-    let (remaining, modifiers) = extract_modifiers(&raw_lower);
-    parse_key_code_with_modifiers(remaining, modifiers)
-}
+fn parse_key_code(raw: &str) -> Result<KeyEvent, String> {
+    let (mut modifiers, raw) = if raw.starts_with("<C-M-") {
+        (
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+            raw.trim_start_matches("<C-M-").trim_end_matches(">"),
+        )
+    } else if raw.starts_with("<C-") {
+        (
+            KeyModifiers::CONTROL,
+            raw.trim_start_matches("<C-").trim_end_matches(">"),
+        )
+    } else if raw.starts_with("<M-") {
+        (
+            KeyModifiers::ALT,
+            raw.trim_start_matches("<M-").trim_end_matches(">"),
+        )
+    } else {
+        (
+            KeyModifiers::NONE,
+            raw.trim_start_matches("<").trim_end_matches(">"),
+        )
+    };
 
-fn extract_modifiers(raw: &str) -> (&str, KeyModifiers) {
-    let mut modifiers = KeyModifiers::empty();
-    let mut current = raw;
-
-    loop {
-        match current {
-            rest if rest.starts_with("ctrl-") => {
-                modifiers.insert(KeyModifiers::CONTROL);
-                current = &rest[5..];
-            }
-            rest if rest.starts_with("alt-") => {
-                modifiers.insert(KeyModifiers::ALT);
-                current = &rest[4..];
-            }
-            rest if rest.starts_with("shift-") => {
-                modifiers.insert(KeyModifiers::SHIFT);
-                current = &rest[6..];
-            }
-            _ => break,
-        };
-    }
-
-    (current, modifiers)
-}
-
-fn parse_key_code_with_modifiers(
-    raw: &str,
-    mut modifiers: KeyModifiers,
-) -> Result<KeyEvent, String> {
-    let c = match raw {
-        "<Esc>" => KeyCode::Esc,
-        "<Enter>" => KeyCode::Enter,
-        "<Left>" => KeyCode::Left,
-        "<Right>" => KeyCode::Right,
-        "<Up>" => KeyCode::Up,
-        "<Down>" => KeyCode::Down,
-        "<Home>" => KeyCode::Home,
-        "<End>" => KeyCode::End,
-        "<Pageup>" => KeyCode::PageUp,
-        "<Pagedown>" => KeyCode::PageDown,
-        "<S-Tab>" => {
-            modifiers.insert(KeyModifiers::SHIFT);
+    let key_code = match raw {
+        "Esc" => KeyCode::Esc,
+        "Enter" => KeyCode::Enter,
+        "Left" => KeyCode::Left,
+        "Right" => KeyCode::Right,
+        "Up" => KeyCode::Up,
+        "Down" => KeyCode::Down,
+        "Home" => KeyCode::Home,
+        "End" => KeyCode::End,
+        "Pageup" => KeyCode::PageUp,
+        "Pagedown" => KeyCode::PageDown,
+        "S-Tab" => {
+            modifiers |= KeyModifiers::SHIFT;
             KeyCode::BackTab
         }
-        "<BS>" => KeyCode::Backspace,
-        "<Del>" => KeyCode::Delete,
-        "<Insert>" => KeyCode::Insert,
-        "<F1>" => KeyCode::F(1),
-        "<F2>" => KeyCode::F(2),
-        "<F3>" => KeyCode::F(3),
-        "<F4>" => KeyCode::F(4),
-        "<F5>" => KeyCode::F(5),
-        "<F6>" => KeyCode::F(6),
-        "<F7>" => KeyCode::F(7),
-        "<F8>" => KeyCode::F(8),
-        "<F9>" => KeyCode::F(9),
-        "<F10>" => KeyCode::F(10),
-        "<F11>" => KeyCode::F(11),
-        "<F12>" => KeyCode::F(12),
-        "<Space>" => KeyCode::Char(' '),
-        "<kMinus>" => KeyCode::Char('-'),
-        "<Tab>" => KeyCode::Tab,
-        c if c.starts_with('<') && c.ends_with('>') => {
-            if c.starts_with("<C-") {
-                c.strip_prefix("<C-")
-                    .and_then(|s| s.strip_suffix('>'))
-                    .and_then(|s| s.chars().next())
-                    .map(|c| {
-                        modifiers.insert(KeyModifiers::CONTROL);
-                        KeyCode::Char(c)
-                    })
-                    .ok_or_else(|| format!("Unable to parse {raw}"))?
-            } else {
-                return Err(format!("Unable to parse {raw}"));
-            }
-        }
+        "BS" => KeyCode::Backspace,
+        "Del" => KeyCode::Delete,
+        "Insert" => KeyCode::Insert,
+        "F1" => KeyCode::F(1),
+        "F2" => KeyCode::F(2),
+        "F3" => KeyCode::F(3),
+        "F4" => KeyCode::F(4),
+        "F5" => KeyCode::F(5),
+        "F6" => KeyCode::F(6),
+        "F7" => KeyCode::F(7),
+        "F8" => KeyCode::F(8),
+        "F9" => KeyCode::F(9),
+        "F10" => KeyCode::F(10),
+        "F11" => KeyCode::F(11),
+        "F12" => KeyCode::F(12),
+        "Space" => KeyCode::Char(' '),
+        "kMinus" => KeyCode::Char('-'),
+        "Tab" => KeyCode::Tab,
         c if c.len() == 1 => {
-            if let Some(mut c) = c.chars().next() {
-                if modifiers.contains(KeyModifiers::SHIFT) {
-                    c = c.to_ascii_uppercase();
+            if let Some(c) = c.chars().next() {
+                if c.is_uppercase() {
+                    modifiers |= KeyModifiers::SHIFT;
                 }
                 KeyCode::Char(c)
             } else {
@@ -190,153 +159,284 @@ fn parse_key_code_with_modifiers(
         }
         _ => return Err(format!("Unable to parse {raw}")),
     };
-    Ok(KeyEvent::new(c, modifiers))
+
+    Ok(KeyEvent::new(key_code, modifiers))
 }
 
-pub fn key_event_to_string(key_event: &KeyEvent) -> String {
+fn key_event_to_string(key_event: &KeyEvent) -> String {
+    let mut modifiers = Vec::with_capacity(3);
+    if key_event.modifiers.intersects(KeyModifiers::CONTROL) {
+        modifiers.push("C");
+    }
+    if key_event.modifiers.intersects(KeyModifiers::ALT) {
+        modifiers.push("M");
+    }
     let char;
     let key_code = match key_event.code {
-        KeyCode::Backspace => "<BS>",
-        KeyCode::Enter => "<Enter>",
-        KeyCode::Left => "<Left>",
-        KeyCode::Right => "<Right>",
-        KeyCode::Up => "<Up>",
-        KeyCode::Down => "<Down>",
-        KeyCode::Home => "<Home>",
-        KeyCode::End => "<End>",
-        KeyCode::PageUp => "<Pageup>",
-        KeyCode::PageDown => "<Pagedown>",
-        KeyCode::Tab => "<Tab>",
-        KeyCode::BackTab => "<S-Tab>",
-        KeyCode::Delete => "<Delete>",
-        KeyCode::Insert => "<Insert>",
+        KeyCode::Backspace => "BS",
+        KeyCode::Enter => "Enter",
+        KeyCode::Left => "Left",
+        KeyCode::Right => "Right",
+        KeyCode::Up => "Up",
+        KeyCode::Down => "Down",
+        KeyCode::Home => "Home",
+        KeyCode::End => "End",
+        KeyCode::PageUp => "Pageup",
+        KeyCode::PageDown => "Pagedown",
+        KeyCode::Tab => "Tab",
+        KeyCode::BackTab => "S-Tab",
+        KeyCode::Delete => "Delete",
+        KeyCode::Insert => "Insert",
         KeyCode::F(c) => {
-            char = format!("<F{c}>");
+            char = format!("F{c}");
             &char
         }
-        KeyCode::Char(' ') => "<Space>",
+        KeyCode::Char(' ') => "Space",
         KeyCode::Char(c) => {
             char = c.to_string();
             &char
         }
-        KeyCode::Esc => "<Esc>",
+        KeyCode::Esc => "Esc",
         _ => {
             todo!("Unsupported key code: {:?}", key_event.code);
         }
     };
 
-    let mut modifiers = Vec::with_capacity(3);
-
-    if key_event.modifiers.intersects(KeyModifiers::CONTROL) {
-        modifiers.push("ctrl");
+    if key_code.len() > 1 || !modifiers.is_empty() {
+        if modifiers.is_empty() {
+            format!("<{key_code}>")
+        } else {
+            let modifiers = modifiers.join("-");
+            format!("<{modifiers}-{key_code}>")
+        }
+    } else {
+        key_code.to_string()
     }
+}
 
-    if key_event.modifiers.intersects(KeyModifiers::SHIFT) {
-        modifiers.push("shift");
-    }
-
-    if key_event.modifiers.intersects(KeyModifiers::ALT) {
-        modifiers.push("alt");
-    }
-
-    let mut key = modifiers.join("-");
-
-    if !key.is_empty() {
-        key.push('-');
-    }
-    key.push_str(key_code);
-
-    key
+pub fn key_sequence_to_string(seq: &[KeyEvent]) -> String {
+    let debug_string = seq
+        .iter()
+        .map(key_event_to_string)
+        .collect::<Vec<String>>()
+        .join("");
+    debug_string.to_string()
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use crossterm::event::{KeyCode, KeyModifiers};
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    #[test]
+    pub fn parse_key_sequence_cx_cx() {
+        assert_eq!(
+            vec![
+                KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
+                KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
+            ],
+            super::parse_key_sequence("<C-x><C-x>").unwrap()
+        );
+    }
+
+    #[test]
+    pub fn parse_key_sequence_g_g() {
+        assert_eq!(
+            vec![
+                KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
+                KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
+            ],
+            super::parse_key_sequence("gg").unwrap()
+        );
+    }
+
+    #[test]
+    pub fn parse_key_sequence_cx_g() {
+        assert_eq!(
+            vec![
+                KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
+                KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
+            ],
+            super::parse_key_sequence("<C-x>g").unwrap()
+        );
+    }
+
+    #[test]
+    pub fn parse_key_code_x() {
+        assert_eq!(
+            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+            super::parse_key_code("x").unwrap(),
+        );
+        assert_eq!(
+            KeyEvent::new(KeyCode::Char('X'), KeyModifiers::NONE),
+            super::parse_key_code("X").unwrap(),
+        );
+    }
+
+    #[test]
+    pub fn parse_key_code_ctrl_x() {
+        assert_eq!(
+            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
+            super::parse_key_code("<C-x>").unwrap(),
+        );
+        assert_eq!(
+            KeyEvent::new(KeyCode::Char('X'), KeyModifiers::CONTROL),
+            super::parse_key_code("<C-X>").unwrap(),
+        );
+    }
+
+    #[test]
+    pub fn parse_key_code_ctrl_alt_x() {
+        assert_eq!(
+            KeyEvent::new(
+                KeyCode::Char('x'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT
+            ),
+            super::parse_key_code("<C-M-x>").unwrap(),
+        );
+        assert_eq!(
+            KeyEvent::new(
+                KeyCode::Char('X'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT
+            ),
+            super::parse_key_code("<C-M-X>").unwrap(),
+        );
+    }
+
+    #[test]
+    pub fn parse_key_code_esc() {
+        assert_eq!(
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            super::parse_key_code("<Esc>").unwrap(),
+        );
+    }
+
+    #[test]
+    pub fn parse_key_code_ctrl_esc() {
+        assert_eq!(
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::CONTROL),
+            super::parse_key_code("<C-Esc>").unwrap(),
+        );
+    }
+
+    #[test]
+    pub fn parse_key_code_ctrl_alt_esc() {
+        assert_eq!(
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::CONTROL | KeyModifiers::ALT),
+            super::parse_key_code("<C-M-Esc>").unwrap(),
+        );
+    }
+
+    #[test]
+    pub fn parse_key_code_s_tab() {
+        assert_eq!(
+            KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT),
+            super::parse_key_code("<S-Tab>").unwrap(),
+        );
+    }
 
     #[test]
     pub fn key_event_to_string_x() {
-        let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "x");
+        assert_eq!(
+            "x",
+            super::key_event_to_string(&KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE))
+        );
     }
 
     #[test]
     pub fn key_event_to_string_shift_x() {
-        let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('X'), KeyModifiers::NONE);
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "x");
+        assert_eq!(
+            "X",
+            super::key_event_to_string(&KeyEvent::new(KeyCode::Char('X'), KeyModifiers::NONE))
+        );
     }
 
     #[test]
     pub fn key_event_to_string_ctl_x() {
-        let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL);
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "<C-x>");
+        assert_eq!(
+            "<C-x>",
+            super::key_event_to_string(&KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL))
+        );
     }
 
     #[test]
     pub fn key_event_to_string_ctl_shift_x() {
-        let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('X'), KeyModifiers::CONTROL);
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "<C-X>");
+        assert_eq!(
+            "<C-X>",
+            super::key_event_to_string(&KeyEvent::new(KeyCode::Char('X'), KeyModifiers::CONTROL))
+        );
     }
 
     #[test]
     pub fn key_event_to_string_alt_x() {
-        let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('x'), KeyModifiers::ALT);
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "<M-x>");
+        assert_eq!(
+            "<M-x>",
+            super::key_event_to_string(&KeyEvent::new(KeyCode::Char('x'), KeyModifiers::ALT))
+        );
     }
 
     #[test]
     pub fn key_event_to_string_alt_shift_x() {
-        let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('X'), KeyModifiers::ALT);
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "<M-X>");
+        assert_eq!(
+            "<M-X>",
+            super::key_event_to_string(&KeyEvent::new(KeyCode::Char('X'), KeyModifiers::ALT))
+        );
     }
 
     #[test]
     pub fn key_event_to_string_ctl_alt_x() {
-        let key_event = crossterm::event::KeyEvent::new(
-            KeyCode::Char('X'),
-            KeyModifiers::ALT | KeyModifiers::CONTROL,
+        assert_eq!(
+            "<C-M-x>",
+            super::key_event_to_string(&KeyEvent::new(
+                KeyCode::Char('x'),
+                KeyModifiers::ALT | KeyModifiers::CONTROL
+            ))
         );
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "<C-M-x>");
     }
 
     #[test]
     pub fn key_event_to_string_ctl_alt_shift_x() {
-        let key_event = crossterm::event::KeyEvent::new(
-            KeyCode::Char('X'),
-            KeyModifiers::ALT | KeyModifiers::CONTROL,
+        assert_eq!(
+            "<C-M-X>",
+            super::key_event_to_string(&KeyEvent::new(
+                KeyCode::Char('X'),
+                KeyModifiers::ALT | KeyModifiers::CONTROL | KeyModifiers::SHIFT
+            ))
         );
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "<C-M-X>");
     }
 
     #[test]
     pub fn key_event_to_string_esc() {
-        let key_event = crossterm::event::KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "<Esc>");
+        assert_eq!(
+            "<Esc>",
+            super::key_event_to_string(&KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+        );
     }
 
     #[test]
     pub fn key_event_to_string_ctl_esc() {
-        let key_event = crossterm::event::KeyEvent::new(KeyCode::Esc, KeyModifiers::CONTROL);
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "<C-Esc>");
+        assert_eq!(
+            "<C-Esc>",
+            super::key_event_to_string(&KeyEvent::new(KeyCode::Esc, KeyModifiers::CONTROL))
+        );
     }
 
     #[test]
     pub fn key_event_to_string_ctl_alt_esc() {
-        let key_event = crossterm::event::KeyEvent::new(
-            KeyCode::Esc,
-            KeyModifiers::ALT | KeyModifiers::CONTROL,
+        assert_eq!(
+            "<C-M-Esc>",
+            super::key_event_to_string(&KeyEvent::new(
+                KeyCode::Esc,
+                KeyModifiers::ALT | KeyModifiers::CONTROL
+            ))
         );
-        let key_str = super::key_event_to_string(&key_event);
-        assert_eq!(key_str, "<C-M-Esc>");
+    }
+
+    #[test]
+    pub fn key_event_to_string_s_tab() {
+        assert_eq!(
+            "<S-Tab>",
+            super::key_event_to_string(&KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT))
+        );
     }
 }
