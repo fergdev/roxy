@@ -1,4 +1,4 @@
-use rat_focus::HasFocus;
+use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect, widgets::Paragraph};
 use roxy_proxy::flow::Timing;
 use time::OffsetDateTime;
@@ -12,7 +12,7 @@ struct State {
 
 pub struct FlowTiming {
     state: watch::Receiver<State>,
-    focus: rat_focus::FocusFlag,
+    focus: FocusFlag,
 }
 
 impl FlowTiming {
@@ -21,10 +21,16 @@ impl FlowTiming {
 
         tokio::spawn({
             async move {
+                // info!("waiting on timing updates...");
                 while let Some(timing) = rx.recv().await {
+                    // info!("REC timing {timing:?}");
                     let lines = vec![
                         timing_line(&timing.client_conn_established, "client_conn_established"),
                         timing_line(&timing.server_conn_initiated, "server_conn_initiated"),
+                        timing_line(
+                            &timing.server_conn_http_handshake,
+                            "server_conn_http_handshake",
+                        ),
                         timing_line(
                             &timing.server_conn_tcp_handshake,
                             "server_conn_TCP_handshake",
@@ -44,6 +50,7 @@ impl FlowTiming {
                         timing_line(&timing.client_conn_closed, "client_conn_closed"),
                         timing_line(&timing.server_conn_closed, "server_conn_closed"),
                     ];
+                    // info!("sending timing update to UI...");
                     ui_tx.send(State { lines }).unwrap_or_else(|e| {
                         tracing::debug!("Failed to send UI state update: {}", e);
                     });
@@ -53,7 +60,7 @@ impl FlowTiming {
 
         Self {
             state: ui_rx,
-            focus: rat_focus::FocusFlag::new().with_name("FlowTiming"),
+            focus: FocusFlag::new().with_name("FlowTiming"),
         }
     }
 }
@@ -76,7 +83,7 @@ impl HasFocus for FlowTiming {
         Rect::default()
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 }

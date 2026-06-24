@@ -1,4 +1,4 @@
-use rat_focus::HasFocus;
+use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     text::Span,
@@ -28,7 +28,7 @@ struct UiState {
 }
 
 pub struct FlowDetailsResponse {
-    focus: rat_focus::FocusFlag,
+    focus: FocusFlag,
     ui_state: watch::Receiver<UiState>,
     line_component: LineComponent,
     headers: FlowDetailsHeaders,
@@ -45,7 +45,7 @@ impl FlowDetailsResponse {
         let body = FlowDetailsBody::new(body_rx);
 
         let this = Self {
-            focus: rat_focus::FocusFlag::new().with_name("FlowResponse"),
+            focus: FocusFlag::new().with_name("FlowResponse"),
             ui_state: ui_rx,
             line_component: LineComponent::new("ResponseLine"),
             headers: flow_headers,
@@ -99,7 +99,7 @@ impl HasFocus for FlowDetailsResponse {
         Rect::default()
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 }

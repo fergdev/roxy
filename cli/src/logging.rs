@@ -1,10 +1,16 @@
-use std::{path::PathBuf, sync::Once};
+use std::{
+    fs::{File, create_dir_all},
+    path::PathBuf,
+    sync::Once,
+};
 
 use color_eyre::eyre::Result;
 use directories::ProjectDirs;
 use once_cell::sync::OnceCell;
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{self, Layer, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{
+    self, Layer, filter::EnvFilter, layer::SubscriberExt, util::SubscriberInitExt,
+};
 
 use crate::ui::log::UiLogLayer;
 
@@ -44,9 +50,9 @@ pub fn initialize_logging_with_layer(layer: Option<UiLogLayer>) -> Result<()> {
     INIT_TRACING.call_once(|| {
         println!("Initializing logging for {}", env!("CARGO_PKG_NAME"));
         let directory = get_data_dir();
-        std::fs::create_dir_all(directory.clone()).expect("Could not create logging dir");
+        create_dir_all::<_>(directory.clone()).expect("Could not create logging dir");
         let log_path = directory.join(format!("{}.log", env!("CARGO_PKG_NAME")));
-        let log_file = std::fs::File::create(log_path).expect("Could not create log file");
+        let log_file = File::create(log_path).expect("Could not create log file");
         unsafe {
             std::env::set_var(
                 "RUST_LOG",
@@ -62,7 +68,7 @@ pub fn initialize_logging_with_layer(layer: Option<UiLogLayer>) -> Result<()> {
             .with_target(false)
             .with_ansi(false)
             .without_time()
-            .with_filter(tracing_subscriber::filter::EnvFilter::from_default_env());
+            .with_filter(EnvFilter::from_default_env());
 
         let builder = tracing_subscriber::registry()
             .with(file_subscriber)

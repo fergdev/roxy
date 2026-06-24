@@ -390,13 +390,44 @@ impl ServerCertVerifier for LoggingServerVerifier {
 
 #[derive(Debug, Clone)]
 pub struct CapturedClientHello {
-    pub data: String,
+    pub server_name: Option<String>,
+    pub signature_schemes: Vec<SignatureScheme>,
+    pub alpn: Option<Vec<String>>,
+    pub server_cert_types: Option<Vec<String>>,
+    pub client_cert_types: Option<Vec<String>>,
+    pub cipher_suites: Vec<String>,
+    pub certificate_authorities: Option<Vec<String>>,
+    pub named_groups: Option<Vec<String>>,
 }
 
 impl From<ClientHello<'_>> for CapturedClientHello {
     fn from(value: ClientHello<'_>) -> Self {
         CapturedClientHello {
-            data: format!("{value:?}"),
+            server_name: value.server_name().map(|sn| sn.to_owned()),
+            signature_schemes: value.signature_schemes().to_vec(),
+            alpn: value.alpn().map(|protos| {
+                protos
+                    .into_iter()
+                    .map(|p| String::from_utf8_lossy(p).to_string())
+                    .collect()
+            }),
+            server_cert_types: value
+                .server_cert_types()
+                .map(|types| types.iter().map(|t| format!("{t:?}")).collect()),
+            client_cert_types: value
+                .client_cert_types()
+                .map(|types| types.iter().map(|t| format!("{t:?}")).collect()),
+            cipher_suites: value
+                .cipher_suites()
+                .iter()
+                .map(|cs| format!("{cs:?}"))
+                .collect(),
+            certificate_authorities: value
+                .certificate_authorities()
+                .map(|cas| cas.iter().map(|ca| format!("{ca:?}").to_string()).collect()),
+            named_groups: value
+                .named_groups()
+                .map(|groups| groups.iter().map(|g| format!("{g:?}")).collect()),
         }
     }
 }

@@ -11,7 +11,7 @@ use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulPro
 use roxy_shared::content::ContentType;
 use snowflake::SnowflakeIdGenerator;
 use tokio::sync::{mpsc, watch};
-use tracing::debug;
+use tracing::{debug, error};
 use x509_parser::nom::HexDisplay;
 
 use std::{
@@ -268,7 +268,7 @@ impl ImageCache {
                     return Ok(());
                 }
                 Err(_) => {
-                    eprintln!("Failed to lock image protocol for rendering");
+                    error!("Failed to lock image protocol for rendering");
                 }
             }
         }

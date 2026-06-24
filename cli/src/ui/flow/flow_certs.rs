@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -8,15 +9,15 @@ use ratatui::{
 };
 use roxy_proxy::flow::FlowCerts;
 use roxy_shared::cert::{
-    ClientTlsConnectionData, ClientVerificationCapture, ServerTlsConnectionData,
-    ServerVerificationCapture, TlsVerify,
+    CapturedClientHello, ClientTlsConnectionData, ClientVerificationCapture,
+    ServerTlsConnectionData, ServerVerificationCapture, TlsVerify,
 };
 use strum::EnumIter;
 use tokio::{
     sync::{mpsc::Receiver, watch},
     task::JoinHandle,
 };
-use tracing::warn;
+use tracing::{info, warn};
 use x509_parser::parse_x509_certificate;
 
 use crate::{
@@ -89,7 +90,7 @@ impl CertInfo {
 
 pub struct FlowDetailsCerts {
     state: watch::Receiver<UiState>,
-    focus: rat_focus::FocusFlag,
+    focus: FocusFlag,
     handle: JoinHandle<()>,
     tab: TabComponent,
     client_tab_cmp: TabComponent,
@@ -148,7 +149,7 @@ impl RootTab {
         let all_tabs = Self::all();
         let index = self.index();
         if index == all_tabs.len() - 1 {
-            *all_tabs.last().unwrap_or(&Self::Client)
+            *all_tabs.first().unwrap_or(&Self::Client)
         } else {
             all_tabs[index + 1]
         }
@@ -247,7 +248,7 @@ impl ServerTab {
 
 #[derive(Default, Clone)]
 struct ClientState {
-    hello: Option<String>,
+    hello: Option<CapturedClientHello>,
     certs: Option<ClientVerificationCapture>,
     tls: Option<ServerTlsConnectionData>,
 }
@@ -265,9 +266,11 @@ impl FlowDetailsCerts {
 
         let handle = tokio::spawn({
             async move {
+                info!("waiting on cert updates...");
                 while let Some(certs) = cert_rx.recv().await {
+                    info!("REC certs {certs:?}");
                     let client = ClientState {
-                        hello: certs.client_hello.map(|v| v.data),
+                        hello: certs.client_hello.clone(),
                         certs: certs.client_verification,
                         tls: certs.client_tls,
                     };
@@ -285,7 +288,7 @@ impl FlowDetailsCerts {
 
         Self {
             state: ui_rx,
-            focus: rat_focus::FocusFlag::new().with_name("FlowCerts"),
+            focus: FocusFlag::new().with_name("FlowCerts"),
             handle,
             tab: TabComponent::new("FlowTabCerts"),
             client_tab_cmp: TabComponent::new("ClientTab"),
@@ -319,19 +322,135 @@ impl FlowDetailsCerts {
         }
     }
 
-    fn render_client_hello(&mut self, f: &mut Frame<'_>, area: Rect) {
-        let certs = &self.state.borrow().client.hello;
-        let mut lines = vec![];
+    fn render_client_hello(&mut self, frame: &mut Frame<'_>, area: Rect) {
+        let client_hello = &self.state.borrow().client.hello;
+        let mut lines: Vec<Line> = vec![];
 
-        match certs {
-            Some(capture) => lines.push(capture.to_string().into()),
+        match client_hello {
+            Some(capture) => {
+                lines.push(Line::from(Span::styled(
+                    "Server name",
+                    Style::default().bold(),
+                )));
+
+                if let Some(server_name) = &capture.server_name {
+                    lines.push(server_name.to_owned().into());
+                } else {
+                    lines.push("None".into());
+                }
+                lines.push(Line::from(Span::styled(
+                    "Signature schemes",
+                    Style::default().bold(),
+                )));
+                if capture.signature_schemes.is_empty() {
+                    lines.push("None".into());
+                } else {
+                    capture
+                        .signature_schemes
+                        .iter()
+                        .for_each(|s| lines.push(format!("{s:?}").into()));
+                }
+                lines.push(Line::from(Span::styled("ALPN", Style::default().bold())));
+                if let Some(alpn) = &capture.alpn {
+                    if alpn.is_empty() {
+                        lines.push("Empty".into());
+                    } else {
+                        alpn.iter().for_each(|s| lines.push(s.to_owned().into()));
+                    }
+                } else {
+                    lines.push("None".into());
+                }
+
+                // server_cert_types: Option<Vec<String>>,
+                lines.push(Line::from(Span::styled(
+                    "server_cert_types",
+                    Style::default().bold(),
+                )));
+
+                if let Some(server_cert_types) = &capture.server_cert_types {
+                    if server_cert_types.is_empty() {
+                        lines.push("Empty".into());
+                    } else {
+                        server_cert_types
+                            .iter()
+                            .for_each(|s| lines.push(s.to_owned().into()));
+                    }
+                } else {
+                    lines.push("None".into());
+                }
+
+                // client_cert_types: Option<Vec<String>>,
+                lines.push(Line::from(Span::styled(
+                    "client_cert_types",
+                    Style::default().bold(),
+                )));
+                if let Some(client_cert_types) = &capture.server_cert_types {
+                    if client_cert_types.is_empty() {
+                        lines.push("Empty".into());
+                    } else {
+                        client_cert_types
+                            .iter()
+                            .for_each(|s| lines.push(s.to_owned().into()));
+                    }
+                } else {
+                    lines.push("None".into());
+                }
+                // cipher_suites: Vec<String>,
+                lines.push(Line::from(Span::styled(
+                    "cipher_suites",
+                    Style::default().bold(),
+                )));
+
+                if capture.cipher_suites.is_empty() {
+                    lines.push("Empty".into());
+                } else {
+                    capture
+                        .cipher_suites
+                        .iter()
+                        .for_each(|s| lines.push(format!("{s:?}").into()));
+                }
+                // certificate_authorities: Option<Vec<String>>,
+                lines.push(Line::from(Span::styled(
+                    "certificate_authorities",
+                    Style::default().bold(),
+                )));
+                if let Some(certificate_authorities) = &capture.certificate_authorities {
+                    if certificate_authorities.is_empty() {
+                        lines.push("Empty".into());
+                    } else {
+                        certificate_authorities
+                            .iter()
+                            .for_each(|s| lines.push(s.to_owned().into()));
+                    }
+                } else {
+                    lines.push("None".into());
+                }
+
+                // named_groups: Option<Vec<String>>,
+                lines.push(Line::from(Span::styled(
+                    "named_groups",
+                    Style::default().bold(),
+                )));
+                if let Some(named_groups) = &capture.named_groups {
+                    if named_groups.is_empty() {
+                        lines.push("Empty".into());
+                    } else {
+                        named_groups
+                            .iter()
+                            .for_each(|s| lines.push(s.to_owned().into()));
+                    }
+                } else {
+                    lines.push("None".into());
+                }
+            }
             None => lines.push("No data".into()),
         }
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false });
-        f.render_widget(paragraph, area);
+            .wrap(Wrap { trim: false })
+            .scroll((self.scroll_index as u16, 0));
+        frame.render_widget(paragraph, area);
     }
 
     fn render_client_cert(&mut self, f: &mut Frame<'_>, area: Rect) {
@@ -400,7 +519,7 @@ impl FlowDetailsCerts {
         f.render_widget(paragraph, area);
     }
 
-    fn render_server(&mut self, f: &mut Frame<'_>, area: Rect) {
+    fn render_server(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
         let tab_titles: Vec<Line> = ServerTab::all().iter().map(|v| v.title().into()).collect();
 
@@ -411,11 +530,11 @@ impl FlowDetailsCerts {
             self.server_tab_cmp.focus.get(),
         );
 
-        f.render_widget(tabs, layout[0]);
+        frame.render_widget(tabs, layout[0]);
         match self.server_tab {
-            ServerTab::ResolveClientCert => self.render_resolve_client_cert(f, layout[1]),
-            ServerTab::Certs => self.render_server_cert(f, layout[1]),
-            ServerTab::Tls => self.render_server_tls(f, layout[1]),
+            ServerTab::ResolveClientCert => self.render_resolve_client_cert(frame, layout[1]),
+            ServerTab::Certs => self.render_server_cert(frame, layout[1]),
+            ServerTab::Tls => self.render_server_tls(frame, layout[1]),
         }
     }
 
@@ -566,7 +685,7 @@ fn render_cert<'a>(cert: &'a CertInfo) -> Paragraph<'a> {
         .wrap(Wrap { trim: false })
 }
 
-impl rat_focus::HasFocus for FlowDetailsCerts {
+impl HasFocus for FlowDetailsCerts {
     fn build(&self, builder: &mut rat_focus::FocusBuilder) {
         builder.leaf_widget(&self.tab);
         match self.root_tab {
@@ -576,12 +695,12 @@ impl rat_focus::HasFocus for FlowDetailsCerts {
         builder.leaf_widget(self);
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 
-    fn area(&self) -> ratatui::prelude::Rect {
-        ratatui::prelude::Rect::default()
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
 
@@ -591,7 +710,6 @@ impl Component for FlowDetailsCerts {
             match action {
                 Action::Left => {
                     self.root_tab = self.root_tab.prev();
-
                     return ActionResult::Consumed;
                 }
                 Action::Right => {
@@ -645,11 +763,7 @@ impl Component for FlowDetailsCerts {
         ActionResult::Ignored
     }
 
-    fn render(
-        &mut self,
-        f: &mut ratatui::Frame,
-        area: ratatui::prelude::Rect,
-    ) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
         let tab_titles: Vec<Line> = RootTab::all().iter().map(|v| v.title().into()).collect();
 
@@ -659,10 +773,10 @@ impl Component for FlowDetailsCerts {
             self.root_tab.index(),
             self.tab.focus.get(),
         );
-        f.render_widget(tabs, layout[0]);
+        frame.render_widget(tabs, layout[0]);
         match self.root_tab {
-            RootTab::Client => self.render_client(f, layout[1]),
-            RootTab::Server => self.render_server(f, layout[1]),
+            RootTab::Client => self.render_client(frame, layout[1]),
+            RootTab::Server => self.render_server(frame, layout[1]),
         }
         Ok(())
     }

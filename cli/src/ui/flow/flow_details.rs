@@ -13,7 +13,7 @@ use tokio::{
     sync::{mpsc, watch},
     task::JoinHandle,
 };
-use tracing::error;
+use tracing::{error, info};
 
 use crate::{
     event::Action,
@@ -68,7 +68,7 @@ impl Tab {
         let all_tabs = Self::all();
         let index = self.index();
         if index == 0 {
-            *all_tabs.first().unwrap_or(&Self::Ws)
+            *all_tabs.iter().last().unwrap_or(&Self::Ws)
         } else {
             all_tabs[index - 1]
         }
@@ -155,8 +155,7 @@ impl FlowDetails {
     }
 
     pub fn set_flow(&mut self, flow_id: i64) {
-        self.focus.set(true);
-
+        self.tabs.focus.set(true);
         self.selected_flow = Some(flow_id);
         self.flow_id_tx.send(Some(flow_id)).unwrap_or_else(|_| {
             error!("Failed to send flow ID, channel closed");
@@ -205,6 +204,7 @@ async fn update_flow_view(
             ws_tx.send(flow.messages.clone()).await.unwrap_or_else(|e| {
                 error!("Failed to send WebSocket messages: {}", e);
             });
+            info!("Sending timing info: {:?}", flow.timing);
             timing_tx
                 .send(flow.timing.clone())
                 .await
