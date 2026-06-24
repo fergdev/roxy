@@ -486,7 +486,7 @@ impl InterceptedResponse {
     }
 
     pub fn request_line(&self) -> String {
-        format!("{:?} {}", self.version, self.status)
+        format!("{} {}", self.version, self.status)
     }
 
     pub fn response_builder(&self) -> http::response::Builder {

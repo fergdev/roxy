@@ -298,12 +298,12 @@ impl Component for FlowDetails {
         }
     }
 
-    fn render(&mut self, f: &mut ratatui::Frame<'_>, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) -> Result<()> {
         self.area = area;
 
         let popup_area = centered_rect(100, 100, area);
 
-        f.render_widget(Clear, popup_area);
+        frame.render_widget(Clear, popup_area);
 
         let layout =
             Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(popup_area);
@@ -316,23 +316,23 @@ impl Component for FlowDetails {
             tab_index,
             self.tabs.focus.get(),
         );
-        f.render_widget(tabs, layout[0]);
+        frame.render_widget(tabs, layout[0]);
 
         match self.tab {
             Tab::Request => {
-                self.request.render(f, layout[1])?;
+                self.request.render(frame, layout[1])?;
             }
             Tab::Response => {
-                self.response.render(f, layout[1])?;
+                self.response.render(frame, layout[1])?;
             }
             Tab::Certs => {
-                self.certs.render(f, layout[1])?;
+                self.certs.render(frame, layout[1])?;
             }
             Tab::Timing => {
-                self.timing.render(f, layout[1])?;
+                self.timing.render(frame, layout[1])?;
             }
             Tab::Ws => {
-                self.ws.render(f, layout[1])?;
+                self.ws.render(frame, layout[1])?;
             }
         }
 

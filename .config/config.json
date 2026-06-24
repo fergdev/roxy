@@ -6,7 +6,7 @@
   "keybindings": {
     "Normal": {
       "<q>": "Back",
-      "<Ctrl-c>": "Quit",
+      "<C-c>": "Quit",
       "<Enter>": "Select",
       "k": "Up",
       "j": "Down",
@@ -17,11 +17,11 @@
       "G": "Bottom",
       "g": "Top",
       "f": "FpsView",
-      "tab": "FocusNext",
-      "backtab": "FocusPrev"
+      "<Tab>": "FocusNext",
+      "<S-Tab>": "FocusPrev"
     },
     "Insert": {
-      "<Ctrl-]>": "Back",
+      "<C-]>": "Back",
       "<Esc>": "Back"
     }
   },

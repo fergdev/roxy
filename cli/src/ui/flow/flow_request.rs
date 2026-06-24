@@ -1,3 +1,4 @@
+use color_eyre::eyre::Result;
 use rat_focus::HasFocus;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -24,7 +25,7 @@ use super::{flow_body::FlowDetailsBody, flow_headers::FlowDetailsHeaders};
 
 #[derive(Default, Clone)]
 struct UiState {
-    data: String,
+    line_data: String,
 }
 
 pub struct FlowDetailsRequest {
@@ -58,7 +59,7 @@ impl FlowDetailsRequest {
                     if let Some(req) = req {
                         ui_tx
                             .send(UiState {
-                                data: req.line_pretty(),
+                                line_data: req.line_pretty(),
                             })
                             .unwrap_or_else(|e| {
                                 debug!("Failed to send UI state update: {}", e);
@@ -112,31 +113,27 @@ impl Component for FlowDetailsRequest {
         self.body.update(action)
     }
 
-    fn render(
-        &mut self,
-        f: &mut ratatui::Frame,
-        area: ratatui::prelude::Rect,
-    ) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) -> Result<()> {
         let data = self.ui_state.borrow_and_update();
 
-        let para = Paragraph::new(Span::from(&data.data))
+        let para = Paragraph::new(Span::from(&data.line_data))
             .block(themed_block(Some("Line"), self.line_component.focus.get()))
             .wrap(Wrap { trim: false });
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(7),
+                Constraint::Length(3),
                 Constraint::Length(7),
                 Constraint::Min(0),
             ])
             .split(area);
 
-        f.render_widget(Clear, chunks[0]);
-        f.render_widget(para, chunks[0]);
+        frame.render_widget(Clear, chunks[0]);
+        frame.render_widget(para, chunks[0]);
 
-        self.headers.render(f, chunks[1])?;
-        self.body.render(f, chunks[2])?;
+        self.headers.render(frame, chunks[1])?;
+        self.body.render(frame, chunks[2])?;
 
         Ok(())
     }

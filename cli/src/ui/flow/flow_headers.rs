@@ -1,4 +1,5 @@
 use hyper::HeaderMap;
+use rat_focus::HasFocus;
 use ratatui::{
     layout::{Constraint, Rect},
     style::Style,
@@ -45,7 +46,7 @@ impl FlowDetailsHeaders {
     }
 }
 
-impl rat_focus::HasFocus for FlowDetailsHeaders {
+impl HasFocus for FlowDetailsHeaders {
     fn build(&self, builder: &mut rat_focus::FocusBuilder) {
         builder.leaf_widget(self);
     }
@@ -80,10 +81,10 @@ impl Component for FlowDetailsHeaders {
 
     fn render(
         &mut self,
-        f: &mut ratatui::Frame,
+        frame: &mut ratatui::Frame,
         area: ratatui::prelude::Rect,
     ) -> color_eyre::eyre::Result<()> {
-        f.render_widget(Clear, area);
+        frame.render_widget(Clear, area);
         let headers = self.headers.borrow_and_update();
         match headers.as_ref() {
             Some(headers) => {
@@ -103,12 +104,12 @@ impl Component for FlowDetailsHeaders {
                 let widths = [Constraint::Length(20), Constraint::Min(10)];
                 let table = themed_table(rows, widths, Some("Headers"), self.focus.get());
 
-                f.render_stateful_widget(table, area, &mut self.table_state);
+                frame.render_stateful_widget(table, area, &mut self.table_state);
             }
             None => {
                 let paragraph = ratatui::widgets::Paragraph::new("No headers available")
                     .block(themed_block(Some("headers"), self.focus.get()));
-                f.render_widget(paragraph, area);
+                frame.render_widget(paragraph, area);
             }
         }
 

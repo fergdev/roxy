@@ -13,7 +13,11 @@ use ratatui::{
 };
 
 use crate::{
-    config::{ConfigManager, RoxyConfig, key_event_to_string, parse_color, parse_key_event},
+    config::{
+        ConfigManager, RoxyConfig,
+        color::parse_color,
+        keys::{key_event_to_string, parse_key_event},
+    },
     event::{Action, Mode},
 };
 

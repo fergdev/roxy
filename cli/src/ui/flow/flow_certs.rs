@@ -300,7 +300,7 @@ impl FlowDetailsCerts {
         }
     }
 
-    fn render_client(&mut self, f: &mut Frame<'_>, area: Rect) {
+    fn render_client(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
 
         let tab_titles: Vec<Line> = ClientTab::all()
@@ -314,11 +314,11 @@ impl FlowDetailsCerts {
             self.client_tab.index(),
             self.client_tab_cmp.focus.get(),
         );
-        f.render_widget(tabs, layout[0]);
+        frame.render_widget(tabs, layout[0]);
         match self.client_tab {
-            ClientTab::Hello => self.render_client_hello(f, layout[1]),
-            ClientTab::Certs => self.render_client_cert(f, layout[1]),
-            ClientTab::Tls => self.render_client_tls(f, layout[1]),
+            ClientTab::Hello => self.render_client_hello(frame, layout[1]),
+            ClientTab::Certs => self.render_client_cert(frame, layout[1]),
+            ClientTab::Tls => self.render_client_tls(frame, layout[1]),
         }
     }
 

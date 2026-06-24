@@ -1,18 +1,10 @@
-use rat_focus::{FocusFlag, HasFocus};
-use ratatui::{
-    Frame,
-    layout::Rect,
-    text::{Line, Span},
-    widgets::Paragraph,
-};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
+use ratatui::{Frame, layout::Rect};
 use roxy_proxy::flow::Timing;
 use time::OffsetDateTime;
 use tokio::sync::{mpsc, watch};
 
-use crate::ui::framework::{
-    component::Component,
-    theme::{tertiary_text, themed_block},
-};
+use crate::ui::framework::{component::Component, paragraph};
 
 struct State {
     lines: Vec<(String, String)>,
@@ -79,7 +71,7 @@ fn timing_line(time: &Option<OffsetDateTime>, key: &str) -> (String, String) {
 }
 
 impl HasFocus for FlowTiming {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
 
@@ -95,20 +87,7 @@ impl HasFocus for FlowTiming {
 impl Component for FlowTiming {
     fn render(&mut self, f: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
         let state = self.state.borrow();
-        let lines = state
-            .lines
-            .iter()
-            .map(|(k, v)| {
-                Line::from(vec![
-                    Span::styled(format!("{k}:"), tertiary_text()),
-                    Span::raw(v),
-                ])
-            })
-            .collect::<Vec<_>>();
-        f.render_widget(
-            Paragraph::new(lines).block(themed_block(Some("Timing"), self.focus.get())),
-            area,
-        );
+        paragraph::kv_paragraph(&state.lines, f, area, Some("Timing"), self.focus.get());
         Ok(())
     }
 }
