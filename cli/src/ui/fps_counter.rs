@@ -83,11 +83,7 @@ impl Component for FpsCounter {
         if !self.visible {
             return Ok(());
         }
-        let vertical = Layout::vertical([
-            Constraint::Length(3), // height of the block
-            Constraint::Min(0),
-        ])
-        .split(area);
+        let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(area);
 
         let horizontal =
             Layout::horizontal([Constraint::Min(0), Constraint::Length(30)]).split(vertical[0]);

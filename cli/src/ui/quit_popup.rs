@@ -69,9 +69,9 @@ impl Component for QuitPopup {
         }
     }
 
-    fn render(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         let popup_area = centered_rect_abs(30, 4, area);
-        f.render_widget(Clear, popup_area);
+        frame.render_widget(Clear, popup_area);
 
         let padded_area = popup_area.inner(Margin {
             vertical: 1,
@@ -85,9 +85,9 @@ impl Component for QuitPopup {
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(layout[1]);
 
-        f.render_widget(themed_block(Some("Quit Roxy"), true), popup_area);
-        f.render_widget(themed_button("Yes", self.selected), button_layout[0]);
-        f.render_widget(themed_button("No", !self.selected), button_layout[1]);
+        frame.render_widget(themed_block(Some("Quit Roxy"), true), popup_area);
+        frame.render_widget(themed_button("Yes", self.selected), button_layout[0]);
+        frame.render_widget(themed_button("No", !self.selected), button_layout[1]);
 
         Ok(())
     }

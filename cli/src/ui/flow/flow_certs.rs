@@ -347,7 +347,7 @@ impl FlowDetailsCerts {
                         .iter()
                         .for_each(|s| lines.push(format!("{s:?}").into()));
                 }
-                lines.push(Line::from(Span::styled("ALPN", Style::default().bold())));
+                lines.push(Line::from(Span::styled("ALPN", tertiary_text())));
                 if let Some(alpn) = &capture.alpn {
                     if alpn.is_empty() {
                         lines.push("Empty".into());

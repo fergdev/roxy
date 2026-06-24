@@ -11,7 +11,7 @@ use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulPro
 use roxy_shared::content::ContentType;
 use snowflake::SnowflakeIdGenerator;
 use tokio::sync::{mpsc, watch};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 use x509_parser::nom::HexDisplay;
 
 use std::{
@@ -183,7 +183,7 @@ impl Component for FlowDetailsBody {
         }
     }
 
-    fn render(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         if self.state.has_changed().unwrap_or(true) {
             self.scroll = 0;
         }
@@ -192,23 +192,28 @@ impl Component for FlowDetailsBody {
                 let para = Paragraph::new("No body")
                     .block(themed_block(Some("Body"), self.focus.get()))
                     .scroll((0, 0));
-                f.render_widget(para, area);
+                frame.render_widget(para, area);
             }
             Body::Text(ref lines) => {
+                let len = lines.len() as u16;
+                let height = frame.area().height;
+                let clamped_scroll = self.scroll.clamp(0, len);
+                info!("{len} {height}");
+                self.scroll = clamped_scroll;
                 let para = Paragraph::new(lines.to_owned())
                     .wrap(Wrap { trim: false })
                     .block(themed_block(Some("Body"), self.focus.get()))
-                    .scroll((self.scroll, 0));
-                f.render_widget(para, area);
+                    .scroll((clamped_scroll, 0));
+                frame.render_widget(para, area);
             }
             Body::Image(ref id) => {
                 if let Some(id) = id {
-                    return self.image_cache.render(f, area, id);
+                    return self.image_cache.render(frame, area, id);
                 } else {
                     let para = Paragraph::new(Line::raw("Failed to render image"))
                         .block(Block::default().title("Body").borders(Borders::ALL))
                         .scroll((0, 0));
-                    f.render_widget(para, area);
+                    frame.render_widget(para, area);
                 }
             }
         }

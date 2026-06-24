@@ -53,7 +53,7 @@ impl ConfigTab {
         let all_tabs = Self::all();
         let index = self.index();
         if index == 0 {
-            Self::Theme // TODO: not great, but doesn't unwrap
+            *all_tabs.last().unwrap_or(&Self::Theme)
         } else {
             all_tabs[index - 1]
         }
@@ -63,7 +63,7 @@ impl ConfigTab {
         let all_tabs = Self::all();
         let index = self.index();
         if index == all_tabs.len() - 1 {
-            Self::App // TODO: not great, but doesn't unwrap
+            *all_tabs.first().unwrap_or(&Self::App)
         } else {
             all_tabs[index + 1]
         }
@@ -235,8 +235,6 @@ impl ConfigEditor {
 impl From<&RoxyConfig> for HashMap<ConfigTab, Vec<EditableConfigField>> {
     fn from(cfg: &RoxyConfig) -> Self {
         let mut fields = HashMap::new();
-
-        debug!("Setting confirm_quit");
         let app_fieldds = vec![
             EditableConfigField {
                 key: "confirm_quit".into(),
