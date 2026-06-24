@@ -461,13 +461,18 @@ impl ResolvesServerCert for LoggingResolvesServerCert {
 
 #[derive(Debug, Default, Clone)]
 pub struct CapturedResolveClientCert {
-    pub data: String,
+    pub root_hint_subjects: Vec<String>,
+    pub sigschemes: Vec<SignatureScheme>,
 }
 
 impl CapturedResolveClientCert {
     fn new(root_hint_subjects: &[&[u8]], sigschemes: &[SignatureScheme]) -> Self {
         Self {
-            data: format!("{root_hint_subjects:?} {sigschemes:?}"),
+            root_hint_subjects: root_hint_subjects
+                .iter()
+                .map(|s| format!("{:?}", s))
+                .collect(),
+            sigschemes: sigschemes.to_vec(),
         }
     }
 }

@@ -9,8 +9,8 @@ use ratatui::{
 };
 use roxy_proxy::flow::FlowCerts;
 use roxy_shared::cert::{
-    CapturedClientHello, ClientTlsConnectionData, ClientVerificationCapture,
-    ServerTlsConnectionData, ServerVerificationCapture, TlsVerify,
+    CapturedClientHello, CapturedResolveClientCert, ClientTlsConnectionData,
+    ClientVerificationCapture, ServerTlsConnectionData, ServerVerificationCapture, TlsVerify,
 };
 use strum::EnumIter;
 use tokio::{
@@ -255,7 +255,7 @@ struct ClientState {
 
 #[derive(Default, Clone)]
 struct ServerState {
-    resolve_client_cert: Option<String>,
+    resolve_client_cert: Option<CapturedResolveClientCert>,
     certs: Option<ServerVerificationCapture>,
     tls: Option<ClientTlsConnectionData>,
 }
@@ -275,7 +275,7 @@ impl FlowDetailsCerts {
                         tls: certs.client_tls,
                     };
                     let server = ServerState {
-                        resolve_client_cert: certs.server_resolve_client_cert.map(|v| v.data),
+                        resolve_client_cert: certs.server_resolve_client_cert.clone(),
                         certs: certs.server_verification,
                         tls: certs.server_tls,
                     };
@@ -544,7 +544,33 @@ impl FlowDetailsCerts {
 
         match &certs {
             Some(capture) => {
-                lines.push(capture.to_string().into());
+                // root_hint_subjects
+                lines.push(Line::from(Span::styled(
+                    "root_hint_subjects",
+                    Style::default().bold(),
+                )));
+                if capture.root_hint_subjects.is_empty() {
+                    lines.push("Empty".into());
+                } else {
+                    capture
+                        .root_hint_subjects
+                        .iter()
+                        .for_each(|s| lines.push(s.to_owned().into()));
+                }
+
+                // root_hint_subjects
+                lines.push(Line::from(Span::styled(
+                    "sigschemes",
+                    Style::default().bold(),
+                )));
+                if capture.sigschemes.is_empty() {
+                    lines.push("Empty".into());
+                } else {
+                    capture
+                        .sigschemes
+                        .iter()
+                        .for_each(|s| lines.push(format!("{s:?}").into()));
+                }
             }
             None => {
                 lines.push("No data".into());
