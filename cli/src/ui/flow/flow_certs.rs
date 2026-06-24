@@ -466,8 +466,8 @@ impl FlowDetailsCerts {
 
                         match CertInfo::from_der(cert.end_entity.clone()) {
                             Some(ci) => {
-                                let para = render_cert(&ci);
-                                f.render_widget(para, area);
+                                render_cert(&ci, &mut lines);
+                                // f.render_widget(para, area);
                             }
                             None => {
                                 lines.push("Failed to render cert".into());
@@ -515,7 +515,8 @@ impl FlowDetailsCerts {
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false });
+            .wrap(Wrap { trim: false })
+            .scroll((self.scroll_index as u16, 0));
         f.render_widget(paragraph, area);
     }
 
@@ -579,11 +580,12 @@ impl FlowDetailsCerts {
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false });
+            .wrap(Wrap { trim: false })
+            .scroll((self.scroll_index as u16, 0));
         f.render_widget(paragraph, area);
     }
 
-    fn render_server_cert(&mut self, f: &mut Frame<'_>, area: Rect) {
+    fn render_server_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let certs = &self.state.borrow().server.certs;
         let mut lines = vec![];
 
@@ -594,9 +596,8 @@ impl FlowDetailsCerts {
                     Some(cert) => {
                         lines.push("End entity".into());
                         match CertInfo::from_der(cert.end_entity.clone()) {
-                            Some(ci) => {
-                                let para = render_cert(&ci);
-                                f.render_widget(para, area);
+                            Some(cert_info) => {
+                                render_cert(&cert_info, &mut lines);
                             }
                             None => {
                                 lines.push("Failed to render cert".into());
@@ -615,9 +616,11 @@ impl FlowDetailsCerts {
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false });
-        f.render_widget(paragraph, area);
+            .wrap(Wrap { trim: false })
+            .scroll((self.scroll_index as u16, 0));
+        frame.render_widget(paragraph, area);
     }
+
     fn render_server_tls(&mut self, f: &mut Frame<'_>, area: Rect) {
         let tls = &self.state.borrow().server.tls;
         let mut lines = vec![];
@@ -637,78 +640,73 @@ impl FlowDetailsCerts {
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false });
+            .wrap(Wrap { trim: false })
+            .scroll((self.scroll_index as u16, 0));
         f.render_widget(paragraph, area);
     }
 }
 
-fn render_cert<'a>(cert: &'a CertInfo) -> Paragraph<'a> {
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("Version: ", Style::default().fg(Color::Yellow)),
-            Span::raw(cert.version.to_string()),
-        ]),
-        Line::from(vec![
-            Span::styled("Serial: ", Style::default().fg(Color::Yellow)),
-            Span::raw(
-                cert.serial
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<String>(),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Signature OID: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.signature_oid),
-        ]),
-        Line::from(vec![
-            Span::styled("Issuer: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.issuer),
-        ]),
-        Line::from(vec![
-            Span::styled("Subject: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.subject),
-        ]),
-        Line::from(vec![
-            Span::styled("Not Before: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.not_before),
-        ]),
-        Line::from(vec![
-            Span::styled("Not After: ", Style::default().fg(Color::Yellow)),
-            Span::raw(&cert.not_after),
-        ]),
-        Line::from(vec![
-            Span::styled("Public Key: ", Style::default().fg(Color::Yellow)),
-            Span::raw(format!("[{} bytes]", cert.public_key.len())),
-        ]),
-        Line::from(vec![
-            Span::styled("Signature: ", Style::default().fg(Color::Yellow)),
-            Span::raw(format!("[{} bytes]", cert.signature_value.len())),
-        ]),
-    ];
+fn render_cert<'a>(cert: &CertInfo, lines: &mut Vec<Line<'a>>) {
+    lines.push(Line::from(vec![
+        Span::styled("Version: ", Style::default().fg(Color::Yellow).bold()),
+        Span::raw(cert.version.to_string()),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Serial: ", Style::default().fg(Color::Yellow).bold()),
+        Span::raw(
+            cert.serial
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>(),
+        ),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Signature OID: ", Style::default().fg(Color::Yellow).bold()),
+        Span::raw(cert.signature_oid.to_owned()),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Issuer: ", Style::default().fg(Color::Yellow).bold()),
+        Span::raw(cert.issuer.to_owned()),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Subject: ", Style::default().fg(Color::Yellow).bold()),
+        Span::raw(cert.subject.to_owned()),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Not Before: ", Style::default().fg(Color::Yellow).bold()),
+        Span::raw(cert.not_before.to_owned()),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Not After: ", Style::default().fg(Color::Yellow).bold()),
+        Span::raw(cert.not_after.to_owned()),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Public Key: ", Style::default().fg(Color::Yellow).bold()),
+        Span::raw(format!("[{} bytes]", cert.public_key.len())),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Signature: ", Style::default().fg(Color::Yellow).bold()),
+        Span::raw(format!("[{} bytes]", cert.signature_value.len())),
+    ]));
 
     if let Some(san) = &cert.san {
         lines.push(Line::from(vec![
-            Span::styled("SAN: ", Style::default().fg(Color::Yellow)),
-            Span::raw(san),
+            Span::styled("SAN: ", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(san.to_owned()),
         ]))
     }
     if let Some(issuer_cn) = &cert.issuer_cn {
         lines.push(Line::from(vec![
-            Span::styled("Iussuer: ", Style::default().fg(Color::Yellow)),
-            Span::raw(issuer_cn),
+            Span::styled("Iussuer: ", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(issuer_cn.to_owned()),
         ]))
     }
     if let Some(subject_cn) = &cert.subject_cn {
         lines.push(Line::from(vec![
-            Span::styled("Iussuer: ", Style::default().fg(Color::Yellow)),
-            Span::raw(subject_cn),
+            Span::styled("Iussuer: ", Style::default().fg(Color::Yellow).bold()),
+            Span::raw(subject_cn.to_owned()),
         ]))
     }
-
-    Paragraph::new(lines)
-        .block(themed_block(Some("Info"), false))
-        .wrap(Wrap { trim: false })
 }
 
 impl HasFocus for FlowDetailsCerts {
@@ -745,21 +743,6 @@ impl Component for FlowDetailsCerts {
                 _ => {}
             }
         }
-        if self.focus.get() {
-            match action {
-                Action::Down => {
-                    self.scroll_index += 1;
-                    return ActionResult::Consumed;
-                }
-                Action::Up => {
-                    if self.scroll_index > 0 {
-                        self.scroll_index -= 1;
-                    }
-                    return ActionResult::Consumed;
-                }
-                _ => {}
-            }
-        }
         if self.client_tab_cmp.focus.get() {
             match action {
                 Action::Left => {
@@ -785,6 +768,19 @@ impl Component for FlowDetailsCerts {
                 }
                 _ => {}
             }
+        }
+        match action {
+            Action::Down => {
+                self.scroll_index += 1;
+                return ActionResult::Consumed;
+            }
+            Action::Up => {
+                if self.scroll_index > 0 {
+                    self.scroll_index -= 1;
+                }
+                return ActionResult::Consumed;
+            }
+            _ => {}
         }
         ActionResult::Ignored
     }

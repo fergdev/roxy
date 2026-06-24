@@ -34,7 +34,7 @@ pub fn themed_block(title: Option<&str>, has_focus: bool) -> Block<'_> {
         title_style
     };
 
-    let mut b = Block::default()
+    let mut block = Block::default()
         .borders(Borders::ALL)
         .border_type(if has_focus {
             BorderType::Thick
@@ -50,12 +50,12 @@ pub fn themed_block(title: Option<&str>, has_focus: bool) -> Block<'_> {
         })
         .style(Style::default().fg(colors.secondary).bg(colors.surface));
     if let Some(title) = title {
-        b = b
+        block = block
             .title(title)
             .title_style(title_style)
             .title_alignment(Alignment::Center)
     }
-    b
+    block
 }
 
 pub fn themed_tabs<'a>(
