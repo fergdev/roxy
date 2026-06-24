@@ -3,7 +3,7 @@ use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::{Color, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Paragraph, Wrap},
 };
@@ -26,7 +26,7 @@ use crate::{
         flow::tab::TabComponent,
         framework::{
             component::{ActionResult, Component},
-            theme::{themed_block, themed_tabs},
+            theme::{tertiary_text, themed_block, themed_tabs},
         },
     },
 };
@@ -194,7 +194,7 @@ impl ClientTab {
         let all_tabs = Self::all();
         let index = self.index();
         if index == all_tabs.len() - 1 {
-            *all_tabs.last().unwrap_or(&Self::Hello)
+            *all_tabs.first().unwrap_or(&Self::Hello)
         } else {
             all_tabs[index + 1]
         }
@@ -328,10 +328,7 @@ impl FlowDetailsCerts {
 
         match client_hello {
             Some(capture) => {
-                lines.push(Line::from(Span::styled(
-                    "Server name",
-                    Style::default().bold(),
-                )));
+                lines.push(Line::from(Span::styled("Server name", tertiary_text())));
 
                 if let Some(server_name) = &capture.server_name {
                     lines.push(server_name.to_owned().into());
@@ -340,7 +337,7 @@ impl FlowDetailsCerts {
                 }
                 lines.push(Line::from(Span::styled(
                     "Signature schemes",
-                    Style::default().bold(),
+                    tertiary_text(),
                 )));
                 if capture.signature_schemes.is_empty() {
                     lines.push("None".into());
@@ -361,10 +358,9 @@ impl FlowDetailsCerts {
                     lines.push("None".into());
                 }
 
-                // server_cert_types: Option<Vec<String>>,
                 lines.push(Line::from(Span::styled(
                     "server_cert_types",
-                    Style::default().bold(),
+                    tertiary_text(),
                 )));
 
                 if let Some(server_cert_types) = &capture.server_cert_types {
@@ -379,10 +375,9 @@ impl FlowDetailsCerts {
                     lines.push("None".into());
                 }
 
-                // client_cert_types: Option<Vec<String>>,
                 lines.push(Line::from(Span::styled(
                     "client_cert_types",
-                    Style::default().bold(),
+                    tertiary_text(),
                 )));
                 if let Some(client_cert_types) = &capture.server_cert_types {
                     if client_cert_types.is_empty() {
@@ -395,11 +390,7 @@ impl FlowDetailsCerts {
                 } else {
                     lines.push("None".into());
                 }
-                // cipher_suites: Vec<String>,
-                lines.push(Line::from(Span::styled(
-                    "cipher_suites",
-                    Style::default().bold(),
-                )));
+                lines.push(Line::from(Span::styled("cipher_suites", tertiary_text())));
 
                 if capture.cipher_suites.is_empty() {
                     lines.push("Empty".into());
@@ -409,10 +400,9 @@ impl FlowDetailsCerts {
                         .iter()
                         .for_each(|s| lines.push(format!("{s:?}").into()));
                 }
-                // certificate_authorities: Option<Vec<String>>,
                 lines.push(Line::from(Span::styled(
                     "certificate_authorities",
-                    Style::default().bold(),
+                    tertiary_text(),
                 )));
                 if let Some(certificate_authorities) = &capture.certificate_authorities {
                     if certificate_authorities.is_empty() {
@@ -426,11 +416,7 @@ impl FlowDetailsCerts {
                     lines.push("None".into());
                 }
 
-                // named_groups: Option<Vec<String>>,
-                lines.push(Line::from(Span::styled(
-                    "named_groups",
-                    Style::default().bold(),
-                )));
+                lines.push(Line::from(Span::styled("named_groups", tertiary_text())));
                 if let Some(named_groups) = &capture.named_groups {
                     if named_groups.is_empty() {
                         lines.push("Empty".into());
@@ -467,7 +453,6 @@ impl FlowDetailsCerts {
                         match CertInfo::from_der(cert.end_entity.clone()) {
                             Some(ci) => {
                                 render_cert(&ci, &mut lines);
-                                // f.render_widget(para, area);
                             }
                             None => {
                                 lines.push("Failed to render cert".into());
@@ -502,11 +487,46 @@ impl FlowDetailsCerts {
 
         match client_tls {
             Some(capture) => {
-                lines.push(format!("protocol_version: {:?}", capture.protocol_version).into());
-                lines.push(format!("cipher_suite: {:?}", capture.cipher_suite).into());
-                lines.push(format!("sni: {:?}", capture.sni).into());
-                lines.push(format!("key_exchange_group: {:?}", capture.key_exchange_group).into());
-                lines.push(format!("alpn: {:?}", capture.alpn).into());
+                let protocol_version = match capture.protocol_version {
+                    Some(version) => format!("{version:?}"),
+                    None => "None".to_string(),
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("protocol_version: ", tertiary_text()),
+                    Span::raw(protocol_version),
+                ]));
+
+                let cipher_suite = match capture.cipher_suite {
+                    Some(cipher_suite) => format!("{cipher_suite:?}"),
+                    None => "None".to_string(),
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("cipher_suite: ", tertiary_text()),
+                    Span::raw(cipher_suite),
+                ]));
+
+                let sni = match &capture.sni {
+                    Some(sni) => format!("{sni:?}"),
+                    None => "None".to_string(),
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("sni: ", tertiary_text()),
+                    Span::raw(format!("{sni:?}")),
+                ]));
+
+                let key_exchange_group = match &capture.key_exchange_group {
+                    Some(key_exchange_group) => format!("{key_exchange_group:?}"),
+                    None => "None".to_string(),
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("key_exchange_group: ", tertiary_text()),
+                    Span::raw(key_exchange_group),
+                ]));
+                let alpn = &capture.alpn;
+                lines.push(Line::from(vec![
+                    Span::styled("alpn: ", tertiary_text()),
+                    Span::raw(format!("{alpn:?}")),
+                ]));
             }
             None => {
                 lines.push("No data".into());
@@ -545,7 +565,6 @@ impl FlowDetailsCerts {
 
         match &certs {
             Some(capture) => {
-                // root_hint_subjects
                 lines.push(Line::from(Span::styled(
                     "root_hint_subjects",
                     Style::default().bold(),
@@ -559,7 +578,6 @@ impl FlowDetailsCerts {
                         .for_each(|s| lines.push(s.to_owned().into()));
                 }
 
-                // root_hint_subjects
                 lines.push(Line::from(Span::styled(
                     "sigschemes",
                     Style::default().bold(),
@@ -627,11 +645,43 @@ impl FlowDetailsCerts {
 
         match tls {
             Some(capture) => {
-                lines.push(format!("protocol_version: {:?}", capture.protocol_version).into());
-                lines.push(format!("cipher_suite: {:?}", capture.cipher_suite).into());
-                lines.push(format!("ech_status: {:?}", capture.ech_status).into());
-                lines.push(format!("key_exchange_group: {:?}", capture.key_exchange_group).into());
-                lines.push(format!("alpn: {:?}", capture.alpn).into());
+                let protocol_version = match capture.protocol_version {
+                    Some(version) => format!("{version:?}"),
+                    None => "None".to_string(),
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("protocol_version: ", tertiary_text()),
+                    Span::raw(protocol_version),
+                ]));
+
+                let cipher_suite = match capture.cipher_suite {
+                    Some(cipher_suite) => format!("{cipher_suite:?}"),
+                    None => "None".to_string(),
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("cipher_suite: ", tertiary_text()),
+                    Span::raw(cipher_suite),
+                ]));
+
+                let ech_status = capture.ech_status;
+                lines.push(Line::from(vec![
+                    Span::styled("ech_status: ", tertiary_text()),
+                    Span::raw(format!("{ech_status:?}")),
+                ]));
+
+                let key_exchange_group = match &capture.key_exchange_group {
+                    Some(key_exchange_group) => format!("{key_exchange_group:?}"),
+                    None => "None".to_string(),
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("key_exchange_group: ", tertiary_text()),
+                    Span::raw(key_exchange_group),
+                ]));
+                let alpn = &capture.alpn;
+                lines.push(Line::from(vec![
+                    Span::styled("alpn: ", tertiary_text()),
+                    Span::raw(format!("{alpn:?}")),
+                ]));
             }
             None => {
                 lines.push("No data".into());
@@ -648,11 +698,11 @@ impl FlowDetailsCerts {
 
 fn render_cert<'a>(cert: &CertInfo, lines: &mut Vec<Line<'a>>) {
     lines.push(Line::from(vec![
-        Span::styled("Version: ", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("Version: ", tertiary_text()),
         Span::raw(cert.version.to_string()),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("Serial: ", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("Serial: ", tertiary_text()),
         Span::raw(
             cert.serial
                 .iter()
@@ -661,49 +711,49 @@ fn render_cert<'a>(cert: &CertInfo, lines: &mut Vec<Line<'a>>) {
         ),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("Signature OID: ", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("Signature OID: ", tertiary_text()),
         Span::raw(cert.signature_oid.to_owned()),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("Issuer: ", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("Issuer: ", tertiary_text()),
         Span::raw(cert.issuer.to_owned()),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("Subject: ", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("Subject: ", tertiary_text()),
         Span::raw(cert.subject.to_owned()),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("Not Before: ", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("Not Before: ", tertiary_text()),
         Span::raw(cert.not_before.to_owned()),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("Not After: ", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("Not After: ", tertiary_text()),
         Span::raw(cert.not_after.to_owned()),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("Public Key: ", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("Public Key: ", tertiary_text()),
         Span::raw(format!("[{} bytes]", cert.public_key.len())),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("Signature: ", Style::default().fg(Color::Yellow).bold()),
+        Span::styled("Signature: ", tertiary_text()),
         Span::raw(format!("[{} bytes]", cert.signature_value.len())),
     ]));
 
     if let Some(san) = &cert.san {
         lines.push(Line::from(vec![
-            Span::styled("SAN: ", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("SAN: ", tertiary_text()),
             Span::raw(san.to_owned()),
         ]))
     }
     if let Some(issuer_cn) = &cert.issuer_cn {
         lines.push(Line::from(vec![
-            Span::styled("Iussuer: ", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("Iussuer: ", tertiary_text()),
             Span::raw(issuer_cn.to_owned()),
         ]))
     }
     if let Some(subject_cn) = &cert.subject_cn {
         lines.push(Line::from(vec![
-            Span::styled("Iussuer: ", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("Iussuer: ", tertiary_text()),
             Span::raw(subject_cn.to_owned()),
         ]))
     }

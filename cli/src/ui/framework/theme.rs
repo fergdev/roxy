@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Alignment, Constraint},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph, Row, Table, Tabs},
 };
@@ -56,6 +56,10 @@ pub fn themed_block(title: Option<&str>, has_focus: bool) -> Block<'_> {
             .title_alignment(Alignment::Center)
     }
     block
+}
+
+pub fn tertiary_text() -> Style {
+    Style::default().fg(Color::Yellow).bold()
 }
 
 pub fn themed_tabs<'a>(

@@ -1,13 +1,21 @@
 use rat_focus::{FocusFlag, HasFocus};
-use ratatui::{Frame, layout::Rect, widgets::Paragraph};
+use ratatui::{
+    Frame,
+    layout::Rect,
+    text::{Line, Span},
+    widgets::Paragraph,
+};
 use roxy_proxy::flow::Timing;
 use time::OffsetDateTime;
 use tokio::sync::{mpsc, watch};
 
-use crate::ui::framework::{component::Component, theme::themed_block};
+use crate::ui::framework::{
+    component::Component,
+    theme::{tertiary_text, themed_block},
+};
 
 struct State {
-    lines: Vec<String>,
+    lines: Vec<(String, String)>,
 }
 
 pub struct FlowTiming {
@@ -21,9 +29,7 @@ impl FlowTiming {
 
         tokio::spawn({
             async move {
-                // info!("waiting on timing updates...");
                 while let Some(timing) = rx.recv().await {
-                    // info!("REC timing {timing:?}");
                     let lines = vec![
                         timing_line(&timing.client_conn_established, "client_conn_established"),
                         timing_line(&timing.server_conn_initiated, "server_conn_initiated"),
@@ -50,7 +56,6 @@ impl FlowTiming {
                         timing_line(&timing.client_conn_closed, "client_conn_closed"),
                         timing_line(&timing.server_conn_closed, "server_conn_closed"),
                     ];
-                    // info!("sending timing update to UI...");
                     ui_tx.send(State { lines }).unwrap_or_else(|e| {
                         tracing::debug!("Failed to send UI state update: {}", e);
                     });
@@ -65,12 +70,11 @@ impl FlowTiming {
     }
 }
 
-fn timing_line(time: &Option<OffsetDateTime>, key: &str) -> String {
-    format!(
-        "{}: {}",
-        key,
+fn timing_line(time: &Option<OffsetDateTime>, key: &str) -> (String, String) {
+    (
+        key.to_owned(),
         time.map(|t| t.to_string())
-            .unwrap_or_else(|| "N/A".to_string())
+            .unwrap_or_else(|| "N/A".to_string()),
     )
 }
 
@@ -90,9 +94,19 @@ impl HasFocus for FlowTiming {
 
 impl Component for FlowTiming {
     fn render(&mut self, f: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+        let state = self.state.borrow();
+        let lines = state
+            .lines
+            .iter()
+            .map(|(k, v)| {
+                Line::from(vec![
+                    Span::styled(format!("{k}:"), tertiary_text()),
+                    Span::raw(v),
+                ])
+            })
+            .collect::<Vec<_>>();
         f.render_widget(
-            Paragraph::new(self.state.borrow().lines.join("\n"))
-                .block(themed_block(Some("Timing"), self.focus.get())),
+            Paragraph::new(lines).block(themed_block(Some("Timing"), self.focus.get())),
             area,
         );
         Ok(())
