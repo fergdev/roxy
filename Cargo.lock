@@ -4431,9 +4431,9 @@ dependencies = [
 
 [[package]]
 name = "rat-event"
-version = "2.0.4"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80ea0a0765e1c5c8d301fa69ab19598cf4ebd7d9cc39b17f2bfa63266ad96684"
+checksum = "b8791fc15b399e958369ce532e9bf2bc3588f364d1e508d0ae122d0fb76a3065"
 dependencies = [
  "log",
  "ratatui-core",
@@ -4442,9 +4442,9 @@ dependencies = [
 
 [[package]]
 name = "rat-focus"
-version = "2.0.2"
+version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87591be77ab89c152fc0e7bec71c670af7e25b4daf10c7bba4e7a3824ebb20c3"
+checksum = "de995d0bfa85aa8a716997903487cf250a35159695cf576be220239bbe1e2bfb"
 dependencies = [
  "fxhash",
  "log",

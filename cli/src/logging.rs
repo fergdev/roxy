@@ -38,6 +38,7 @@ static INIT_TRACING: Once = Once::new();
 pub fn initialize_logging() -> Result<()> {
     initialize_logging_with_layer(None)
 }
+
 #[allow(clippy::expect_used)]
 pub fn initialize_logging_with_layer(layer: Option<UiLogLayer>) -> Result<()> {
     INIT_TRACING.call_once(|| {
@@ -55,8 +56,8 @@ pub fn initialize_logging_with_layer(layer: Option<UiLogLayer>) -> Result<()> {
             )
         };
         let file_subscriber = tracing_subscriber::fmt::layer()
-            .with_file(true)
-            .with_line_number(true)
+            // .with_file(true)
+            // .with_line_number(true)
             .with_writer(log_file)
             .with_target(false)
             .with_ansi(false)

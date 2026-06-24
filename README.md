@@ -45,11 +45,33 @@ Tests require single thread to prevent too many open files error.
 RUST_TEST_THREADS=1 cargo test
 ```
 
+## Log output
+
+```bash
+RUST_LOG=debug cargo run --bin roxy-cli -- --port 3002 --script scripts/logger.lua
+```
+
+On OSX logs can be followed by
+
+```bash
+tail -f ~/Library/Application\ Support/com.fergdev.roxy-cli/roxy-cli.log
+```
+
 ### HTTPS
 
 ```bash
 export CURL_CA_BUNDLE=~/.roxy/roxy-ca-cert.pem
 curl -v --proxy http://localhost:6969 https://example.com --insecure
+```
+
+## Book
+
+The book is built with mdbook. To run locally:
+
+```bash
+cargo install mdbook
+cd book
+mdbook serve
 ```
 
 ## Goals

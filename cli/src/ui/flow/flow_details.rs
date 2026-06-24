@@ -1,5 +1,5 @@
 use color_eyre::Result;
-use rat_focus::HasFocus;
+use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     text::Line,
@@ -86,7 +86,8 @@ impl Tab {
 }
 
 pub struct FlowDetails {
-    focus: rat_focus::FocusFlag,
+    focus: FocusFlag,
+    area: Rect,
     tabs: TabComponent,
     selected_flow: Option<i64>,
     tab: Tab,
@@ -138,7 +139,8 @@ impl FlowDetails {
         });
 
         Self {
-            focus: rat_focus::FocusFlag::new().with_name("FlowDetails"),
+            focus: FocusFlag::new().with_name("FlowDetails"),
+            area: Rect::default(),
             tabs: TabComponent::new(),
             selected_flow: None,
             tab: Tab::Request,
@@ -153,7 +155,7 @@ impl FlowDetails {
     }
 
     pub fn set_flow(&mut self, flow_id: i64) {
-        self.focus();
+        self.focus.set(true);
 
         self.selected_flow = Some(flow_id);
         self.flow_id_tx.send(Some(flow_id)).unwrap_or_else(|_| {
@@ -214,13 +216,13 @@ async fn update_flow_view(
 }
 
 struct TabComponent {
-    focus: rat_focus::FocusFlag,
+    focus: FocusFlag,
 }
 
 impl TabComponent {
     pub fn new() -> Self {
         Self {
-            focus: rat_focus::FocusFlag::new().with_name("FlowDetailsTabs"),
+            focus: FocusFlag::new().with_name("FlowDetailsTabs"),
         }
     }
 }
@@ -230,7 +232,7 @@ impl HasFocus for TabComponent {
         builder.leaf_widget(self);
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 
@@ -264,10 +266,10 @@ impl HasFocus for FlowDetails {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 }
@@ -297,6 +299,8 @@ impl Component for FlowDetails {
     }
 
     fn render(&mut self, f: &mut ratatui::Frame<'_>, area: Rect) -> Result<()> {
+        self.area = area;
+
         let popup_area = centered_rect(100, 100, area);
 
         f.render_widget(Clear, popup_area);

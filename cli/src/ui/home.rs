@@ -71,30 +71,32 @@ impl HasFocus for HomeComponent {
     fn build(&self, builder: &mut rat_focus::FocusBuilder) {
         let tag = builder.start(self);
 
-        match self.active_view {
-            ActiveView::Splash => {
-                builder.widget(&self.splash);
-            }
-            ActiveView::FlowList => {
-                builder.widget(&self.flow_list);
+        if let Some(active_popup) = self.active_popup {
+            match active_popup {
+                ActivePopup::ConfigEditor => {
+                    builder.widget(&self.config_editor);
+                }
+                ActivePopup::QuitPopup => {
+                    builder.widget(&self.quit_popup);
+                }
+                ActivePopup::FlowDetails => {
+                    builder.widget(&self.flow_details);
+                }
+                ActivePopup::LogViewer => {
+                    builder.widget(&self.log_viewer);
+                }
+            };
+        } else {
+            match self.active_view {
+                ActiveView::Splash => {
+                    builder.widget(&self.splash);
+                }
+                ActiveView::FlowList => {
+                    builder.widget(&self.flow_list);
+                }
             }
         }
 
-        match self.active_popup {
-            Some(ActivePopup::ConfigEditor) => {
-                builder.widget(&self.config_editor);
-            }
-            Some(ActivePopup::QuitPopup) => {
-                builder.widget(&self.quit_popup);
-            }
-            Some(ActivePopup::FlowDetails) => {
-                builder.widget(&self.flow_details);
-            }
-            Some(ActivePopup::LogViewer) => {
-                builder.widget(&self.log_viewer);
-            }
-            None => {}
-        };
         builder.end(tag);
     }
 

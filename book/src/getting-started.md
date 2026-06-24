@@ -15,11 +15,16 @@ Roxy makes it easy to inspect, rewrite, and automate traffic using **Rust**, **L
 
 ---
 
-## Installation
+## Running CLI
 
 Clone the repository and build from source:
 
 ```sh
+# Build
 git clone https://github.com/fergdev/roxy.git
 cd roxy
-cargo build --release
+cargo run --bin roxy-cli -- --port 6969
+
+# Another terminal
+curl -x localhost:6969 http://example.com
+```

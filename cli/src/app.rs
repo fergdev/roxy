@@ -66,6 +66,10 @@ impl App {
         let action_tx = self.action_tx.clone();
         loop {
             let mut focus = FocusBuilder::build_for(&self.home);
+
+            // Enable for logging of focues related changes
+            // focus.enable_log();
+
             self.handle_events(&mut tui).await?;
             self.handle_actions(&mut tui, &mut focus)?;
             if self.should_suspend {

@@ -1,6 +1,7 @@
 # Summary
 
 - [Getting Started](./getting-started.md)
+- [Cli](./cli/README.md)
 - [Certificates](./certificates.md)
 - [Scripting](./scripting/README.md)
   - [Flows](./scripting/flows.md)
