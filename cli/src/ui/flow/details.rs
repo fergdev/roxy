@@ -25,9 +25,9 @@ use crate::{
     },
 };
 
-use super::flow_response::FlowDetailsResponse;
-use super::{flow_certs::FlowDetailsCerts, flow_timing::FlowTiming};
-use super::{flow_request::FlowDetailsRequest, ws_details::FlowDetailsWs};
+use super::response::FlowDetailsResponse;
+use super::{certs::FlowDetailsCerts, timing::FlowTiming};
+use super::{request::FlowDetailsRequest, ws_details::FlowDetailsWs};
 
 #[derive(Default, EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
 enum Tab {

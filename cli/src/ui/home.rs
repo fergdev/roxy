@@ -7,7 +7,7 @@ use crate::{config::manager::ConfigManager, event::Action, tui::Event};
 
 use super::{
     config::ConfigEditor,
-    flow::{flow_details::FlowDetails, flow_list::FlowList},
+    flow::{details::FlowDetails, list::FlowList},
     fps_counter::FpsCounter,
     framework::{
         component::{ActionResult, Component, KeyEventResult},
