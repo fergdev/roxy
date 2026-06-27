@@ -7,18 +7,12 @@ use ratatui::{
     text::Line,
     widgets::{Block, Borders, Paragraph, Wrap},
 };
-use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
 use roxy_shared::content::ContentType;
-use snowflake::SnowflakeIdGenerator;
 use tokio::sync::{mpsc, watch};
-use tracing::{debug, error};
+use tracing::debug;
 use x509_parser::nom::HexDisplay;
 
-use std::{
-    collections::HashMap,
-    io::Cursor,
-    sync::{Arc, Mutex},
-};
+use std::io::Cursor;
 
 use super::{
     csv::{render_csv, render_tsv},
@@ -32,9 +26,12 @@ use super::{
 
 use crate::{
     action::Action,
-    ui::framework::{
-        component::{ActionResult, Component},
-        theme::themed_block,
+    ui::{
+        flow::body::image_cache::ImageCache,
+        framework::{
+            component::{ActionResult, Component},
+            theme::themed_block,
+        },
     },
 };
 
@@ -73,6 +70,7 @@ pub struct FlowDetailsBody {
     state: watch::Receiver<UiState>,
     image_cache: ImageCache,
     focus: FocusFlag,
+    area: Rect,
     scroll: u16,
 }
 
@@ -136,7 +134,8 @@ impl FlowDetailsBody {
         Self {
             state: ui_rx,
             image_cache: ic,
-            focus: rat_focus::FocusFlag::new().with_name("FlowBody"),
+            focus: FocusFlag::new().with_name("FlowBody"),
+            area: Rect::default(),
             scroll: 0,
         }
     }
@@ -170,10 +169,19 @@ impl Component for FlowDetailsBody {
                 Action::Down => {
                     let len = self.state.borrow().len() + 5;
 
-                    self.scroll += 1;
                     if self.scroll > len {
                         self.scroll = len;
                     }
+                    ActionResult::Consumed
+                }
+                Action::PageUp => {
+                    if self.scroll > 0 {
+                        self.scroll = self.scroll.saturating_sub(self.area.height);
+                    }
+                    ActionResult::Consumed
+                }
+                Action::PageDown => {
+                    self.scroll = self.scroll.saturating_add(self.area.height);
                     ActionResult::Consumed
                 }
                 Action::Top => {
@@ -192,6 +200,7 @@ impl Component for FlowDetailsBody {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        self.area = area;
         if self.state.has_changed().unwrap_or(true) {
             self.scroll = 0;
         }
@@ -203,14 +212,19 @@ impl Component for FlowDetailsBody {
                 frame.render_widget(para, area);
             }
             Body::Text(ref lines) => {
+                let height = area.height;
                 let len = lines.len() as u16;
-                // let height = frame.area().height;
-                let clamped_scroll = self.scroll.clamp(0, len);
-                self.scroll = clamped_scroll;
+                let max_scroll_index = len.saturating_sub(height);
+
+                // TODO: work
+                // +5 is an arbitrary number to compensate for wrapping, caclulate this from the
+                // length of the lines
+                self.scroll = self.scroll.clamp(0, max_scroll_index + 5);
+
                 let para = Paragraph::new(lines.to_owned())
                     .wrap(Wrap { trim: false })
                     .block(themed_block(Some("Body"), self.focus.get()))
-                    .scroll((clamped_scroll, 0));
+                    .scroll((self.scroll, 0));
                 frame.render_widget(para, area);
             }
             Body::Image(ref id) => {
@@ -225,69 +239,6 @@ impl Component for FlowDetailsBody {
             }
         }
 
-        Ok(())
-    }
-}
-
-#[derive(Clone)]
-struct ImageCache {
-    inner: Arc<Mutex<ImageCacheInner>>,
-}
-
-struct ImageCacheInner {
-    id_gen: SnowflakeIdGenerator,
-    cache: HashMap<i64, Arc<Mutex<StatefulProtocol>>>,
-}
-
-impl ImageCache {
-    fn new() -> Self {
-        ImageCache {
-            inner: Arc::new(Mutex::new(ImageCacheInner {
-                id_gen: SnowflakeIdGenerator::new(1, 1),
-                cache: HashMap::new(),
-            })),
-        }
-    }
-
-    fn render_image(&mut self, raw: &[u8]) -> Option<i64> {
-        if let Ok(image) = image::load_from_memory(raw) {
-            debug!("Loaded image with size: ");
-            // TODO: make this configurable
-            let mut picker = Picker::halfblocks();
-            picker.set_protocol_type(ratatui_image::picker::ProtocolType::Kitty);
-            let proto = picker.new_resize_protocol(image);
-
-            if let Ok(mut guard) = self.inner.lock() {
-                let id = guard.id_gen.generate();
-                guard.cache.insert(id, Arc::new(Mutex::new(proto)));
-                Some(id)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-
-    fn render(&mut self, f: &mut Frame, area: Rect, id: &i64) -> Result<()> {
-        if let Ok(guard) = self.inner.lock()
-            && let Some(proto_arc) = guard.cache.get(id)
-        {
-            match proto_arc.lock() {
-                Ok(mut proto) => {
-                    let image = StatefulImage::default().resize(Resize::default());
-                    f.render_stateful_widget(image, area, &mut *proto);
-                    return Ok(());
-                }
-                Err(_) => {
-                    error!("Failed to lock image protocol for rendering");
-                }
-            }
-        }
-        let para = Paragraph::new(Line::raw("Failed to render image"))
-            .block(Block::default().title("Body").borders(Borders::ALL))
-            .scroll((0, 0));
-        f.render_widget(para, area);
         Ok(())
     }
 }

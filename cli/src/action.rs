@@ -8,27 +8,30 @@ pub enum Action {
     ClearScreen,
     Error(String),
 
-    Select,
-
     Up,
     Down,
     Left,
     Right,
 
-    FocusNext,
-    FocusPrev,
-    FocusReq(usize), // (widget_id)
+    PageUp,
+    PageDown,
 
     Top,
     Bottom,
-    // TODO: add these actions
     Start,
     End,
 
+    // Views
     EditConfig,
     LogView,
     FpsView,
 
+    // Focus
+    FocusNext,
+    FocusPrev,
+    FocusReq(usize), // (widget_id)
+
+    Select,
     Add,
     Delete,
 }

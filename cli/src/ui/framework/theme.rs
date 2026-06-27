@@ -48,7 +48,7 @@ pub fn themed_block(title: Option<&str>, has_focus: bool) -> Block<'_> {
                 .fg(colors.outline_unfocused)
                 .bg(colors.surface)
         })
-        .style(Style::default().fg(colors.secondary).bg(colors.surface));
+        .style(Style::default().fg(colors.on_surface).bg(colors.surface));
     if let Some(title) = title {
         block = block
             .title(title)
@@ -71,12 +71,13 @@ pub fn themed_tabs<'a>(
     let colors = with_theme(|t| t.colors.clone());
 
     Tabs::new(titles)
-        .block(themed_block(title, has_focus))
+        .style(Style::default().fg(colors.on_surface).bg(colors.surface))
         .highlight_style(
             Style::default()
-                .fg(colors.primary)
+                .fg(colors.secondary)
                 .add_modifier(Modifier::BOLD),
         )
+        .block(themed_block(title, has_focus))
         .select(selected)
 }
 

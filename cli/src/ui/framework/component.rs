@@ -65,10 +65,10 @@ pub trait Component {
 
     fn dispatch_action(&mut self, action: Action) -> ActionResult {
         for child in self.children() {
-            let r = child.dispatch_action(action.clone());
-            match r {
+            let result = child.dispatch_action(action.clone());
+            match result {
                 ActionResult::Consumed => {
-                    return r;
+                    return result;
                 }
                 ActionResult::Action(action) => {
                     return ActionResult::Action(action);

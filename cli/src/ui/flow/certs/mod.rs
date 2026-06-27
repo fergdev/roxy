@@ -1,3 +1,5 @@
+mod client;
+mod server;
 use bytes::Bytes;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
@@ -5,7 +7,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::Style,
     text::{Line, Span},
-    widgets::{Paragraph, Wrap},
+    widgets::{Paragraph, ScrollbarState, Wrap},
 };
 use roxy_proxy::flow::FlowCerts;
 use roxy_shared::cert::{
@@ -23,9 +25,17 @@ use x509_parser::parse_x509_certificate;
 use crate::{
     action::Action,
     ui::{
-        flow::tab::TabComponent,
+        flow::{
+            certs::{
+                client::{process_client_hello, process_client_tls},
+                server::process_server_tls,
+            },
+            tab::TabComponent,
+        },
         framework::{
             component::{ActionResult, Component},
+            paragraph::kv_paragraph,
+            scrollbar::{render_horizontal_scrollbar, render_vertical_scrollbar},
             theme::{tertiary_text, themed_block, themed_tabs},
         },
     },
@@ -91,14 +101,19 @@ impl CertInfo {
 pub struct FlowDetailsCerts {
     state: watch::Receiver<UiState>,
     focus: FocusFlag,
+    area: Rect,
     handle: JoinHandle<()>,
+
     tab: TabComponent,
     client_tab_cmp: TabComponent,
     server_tab_cmp: TabComponent,
+
     root_tab: RootTab,
     client_tab: ClientTab,
     server_tab: ServerTab,
-    scroll_index: usize,
+
+    scroll_index_vertical: ScrollbarState,
+    scroll_index_horizontal: ScrollbarState,
 }
 
 impl Drop for FlowDetailsCerts {
@@ -268,7 +283,6 @@ impl FlowDetailsCerts {
             async move {
                 info!("waiting on cert updates...");
                 while let Some(certs) = cert_rx.recv().await {
-                    info!("REC certs {certs:?}");
                     let client = ClientState {
                         hello: certs.client_hello.clone(),
                         certs: certs.client_verification,
@@ -289,6 +303,7 @@ impl FlowDetailsCerts {
         Self {
             state: ui_rx,
             focus: FocusFlag::new().with_name("FlowCerts"),
+            area: Rect::default(),
             handle,
             tab: TabComponent::new("FlowTabCerts"),
             client_tab_cmp: TabComponent::new("ClientTab"),
@@ -296,7 +311,8 @@ impl FlowDetailsCerts {
             root_tab: RootTab::Client,
             client_tab: ClientTab::Hello,
             server_tab: ServerTab::ResolveClientCert,
-            scroll_index: 0,
+            scroll_index_vertical: ScrollbarState::default(),
+            scroll_index_horizontal: ScrollbarState::default(),
         }
     }
 
@@ -323,123 +339,36 @@ impl FlowDetailsCerts {
     }
 
     fn render_client_hello(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let client_hello = &self.state.borrow().client.hello;
-        let mut lines: Vec<Line> = vec![];
-
-        match client_hello {
-            Some(capture) => {
-                lines.push(Line::from(Span::styled("Server name", tertiary_text())));
-
-                if let Some(server_name) = &capture.server_name {
-                    lines.push(server_name.to_owned().into());
-                } else {
-                    lines.push("None".into());
-                }
-                lines.push(Line::from(Span::styled(
-                    "Signature schemes",
-                    tertiary_text(),
-                )));
-                if capture.signature_schemes.is_empty() {
-                    lines.push("None".into());
-                } else {
-                    capture
-                        .signature_schemes
-                        .iter()
-                        .for_each(|s| lines.push(format!("{s:?}").into()));
-                }
-                lines.push(Line::from(Span::styled("ALPN", tertiary_text())));
-                if let Some(alpn) = &capture.alpn {
-                    if alpn.is_empty() {
-                        lines.push("Empty".into());
-                    } else {
-                        alpn.iter().for_each(|s| lines.push(s.to_owned().into()));
-                    }
-                } else {
-                    lines.push("None".into());
-                }
-
-                lines.push(Line::from(Span::styled(
-                    "server_cert_types",
-                    tertiary_text(),
-                )));
-
-                if let Some(server_cert_types) = &capture.server_cert_types {
-                    if server_cert_types.is_empty() {
-                        lines.push("Empty".into());
-                    } else {
-                        server_cert_types
-                            .iter()
-                            .for_each(|s| lines.push(s.to_owned().into()));
-                    }
-                } else {
-                    lines.push("None".into());
-                }
-
-                lines.push(Line::from(Span::styled(
-                    "client_cert_types",
-                    tertiary_text(),
-                )));
-                if let Some(client_cert_types) = &capture.server_cert_types {
-                    if client_cert_types.is_empty() {
-                        lines.push("Empty".into());
-                    } else {
-                        client_cert_types
-                            .iter()
-                            .for_each(|s| lines.push(s.to_owned().into()));
-                    }
-                } else {
-                    lines.push("None".into());
-                }
-                lines.push(Line::from(Span::styled("cipher_suites", tertiary_text())));
-
-                if capture.cipher_suites.is_empty() {
-                    lines.push("Empty".into());
-                } else {
-                    capture
-                        .cipher_suites
-                        .iter()
-                        .for_each(|s| lines.push(format!("{s:?}").into()));
-                }
-                lines.push(Line::from(Span::styled(
-                    "certificate_authorities",
-                    tertiary_text(),
-                )));
-                if let Some(certificate_authorities) = &capture.certificate_authorities {
-                    if certificate_authorities.is_empty() {
-                        lines.push("Empty".into());
-                    } else {
-                        certificate_authorities
-                            .iter()
-                            .for_each(|s| lines.push(s.to_owned().into()));
-                    }
-                } else {
-                    lines.push("None".into());
-                }
-
-                lines.push(Line::from(Span::styled("named_groups", tertiary_text())));
-                if let Some(named_groups) = &capture.named_groups {
-                    if named_groups.is_empty() {
-                        lines.push("Empty".into());
-                    } else {
-                        named_groups
-                            .iter()
-                            .for_each(|s| lines.push(s.to_owned().into()));
-                    }
-                } else {
-                    lines.push("None".into());
-                }
-            }
-            None => lines.push("No data".into()),
-        }
-
-        let paragraph = Paragraph::new(lines)
-            .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false })
-            .scroll((self.scroll_index as u16, 0));
-        frame.render_widget(paragraph, area);
+        let data = process_client_hello(&self.state.borrow().client.hello);
+        self.scroll_index_vertical = self
+            .scroll_index_vertical
+            .content_length(data.len())
+            .viewport_content_length(self.area.height as usize);
+        let max_line_length = data
+            .iter()
+            .map(|(key, value)| key.len() + value.len())
+            .max()
+            .unwrap_or(0);
+        self.scroll_index_horizontal = self
+            .scroll_index_horizontal
+            .content_length(max_line_length)
+            .viewport_content_length(self.area.width as usize);
+        kv_paragraph(
+            &data,
+            frame,
+            area,
+            Some("Hello"),
+            self.focus.get(),
+            (
+                self.scroll_index_vertical.get_position() as u16,
+                self.scroll_index_horizontal.get_position() as u16,
+            ),
+        );
+        render_vertical_scrollbar(frame, area, &mut self.scroll_index_vertical);
+        render_horizontal_scrollbar(frame, area, &mut self.scroll_index_horizontal);
     }
 
-    fn render_client_cert(&mut self, f: &mut Frame<'_>, area: Rect) {
+    fn render_client_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let certs = &self.state.borrow().client.certs;
         let mut lines = vec![];
 
@@ -458,6 +387,18 @@ impl FlowDetailsCerts {
                                 lines.push("Failed to render cert".into());
                             }
                         }
+
+                        for aaa in &cert.intermediates {
+                            match CertInfo::from_der(aaa.clone()) {
+                                Some(ci) => {
+                                    render_cert(&ci, &mut lines);
+                                }
+                                None => {
+                                    lines.push("Failed to render cert".into());
+                                }
+                            }
+                        }
+                        lines.push("End entity".into());
                     }
                     None => {
                         lines.push("No certs".into());
@@ -475,69 +416,42 @@ impl FlowDetailsCerts {
             }
         }
 
-        let paragraph = Paragraph::new(lines)
-            .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false });
-        f.render_widget(paragraph, area);
-    }
-
-    fn render_client_tls(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let client_tls = &self.state.borrow().client.tls;
-        let mut lines = vec![];
-
-        match client_tls {
-            Some(capture) => {
-                let protocol_version = match capture.protocol_version {
-                    Some(version) => format!("{version:?}"),
-                    None => "None".to_string(),
-                };
-                lines.push(Line::from(vec![
-                    Span::styled("protocol_version: ", tertiary_text()),
-                    Span::raw(protocol_version),
-                ]));
-
-                let cipher_suite = match capture.cipher_suite {
-                    Some(cipher_suite) => format!("{cipher_suite:?}"),
-                    None => "None".to_string(),
-                };
-                lines.push(Line::from(vec![
-                    Span::styled("cipher_suite: ", tertiary_text()),
-                    Span::raw(cipher_suite),
-                ]));
-
-                let sni = match &capture.sni {
-                    Some(sni) => format!("{sni:?}"),
-                    None => "None".to_string(),
-                };
-                lines.push(Line::from(vec![
-                    Span::styled("sni: ", tertiary_text()),
-                    Span::raw(format!("{sni:?}")),
-                ]));
-
-                let key_exchange_group = match &capture.key_exchange_group {
-                    Some(key_exchange_group) => format!("{key_exchange_group:?}"),
-                    None => "None".to_string(),
-                };
-                lines.push(Line::from(vec![
-                    Span::styled("key_exchange_group: ", tertiary_text()),
-                    Span::raw(key_exchange_group),
-                ]));
-                let alpn = &capture.alpn;
-                lines.push(Line::from(vec![
-                    Span::styled("alpn: ", tertiary_text()),
-                    Span::raw(format!("{alpn:?}")),
-                ]));
-            }
-            None => {
-                lines.push("No data".into());
-            }
-        }
+        self.scroll_index_vertical = self
+            .scroll_index_vertical
+            .content_length(lines.len())
+            .viewport_content_length(self.area.height as usize);
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(None, self.focus.get()))
             .wrap(Wrap { trim: false })
-            .scroll((self.scroll_index as u16, 0));
+            .scroll((
+                self.scroll_index_vertical.get_position() as u16,
+                self.scroll_index_horizontal.get_position() as u16,
+            ));
         frame.render_widget(paragraph, area);
+    }
+
+    fn render_client_tls(&mut self, frame: &mut Frame<'_>, area: Rect) {
+        let client_tls = &self.state.borrow().client.tls;
+
+        let data = process_client_tls(client_tls);
+
+        self.scroll_index_vertical = self
+            .scroll_index_vertical
+            .content_length(data.len())
+            .viewport_content_length(self.area.height as usize);
+
+        kv_paragraph(
+            &data,
+            frame,
+            area,
+            Some("Tls"),
+            self.focus.get(),
+            (
+                self.scroll_index_vertical.get_position() as u16,
+                self.scroll_index_horizontal.get_position() as u16,
+            ),
+        );
     }
 
     fn render_server(&mut self, frame: &mut Frame<'_>, area: Rect) {
@@ -596,103 +510,99 @@ impl FlowDetailsCerts {
             }
         }
 
+        self.scroll_index_vertical = self
+            .scroll_index_vertical
+            .content_length(lines.len())
+            .viewport_content_length(self.area.height as usize);
+
         let paragraph = Paragraph::new(lines)
             .block(themed_block(None, self.focus.get()))
             .wrap(Wrap { trim: false })
-            .scroll((self.scroll_index as u16, 0));
+            .scroll((
+                self.scroll_index_vertical.get_position() as u16,
+                self.scroll_index_horizontal.get_position() as u16,
+            ));
         frame.render_widget(paragraph, area);
     }
 
     fn render_server_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let certs = &self.state.borrow().server.certs;
         let mut lines = vec![];
+        let header_style = Style::default().bold().underlined();
 
         match certs {
-            Some(capture) => {
-                lines.push("Capture".into());
-                match &capture.cert {
-                    Some(cert) => {
-                        lines.push("End entity".into());
-                        match CertInfo::from_der(cert.end_entity.clone()) {
-                            Some(cert_info) => {
-                                render_cert(&cert_info, &mut lines);
+            Some(capture) => match &capture.cert {
+                Some(cert) => {
+                    lines.push(Line::from(vec![Span::styled("End entity", header_style)]));
+                    match CertInfo::from_der(cert.end_entity.clone()) {
+                        Some(cert_info) => {
+                            render_cert(&cert_info, &mut lines);
+                        }
+                        None => {
+                            lines.push("Failed to render cert".into());
+                        }
+                    }
+                    for (index, certificate) in cert.intermediates.iter().enumerate() {
+                        lines.push(Line::from(vec![Span::styled(
+                            format!("Intermediatary {index}"),
+                            header_style,
+                        )]));
+                        match CertInfo::from_der(certificate.clone()) {
+                            Some(ci) => {
+                                render_cert(&ci, &mut lines);
                             }
                             None => {
                                 lines.push("Failed to render cert".into());
                             }
                         }
                     }
-                    None => {
-                        lines.push("No certs".into());
-                    }
                 }
-            }
+                None => {
+                    lines.push("No certs".into());
+                }
+            },
             None => {
                 lines.push("No data".into());
             }
         }
 
+        self.scroll_index_vertical = self
+            .scroll_index_vertical
+            .content_length(lines.len())
+            .viewport_content_length(self.area.height as usize);
+
         let paragraph = Paragraph::new(lines)
             .block(themed_block(None, self.focus.get()))
             .wrap(Wrap { trim: false })
-            .scroll((self.scroll_index as u16, 0));
+            .scroll((
+                self.scroll_index_vertical.get_position() as u16,
+                self.scroll_index_horizontal.get_position() as u16,
+            ));
         frame.render_widget(paragraph, area);
+
+        render_vertical_scrollbar(frame, area, &mut self.scroll_index_vertical);
+        render_horizontal_scrollbar(frame, area, &mut self.scroll_index_horizontal);
     }
 
     fn render_server_tls(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let tls = &self.state.borrow().server.tls;
-        let mut lines = vec![];
+        let data = process_server_tls(tls);
 
-        match tls {
-            Some(capture) => {
-                let protocol_version = match capture.protocol_version {
-                    Some(version) => format!("{version:?}"),
-                    None => "None".to_string(),
-                };
-                lines.push(Line::from(vec![
-                    Span::styled("protocol_version: ", tertiary_text()),
-                    Span::raw(protocol_version),
-                ]));
-
-                let cipher_suite = match capture.cipher_suite {
-                    Some(cipher_suite) => format!("{cipher_suite:?}"),
-                    None => "None".to_string(),
-                };
-                lines.push(Line::from(vec![
-                    Span::styled("cipher_suite: ", tertiary_text()),
-                    Span::raw(cipher_suite),
-                ]));
-
-                let ech_status = capture.ech_status;
-                lines.push(Line::from(vec![
-                    Span::styled("ech_status: ", tertiary_text()),
-                    Span::raw(format!("{ech_status:?}")),
-                ]));
-
-                let key_exchange_group = match &capture.key_exchange_group {
-                    Some(key_exchange_group) => format!("{key_exchange_group:?}"),
-                    None => "None".to_string(),
-                };
-                lines.push(Line::from(vec![
-                    Span::styled("key_exchange_group: ", tertiary_text()),
-                    Span::raw(key_exchange_group),
-                ]));
-                let alpn = &capture.alpn;
-                lines.push(Line::from(vec![
-                    Span::styled("alpn: ", tertiary_text()),
-                    Span::raw(format!("{alpn:?}")),
-                ]));
-            }
-            None => {
-                lines.push("No data".into());
-            }
-        }
-
-        let paragraph = Paragraph::new(lines)
-            .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false })
-            .scroll((self.scroll_index as u16, 0));
-        frame.render_widget(paragraph, area);
+        self.scroll_index_vertical = self
+            .scroll_index_vertical
+            .content_length(data.len())
+            .viewport_content_length(self.area.height as usize);
+        kv_paragraph(
+            &data,
+            frame,
+            area,
+            Some("Tls"),
+            self.focus.get(),
+            (
+                self.scroll_index_vertical.get_position() as u16,
+                self.scroll_index_horizontal.get_position() as u16,
+            ),
+        );
     }
 }
 
@@ -819,23 +729,60 @@ impl Component for FlowDetailsCerts {
                 _ => {}
             }
         }
-        match action {
-            Action::Down => {
-                self.scroll_index += 1;
-                return ActionResult::Consumed;
-            }
-            Action::Up => {
-                if self.scroll_index > 0 {
-                    self.scroll_index -= 1;
+        if self.focus.get() {
+            match action {
+                Action::Down => {
+                    self.scroll_index_vertical.next();
+                    return ActionResult::Consumed;
                 }
-                return ActionResult::Consumed;
+                Action::Up => {
+                    self.scroll_index_vertical.prev();
+                    return ActionResult::Consumed;
+                }
+                Action::Left => {
+                    self.scroll_index_horizontal.prev();
+                    return ActionResult::Consumed;
+                }
+                Action::Right => {
+                    self.scroll_index_horizontal.next();
+                    return ActionResult::Consumed;
+                }
+                Action::Start => {
+                    self.scroll_index_horizontal.first();
+                    return ActionResult::Consumed;
+                }
+                Action::End => {
+                    self.scroll_index_horizontal.last();
+                    return ActionResult::Consumed;
+                }
+                Action::PageUp => {
+                    for _ in 0..self.area.height as usize {
+                        self.scroll_index_vertical.prev();
+                    }
+                    return ActionResult::Consumed;
+                }
+                Action::PageDown => {
+                    for _ in 0..self.area.height as usize {
+                        self.scroll_index_vertical.next();
+                    }
+                    return ActionResult::Consumed;
+                }
+                Action::Top => {
+                    self.scroll_index_vertical.first();
+                    return ActionResult::Consumed;
+                }
+                Action::Bottom => {
+                    self.scroll_index_vertical.last();
+                    return ActionResult::Consumed;
+                }
+                _ => {}
             }
-            _ => {}
         }
         ActionResult::Ignored
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+        self.area = area;
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
         let tab_titles: Vec<Line> = RootTab::all().iter().map(|v| v.title().into()).collect();
 

@@ -1,6 +1,6 @@
 pub mod config;
 pub mod flow;
-mod fps_counter;
+pub mod fps_counter;
 pub mod framework;
 pub mod home;
 pub mod log;

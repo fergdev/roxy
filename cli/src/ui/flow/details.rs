@@ -170,6 +170,12 @@ impl FlowDetails {
     fn prev_tab(&mut self) {
         self.tab = self.tab.prev();
     }
+    fn start_tab(&mut self) {
+        self.tab = Tab::default();
+    }
+    fn end_tab(&mut self) {
+        self.tab = Tab::Ws;
+    }
 }
 
 async fn update_flow_view(
@@ -205,7 +211,6 @@ async fn update_flow_view(
             ws_tx.send(flow.messages.clone()).await.unwrap_or_else(|e| {
                 error!("Failed to send WebSocket messages: {}", e);
             });
-            info!("Sending timing info: {:?}", flow.timing);
             timing_tx
                 .send(flow.timing.clone())
                 .await
@@ -287,6 +292,13 @@ impl Component for FlowDetails {
         ]
     }
     fn handle_action(&mut self, action: Action) -> ActionResult {
+        info!(
+            "DEBUGPRINT[76]: {}:{}: action={:#?}",
+            file!(),
+            line!(),
+            action
+        );
+
         if self.tabs.focus.get() {
             match action {
                 Action::Left => {
@@ -295,6 +307,14 @@ impl Component for FlowDetails {
                 }
                 Action::Right => {
                     self.next_tab();
+                    return ActionResult::Consumed;
+                }
+                Action::Start => {
+                    self.start_tab();
+                    return ActionResult::Consumed;
+                }
+                Action::End => {
+                    self.end_tab();
                     return ActionResult::Consumed;
                 }
                 _ => {}

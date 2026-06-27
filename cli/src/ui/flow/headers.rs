@@ -11,7 +11,7 @@ use tokio::sync::{
     mpsc::{self},
     watch,
 };
-use tracing::error;
+use tracing::{error, info};
 
 use crate::{
     action::Action,
@@ -24,6 +24,7 @@ use crate::{
 pub struct FlowDetailsHeaders {
     headers: watch::Receiver<Option<HeaderMap>>,
     focus: FocusFlag,
+    area: Rect,
     table_state: TableState,
 }
 
@@ -42,6 +43,7 @@ impl FlowDetailsHeaders {
         Self {
             headers: headers_rx,
             focus: FocusFlag::new().with_name("FlowHeaders"),
+            area: Rect::default(),
             table_state: TableState::default(),
         }
     }
@@ -73,6 +75,38 @@ impl Component for FlowDetailsHeaders {
                     self.table_state.select_next();
                     ActionResult::Consumed
                 }
+                Action::PageUp => {
+                    self.table_state.scroll_up_by(self.area.height);
+                    ActionResult::Consumed
+                }
+                Action::PageDown => {
+                    info!(
+                        "DEBUGPRINT[73]: {}:{} (after Action::PageDown => )",
+                        file!(),
+                        line!()
+                    );
+                    self.table_state.scroll_down_by(self.area.height);
+                    // self.table_state.select(Some(0));
+                    ActionResult::Consumed
+                }
+                Action::Top => {
+                    self.table_state.select(Some(0));
+                    ActionResult::Consumed
+                }
+                Action::Bottom => {
+                    let headers = self.headers.borrow_and_update();
+                    let headers_size = headers.as_ref().map(|h| h.len()).unwrap_or(0);
+                    info!(
+                        "DEBUGPRINT[72]: {}:{}: headers_size={:#?}",
+                        file!(),
+                        line!(),
+                        headers_size
+                    );
+
+                    self.table_state.scroll_down_by(headers_size as u16);
+                    // self.table_state.scrol(Some(headers_size));
+                    ActionResult::Consumed
+                }
                 _ => ActionResult::Ignored,
             }
         } else {
@@ -81,11 +115,12 @@ impl Component for FlowDetailsHeaders {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+        self.area = area;
         frame.render_widget(Clear, area);
         let headers = self.headers.borrow_and_update();
         match headers.as_ref() {
             Some(headers) => {
-                let header_style = Style::default().bold();
+                let header_style = Style::default();
                 let mut rows = vec![];
                 for (header_key, header_value) in headers {
                     let header_value_str = header_value.to_str().unwrap_or("error").to_string();

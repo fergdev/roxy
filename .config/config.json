@@ -7,23 +7,22 @@
     "Normal": {
       "<q>": "Back",
       "<C-c>": "Quit",
-      "<Enter>": "Select",
       "k": "Up",
       "j": "Down",
       "h": "Left",
       "l": "Right",
       "i": "EditConfig",
       "d": "LogView",
-
       "gg": "Top",
-      "aa": "Top",
-
       "G": "Bottom",
-
+      "0": "Start",
+      "$": "End",
+      "<C-u>": "PageUp",
+      "<C-d>": "PageDown",
       "f": "FpsView",
       "<Tab>": "FocusNext",
       "<S-Tab>": "FocusPrev",
-
+      "<Enter>": "Select",
       "e": "Delete",
       "a": "Add"
     },

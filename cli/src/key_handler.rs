@@ -92,6 +92,11 @@ impl KeyHandler {
         }
 
         inner.last_tick_key_events.push(key_event);
+
+        // Leave here for easy debuggin
+        // let dbg = key_sequence_to_string(&inner.last_tick_key_events);
+        // info!("DEBUGPRINT[70]: {}:{}: dbg={:#?}", file!(), line!(), dbg);
+
         let (action, has_more) = inner.key_trie.get(&inner.last_tick_key_events);
 
         if let Some(action) = action {
@@ -116,8 +121,10 @@ impl KeyHandler {
         }
 
         // No action or more actions available, clean up
-        inner.last_tick_key_events.drain(..);
-        inner.last_key_tick = None;
+        if !has_more {
+            inner.last_tick_key_events.drain(..);
+            inner.last_key_tick = None;
+        }
 
         Ok(())
     }

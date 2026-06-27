@@ -1,6 +1,7 @@
 pub mod component;
 pub mod csv;
 pub mod html;
+pub(crate) mod image_cache;
 pub mod json;
 pub mod markdown;
 pub mod toml;

@@ -87,7 +87,14 @@ impl HasFocus for FlowTiming {
 impl Component for FlowTiming {
     fn render(&mut self, f: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
         let state = self.state.borrow();
-        paragraph::kv_paragraph(&state.lines, f, area, Some("Timing"), self.focus.get());
+        paragraph::kv_paragraph(
+            &state.lines,
+            f,
+            area,
+            Some("Timing"),
+            self.focus.get(),
+            (0, 0),
+        );
         Ok(())
     }
 }
