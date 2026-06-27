@@ -31,7 +31,6 @@ pub enum TuiEvent {
     Init,
     Quit,
     Error,
-    Closed,
     Tick,
     Render,
     FocusGained,
