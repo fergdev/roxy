@@ -66,9 +66,12 @@ impl ConfigEditor {
 }
 
 impl Component for ConfigEditor {
+    fn handle_tui_event(&mut self, tui_event: crate::tui::TuiEvent) -> Result<Option<Action>> {
+        self.tab_component.handle_tui_event(tui_event.clone())?;
+        self.table_component.handle_tui_event(tui_event)
+    }
     fn handle_action(&mut self, action: Action) -> ActionResult {
         if self.tab_component.handle_action(action.clone()) == ActionResult::Consumed {
-            // self.update_fields();
             return ActionResult::Consumed;
         }
         self.table_component.handle_action(action)

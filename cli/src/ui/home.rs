@@ -125,18 +125,25 @@ pub enum ActivePopup {
 
 impl Component for HomeComponent {
     fn handle_tui_event(&mut self, event: TuiEvent) -> Result<Option<Action>> {
-        let action = match event {
-            TuiEvent::Tick => {
-                if self.flow_store.flows.is_empty() {
-                    self.active_view = ActiveView::Splash;
-                } else {
-                    self.active_view = ActiveView::FlowList;
-                }
-                None
-            }
-            _ => None,
+        let res = match self.active_popup {
+            Some(ActivePopup::ConfigEditor) => self.config_editor.handle_tui_event(event.clone()),
+            Some(ActivePopup::QuitPopup) => self.quit_popup.handle_tui_event(event.clone()),
+            Some(ActivePopup::FlowDetails) => self.flow_details.handle_tui_event(event.clone()),
+            Some(ActivePopup::LogViewer) => self.log_viewer.handle_tui_event(event.clone()),
+            None => Ok(None),
         };
-        Ok(action)
+        if let Ok(Some(action)) = res {
+            return Ok(Some(action));
+        }
+
+        if let TuiEvent::Tick = event {
+            if self.flow_store.flows.is_empty() {
+                self.active_view = ActiveView::Splash;
+            } else {
+                self.active_view = ActiveView::FlowList;
+            }
+        }
+        Ok(None)
     }
 
     fn handle_action(&mut self, action: Action) -> ActionResult {

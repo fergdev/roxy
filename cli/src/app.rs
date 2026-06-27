@@ -63,20 +63,18 @@ impl App {
     pub async fn run(&mut self) -> Result<()> {
         let mut tui = Tui::new()?.mouse(true).tick_rate(4.0).frame_rate(60.0);
         tui.enter()?;
-        let action_tx = self.action_tx.clone();
         loop {
             let mut focus = FocusBuilder::build_for(&self.home);
 
-            // Enable for logging of focues related changes
+            // Enable for logging of focus related changes
             // focus.enable_log();
 
             self.handle_events(&mut tui).await?;
             self.handle_actions(&mut tui, &mut focus)?;
+
             if self.should_suspend {
                 tui.suspend()?;
-                action_tx.send(Action::Resume)?;
-                action_tx.send(Action::ClearScreen)?;
-                // tui.mouse(true);
+                tui.terminal.clear()?;
                 tui.enter()?;
             } else if self.should_quit {
                 tui.stop()?;
@@ -93,26 +91,16 @@ impl App {
         };
         let action_tx = self.action_tx.clone();
         match event {
-            TuiEvent::Quit => action_tx.send(Action::Quit)?,
-            TuiEvent::Tick => action_tx.send(Action::Tick)?,
-            TuiEvent::Render => action_tx.send(Action::Render)?,
-            TuiEvent::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
+            TuiEvent::Quit => self.should_quit = true,
+            TuiEvent::Render => self.render(tui)?,
+            TuiEvent::Resize(w, h) => {
+                self.handle_resize(tui, w, h)?;
+            }
             TuiEvent::Mouse(mouse_event) => {
-                self.handle_mouse_event(mouse_event)?;
+                self.dispatch_mouse_event(mouse_event)?;
             }
             TuiEvent::Key(key) => {
-                // Send raw key events to the component heighrarchy first
-                // so they can intercept and react to them before the key_handler
-                match self.home.handle_key_event(&key) {
-                    KeyEventResult::Consumed => {
-                        return Ok(());
-                    }
-                    KeyEventResult::Ignored => {}
-                    KeyEventResult::Action(action) => {
-                        self.action_tx.send(action)?;
-                    }
-                }
-                self.key_handler.handle_key_event(key)?
+                self.dispatch_key_event(key)?;
             }
             _ => {}
         }
@@ -125,13 +113,8 @@ impl App {
     fn handle_actions(&mut self, tui: &mut Tui, focus: &mut Focus) -> Result<()> {
         while let Ok(action) = self.action_rx.try_recv() {
             match action {
-                Action::Tick => {}
                 Action::Quit => self.should_quit = true,
-                Action::Suspend => self.should_suspend = true,
-                Action::Resume => self.should_suspend = false,
                 Action::ClearScreen => tui.terminal.clear()?,
-                Action::Resize(w, h) => self.handle_resize(tui, w, h)?,
-                Action::Render => self.render(tui)?,
                 Action::FocusNext => {
                     focus.next();
                 }
@@ -150,7 +133,22 @@ impl App {
         Ok(())
     }
 
-    fn handle_mouse_event(&mut self, mouse_event: MouseEvent) -> Result<()> {
+    fn dispatch_key_event(&mut self, key_event: crossterm::event::KeyEvent) -> Result<()> {
+        // Send raw key events to the component heighrarchy first
+        // so they can intercept and react to them before the key_handler
+        match self.home.handle_key_event(&key_event) {
+            KeyEventResult::Consumed => {
+                return Ok(());
+            }
+            KeyEventResult::Ignored => {}
+            KeyEventResult::Action(action) => {
+                self.action_tx.send(action)?;
+            }
+        }
+        self.key_handler.handle_key_event(key_event)
+    }
+
+    fn dispatch_mouse_event(&mut self, mouse_event: MouseEvent) -> Result<()> {
         if let Some(action) = self.home.handle_mouse_event(mouse_event)? {
             self.action_tx.send(action)?;
         }

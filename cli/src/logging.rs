@@ -1,4 +1,5 @@
 use std::{
+    env::{set_var, var},
     fs::{File, create_dir_all},
     path::PathBuf,
     sync::Once,
@@ -19,7 +20,7 @@ static DATA_FOLDER: OnceCell<Option<PathBuf>> = OnceCell::new();
 fn data_folder() -> Option<PathBuf> {
     DATA_FOLDER
         .get_or_init(|| {
-            std::env::var(format!("{}_DATA", PROJECT_NAME))
+            var(format!("{}_DATA", PROJECT_NAME))
                 .ok()
                 .map(PathBuf::from)
         })
@@ -54,10 +55,10 @@ pub fn initialize_logging_with_layer(layer: Option<UiLogLayer>) -> Result<()> {
         let log_path = directory.join(format!("{}.log", env!("CARGO_PKG_NAME")));
         let log_file = File::create(log_path).expect("Could not create log file");
         unsafe {
-            std::env::set_var(
+            set_var(
                 "RUST_LOG",
-                std::env::var("RUST_LOG")
-                    .or_else(|_| std::env::var(format!("{}_LOGLEVEL", PROJECT_NAME)))
+                var("RUST_LOG")
+                    .or_else(|_| var(format!("{}_LOGLEVEL", PROJECT_NAME)))
                     .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME"))),
             )
         };

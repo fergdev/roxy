@@ -69,12 +69,22 @@ impl FpsCounter {
 }
 
 impl Component for FpsCounter {
+    fn handle_tui_event(&mut self, tui_event: crate::tui::TuiEvent) -> Result<Option<Action>> {
+        match tui_event {
+            crate::tui::TuiEvent::Tick => {
+                self.app_tick();
+                Ok(None)
+            }
+            crate::tui::TuiEvent::Render => {
+                self.render_tick();
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
+    }
     fn handle_action(&mut self, action: Action) -> ActionResult {
-        match action {
-            Action::FpsView => self.visible = !self.visible,
-            Action::Tick => self.app_tick(),
-            Action::Render => self.render_tick(),
-            _ => {}
+        if let Action::FpsView = action {
+            self.visible = !self.visible
         };
         ActionResult::Ignored
     }

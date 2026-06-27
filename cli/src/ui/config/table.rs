@@ -16,6 +16,7 @@ use tracing::{debug, error, info};
 use crate::{
     config::{RoxyConfig, color::parse_color, manager::ConfigManager},
     event::Action,
+    tui::TuiEvent,
     ui::{
         config::{ConfigValue, EditableConfigField, tab::ConfigTab},
         framework::{
@@ -223,13 +224,17 @@ impl Component for TableComponent {
         Ok(())
     }
 
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn handle_tui_event(&mut self, tui_event: crate::tui::TuiEvent) -> Result<Option<Action>> {
         // On render we check for new config_tab and update.
-        if action == Action::Render
+        if tui_event == TuiEvent::Render
             && let Ok(config) = self.on_change.try_recv()
         {
             self.selected_tab = config;
         }
+        Ok(None)
+    }
+
+    fn handle_action(&mut self, action: Action) -> ActionResult {
         if !self.focus.get() {
             return ActionResult::Ignored;
         }

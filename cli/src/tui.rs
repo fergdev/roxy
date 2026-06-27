@@ -26,7 +26,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::error;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TuiEvent {
     Init,
     Quit,
