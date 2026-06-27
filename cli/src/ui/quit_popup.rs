@@ -6,7 +6,7 @@ use ratatui::{
     widgets::Clear,
 };
 
-use crate::event::Action;
+use crate::action::Action;
 
 use super::framework::{
     component::{ActionResult, Component},
@@ -48,7 +48,7 @@ impl QuitPopup {
 }
 
 impl Component for QuitPopup {
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn dispatch_action(&mut self, action: Action) -> ActionResult {
         match action {
             Action::Left => {
                 self.selected = !self.selected;

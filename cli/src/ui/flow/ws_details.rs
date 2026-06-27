@@ -1,5 +1,8 @@
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
+    Frame,
     layout::Constraint,
+    prelude::Rect,
     text::{Line, Span},
     widgets::{Cell, Paragraph, Row, Wrap},
 };
@@ -17,7 +20,7 @@ use crate::ui::framework::{
 
 pub struct FlowDetailsWs {
     state: watch::Receiver<UiState>,
-    focus: rat_focus::FocusFlag,
+    focus: FocusFlag,
     table_state: ratatui::widgets::TableState,
 }
 
@@ -47,32 +50,28 @@ impl FlowDetailsWs {
 
         Self {
             state: ui_rx,
-            focus: rat_focus::FocusFlag::new().with_name("FlowWsDetails"),
+            focus: FocusFlag::new().with_name("FlowWsDetails"),
             table_state: ratatui::widgets::TableState::default(),
         }
     }
 }
 
-impl rat_focus::HasFocus for FlowDetailsWs {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+impl HasFocus for FlowDetailsWs {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 
-    fn area(&self) -> ratatui::prelude::Rect {
-        ratatui::prelude::Rect::default()
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
 
 impl Component for FlowDetailsWs {
-    fn render(
-        &mut self,
-        f: &mut ratatui::Frame,
-        area: ratatui::prelude::Rect,
-    ) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
         let data = self.state.borrow_and_update().data.clone();
 
         if data.is_empty() {
@@ -81,7 +80,7 @@ impl Component for FlowDetailsWs {
             let paragraph = Paragraph::new(empty_text)
                 .block(block)
                 .wrap(Wrap { trim: false });
-            f.render_widget(paragraph, area);
+            frame.render_widget(paragraph, area);
         } else {
             let rows: Vec<Row> = data
                 .iter()
@@ -90,7 +89,7 @@ impl Component for FlowDetailsWs {
 
             let widths = [Constraint::Percentage(100)];
 
-            f.render_stateful_widget(
+            frame.render_stateful_widget(
                 themed_table(rows, widths, None, true),
                 area,
                 &mut self.table_state,

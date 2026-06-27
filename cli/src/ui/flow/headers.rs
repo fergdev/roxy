@@ -1,6 +1,7 @@
 use hyper::HeaderMap;
-use rat_focus::HasFocus;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
+    Frame,
     layout::{Constraint, Rect},
     style::Style,
     text::Span,
@@ -13,7 +14,7 @@ use tokio::sync::{
 use tracing::error;
 
 use crate::{
-    event::Action,
+    action::Action,
     ui::framework::{
         component::{ActionResult, Component},
         theme::{themed_block, themed_table},
@@ -22,7 +23,7 @@ use crate::{
 
 pub struct FlowDetailsHeaders {
     headers: watch::Receiver<Option<HeaderMap>>,
-    focus: rat_focus::FocusFlag,
+    focus: FocusFlag,
     table_state: TableState,
 }
 
@@ -40,22 +41,22 @@ impl FlowDetailsHeaders {
 
         Self {
             headers: headers_rx,
-            focus: rat_focus::FocusFlag::new().with_name("FlowHeaders"),
+            focus: FocusFlag::new().with_name("FlowHeaders"),
             table_state: TableState::default(),
         }
     }
 }
 
 impl HasFocus for FlowDetailsHeaders {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 
-    fn area(&self) -> ratatui::prelude::Rect {
+    fn area(&self) -> Rect {
         Rect::default()
     }
 }
@@ -79,11 +80,7 @@ impl Component for FlowDetailsHeaders {
         }
     }
 
-    fn render(
-        &mut self,
-        frame: &mut ratatui::Frame,
-        area: ratatui::prelude::Rect,
-    ) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
         frame.render_widget(Clear, area);
         let headers = self.headers.borrow_and_update();
         match headers.as_ref() {

@@ -1,6 +1,7 @@
 use std::{
     io::{Stdout, stdout},
     ops::{Deref, DerefMut},
+    thread::sleep,
     time::Duration,
 };
 
@@ -15,7 +16,7 @@ use crossterm::{
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use futures_util::{FutureExt, StreamExt};
-use ratatui::backend::CrosstermBackend as Backend;
+use ratatui::{Terminal, backend::CrosstermBackend as Backend};
 #[cfg(not(windows))]
 use signal_hook::low_level::raise;
 use tokio::{
@@ -42,7 +43,7 @@ pub enum TuiEvent {
 }
 
 pub struct Tui {
-    pub terminal: ratatui::Terminal<Backend<Stdout>>,
+    pub terminal: Terminal<Backend<Stdout>>,
     pub task: JoinHandle<()>,
     pub cancellation_token: CancellationToken,
     pub event_rx: UnboundedReceiver<TuiEvent>,
@@ -57,7 +58,7 @@ impl Tui {
     pub fn new() -> Result<Self> {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         Ok(Self {
-            terminal: ratatui::Terminal::new(Backend::new(stdout()))?,
+            terminal: Terminal::new(Backend::new(stdout()))?,
             task: tokio::spawn(async {}),
             cancellation_token: CancellationToken::new(),
             event_rx,
@@ -149,7 +150,7 @@ impl Tui {
         self.cancel();
         let mut counter = 0;
         while !self.task.is_finished() {
-            std::thread::sleep(Duration::from_millis(1));
+            sleep(Duration::from_millis(1));
             counter += 1;
             if counter > 50 {
                 self.task.abort();
@@ -213,7 +214,7 @@ impl Tui {
 }
 
 impl Deref for Tui {
-    type Target = ratatui::Terminal<Backend<Stdout>>;
+    type Target = Terminal<Backend<Stdout>>;
 
     fn deref(&self) -> &Self::Target {
         &self.terminal

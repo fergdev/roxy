@@ -3,7 +3,6 @@ mod tab;
 mod table;
 
 use color_eyre::Result;
-use crossterm::event::{KeyEvent, MouseEvent};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
@@ -17,14 +16,10 @@ use ratatui::{
 
 use crate::{
     config::manager::ConfigManager,
-    event::Action,
     ui::config::{tab::TabComponent, table::TableComponent},
 };
 
-use super::framework::{
-    component::{ActionResult, Component, KeyEventResult},
-    util::centered_rect,
-};
+use super::framework::{component::Component, util::centered_rect};
 
 #[derive(Debug, Clone)]
 enum ConfigValue {
@@ -66,15 +61,8 @@ impl ConfigEditor {
 }
 
 impl Component for ConfigEditor {
-    fn handle_tui_event(&mut self, tui_event: crate::tui::TuiEvent) -> Result<Option<Action>> {
-        self.tab_component.handle_tui_event(tui_event.clone())?;
-        self.table_component.handle_tui_event(tui_event)
-    }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.tab_component.handle_action(action.clone()) == ActionResult::Consumed {
-            return ActionResult::Consumed;
-        }
-        self.table_component.handle_action(action)
+    fn children(&mut self) -> Vec<&mut dyn Component> {
+        vec![&mut self.tab_component, &mut self.table_component]
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
@@ -89,15 +77,6 @@ impl Component for ConfigEditor {
         self.table_component.render(frame, chunks[1])?;
 
         Ok(())
-    }
-    fn handle_key_event(&mut self, key: &KeyEvent) -> KeyEventResult {
-        self.table_component.handle_key_event(key)
-    }
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
-        if let Some(action) = self.tab_component.handle_mouse_event(mouse)? {
-            return Ok(Some(action));
-        }
-        self.table_component.handle_mouse_event(mouse)
     }
 }
 impl HasFocus for ConfigEditor {

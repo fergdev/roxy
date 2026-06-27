@@ -1,13 +1,16 @@
 use color_eyre::Result;
-use rat_focus::HasFocus;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
 };
 
-use crate::event::Action;
+use crate::action::Action;
 
-use tracing::{Event, Level, Subscriber, field::Visit};
+use tracing::{
+    Event, Level, Subscriber,
+    field::{Field, Visit},
+};
 use tracing_subscriber::{Layer, layer::Context, registry::LookupSpan};
 
 use ratatui::{
@@ -40,7 +43,7 @@ pub struct LogLine {
 }
 
 impl Visit for LogLine {
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
         if field.name() == "message" {
             self.message = Some(format!("{value:?}"));
         }
@@ -72,14 +75,14 @@ where
 }
 
 pub struct LogViewer {
-    focus: rat_focus::FocusFlag,
+    focus: FocusFlag,
     logs: Arc<Mutex<VecDeque<LogLine>>>,
     v_scroll_offset: usize,
     h_scroll_offset: usize,
 }
 
 impl HasFocus for LogViewer {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
 
@@ -87,7 +90,7 @@ impl HasFocus for LogViewer {
         Rect::default()
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 }
@@ -95,7 +98,7 @@ impl HasFocus for LogViewer {
 impl LogViewer {
     pub fn new(logs: Arc<Mutex<VecDeque<LogLine>>>) -> Self {
         Self {
-            focus: rat_focus::FocusFlag::new().with_name("LogViewer"),
+            focus: FocusFlag::new().with_name("LogViewer"),
             logs,
             v_scroll_offset: 0,
             h_scroll_offset: 0,
@@ -104,7 +107,7 @@ impl LogViewer {
 }
 
 impl Component for LogViewer {
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn dispatch_action(&mut self, action: Action) -> ActionResult {
         match action {
             Action::Top => {
                 self.v_scroll_offset = 0;

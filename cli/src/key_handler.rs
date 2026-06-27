@@ -13,8 +13,8 @@ use tokio::{
 use tracing::error;
 
 use crate::{
+    action::{Action, KeyInputMode},
     config::manager::ConfigManager,
-    event::{Action, KeyInputMode},
     key_trie::KeyTrie,
 };
 

@@ -13,8 +13,8 @@ use tokio::{sync::watch, task::JoinHandle};
 use tracing::error;
 
 use crate::{
+    action::Action,
     app::ITEM_HEIGHT,
-    event::Action,
     ui::framework::{
         component::{ActionResult, Component},
         theme::themed_table,
@@ -89,7 +89,7 @@ impl FlowList {
         &self,
         ui_tx: watch::Sender<UiState>,
         mut shutdown_rx: watch::Receiver<()>,
-    ) -> tokio::task::JoinHandle<()> {
+    ) -> JoinHandle<()> {
         let flow_store = self.flow_store.clone();
 
         tokio::spawn(async move {

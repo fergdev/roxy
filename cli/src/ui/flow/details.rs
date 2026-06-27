@@ -17,7 +17,7 @@ use tokio::{
 use tracing::{error, info};
 
 use crate::{
-    event::Action,
+    action::Action,
     ui::framework::{
         component::{ActionResult, Component},
         theme::themed_tabs,
@@ -276,6 +276,16 @@ impl HasFocus for FlowDetails {
 }
 
 impl Component for FlowDetails {
+    fn children(&mut self) -> Vec<&mut dyn Component> {
+        vec![
+            // &mut self.tabs,
+            &mut self.request,
+            &mut self.response,
+            &mut self.certs,
+            &mut self.timing,
+            &mut self.ws,
+        ]
+    }
     fn handle_action(&mut self, action: Action) -> ActionResult {
         if self.tabs.focus.get() {
             match action {
@@ -290,13 +300,7 @@ impl Component for FlowDetails {
                 _ => {}
             }
         }
-        match self.tab {
-            Tab::Request => self.request.handle_action(action),
-            Tab::Response => self.response.handle_action(action),
-            Tab::Certs => self.certs.handle_action(action),
-            Tab::Timing => self.timing.handle_action(action),
-            Tab::Ws => self.ws.handle_action(action),
-        }
+        ActionResult::Ignored
     }
 
     fn render(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) -> Result<()> {

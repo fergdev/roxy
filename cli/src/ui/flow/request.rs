@@ -10,15 +10,9 @@ use roxy_shared::content::content_type;
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, trace};
 
-use crate::{
-    event::Action,
-    ui::{
-        flow::tab::LineComponent,
-        framework::{
-            component::{ActionResult, Component},
-            theme::themed_block,
-        },
-    },
+use crate::ui::{
+    flow::tab::LineComponent,
+    framework::{component::Component, theme::themed_block},
 };
 
 use super::{body::component::FlowDetailsBody, headers::FlowDetailsHeaders};
@@ -108,9 +102,12 @@ impl HasFocus for FlowDetailsRequest {
 }
 
 impl Component for FlowDetailsRequest {
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        self.headers.handle_action(action.clone());
-        self.body.handle_action(action)
+    fn children(&mut self) -> Vec<&mut dyn Component> {
+        vec![
+            // &mut self.line_component,
+            &mut self.headers,
+            &mut self.body,
+        ]
     }
 
     fn render(&mut self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) -> Result<()> {

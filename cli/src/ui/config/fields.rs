@@ -3,11 +3,11 @@ use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::debug;
 
 use crate::{
+    action::{Action, KeyInputMode},
     config::{
         RoxyConfig,
         keys::{key_sequence_to_string, parse_key_sequence},
     },
-    event::{Action, KeyInputMode},
     ui::config::{ConfigValue, EditableConfigField, tab::ConfigTab},
 };
 

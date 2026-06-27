@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use rat_focus::{FocusFlag, HasFocus};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -21,7 +21,7 @@ use tracing::{info, warn};
 use x509_parser::parse_x509_certificate;
 
 use crate::{
-    event::Action,
+    action::Action,
     ui::{
         flow::tab::TabComponent,
         framework::{
@@ -760,7 +760,7 @@ fn render_cert<'a>(cert: &CertInfo, lines: &mut Vec<Line<'a>>) {
 }
 
 impl HasFocus for FlowDetailsCerts {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(&self.tab);
         match self.root_tab {
             RootTab::Client => builder.leaf_widget(&self.client_tab_cmp),

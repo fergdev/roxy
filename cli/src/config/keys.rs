@@ -5,7 +5,7 @@ use derive_deref::{Deref, DerefMut};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeMap};
 
 use crate::{
-    event::{Action, KeyInputMode},
+    action::{Action, KeyInputMode},
     notify_error,
 };
 

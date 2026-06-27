@@ -1,24 +1,24 @@
-use rat_focus::HasFocus;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::layout::Rect;
 
 pub struct TabComponent {
-    pub focus: rat_focus::FocusFlag,
+    pub focus: FocusFlag,
 }
 
 impl TabComponent {
     pub fn new(title: &str) -> Self {
         Self {
-            focus: rat_focus::FocusFlag::new().with_name(title),
+            focus: FocusFlag::new().with_name(title),
         }
     }
 }
 
 impl HasFocus for TabComponent {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 
@@ -28,23 +28,23 @@ impl HasFocus for TabComponent {
 }
 
 pub struct LineComponent {
-    pub focus: rat_focus::FocusFlag,
+    pub focus: FocusFlag,
 }
 
 impl LineComponent {
     pub fn new(name: &str) -> Self {
         Self {
-            focus: rat_focus::FocusFlag::new().with_name(name),
+            focus: FocusFlag::new().with_name(name),
         }
     }
 }
 
 impl HasFocus for LineComponent {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 

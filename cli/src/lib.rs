@@ -1,7 +1,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+pub mod action;
 pub mod app;
 pub mod config;
-pub mod event;
 pub mod key_handler;
 pub mod key_trie;
 pub mod logging;

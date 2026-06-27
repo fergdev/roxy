@@ -9,8 +9,8 @@ use roxy_proxy::flow::FlowStore;
 use roxy_proxy::proxy::ProxyManager;
 use tokio::sync::mpsc;
 
+use crate::action::Action;
 use crate::config::manager::ConfigManager;
-use crate::event::Action;
 use crate::key_handler::KeyHandler;
 use crate::tui::{Tui, TuiEvent};
 use crate::ui::framework::component::{ActionResult, Component, KeyEventResult};
@@ -104,7 +104,7 @@ impl App {
             }
             _ => {}
         }
-        if let Some(action) = self.home.handle_tui_event(event.clone())? {
+        if let Some(action) = self.home.dispatch_tui_events(event.clone())? {
             action_tx.send(action)?;
         }
         Ok(())
@@ -126,7 +126,7 @@ impl App {
                 }
                 _ => {}
             }
-            if let ActionResult::Action(action) = self.home.handle_action(action.clone()) {
+            if let ActionResult::Action(action) = self.home.dispatch_action(action.clone()) {
                 self.action_tx.send(action)?
             };
         }

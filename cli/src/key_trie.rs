@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crossterm::event::KeyEvent;
 use tracing::error;
 
-use crate::event::Action;
+use crate::action::Action;
 
 #[derive(Default)]
 pub struct KeyTrie {
@@ -79,7 +79,7 @@ impl KeyNode {
 pub mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-    use crate::event::Action;
+    use crate::action::Action;
 
     use super::KeyTrie;
 

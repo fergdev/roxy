@@ -14,8 +14,8 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{debug, error, info};
 
 use crate::{
+    action::Action,
     config::{RoxyConfig, color::parse_color, manager::ConfigManager},
-    event::Action,
     tui::TuiEvent,
     ui::{
         config::{ConfigValue, EditableConfigField, tab::ConfigTab},
@@ -231,6 +231,22 @@ impl Component for TableComponent {
         {
             self.selected_tab = config;
         }
+
+        match tui_event {
+            TuiEvent::Mouse(mouse) => match self.handle_mouse_event(mouse) {
+                Ok(Some(action)) => return Ok(Some(action)),
+                Ok(None) => {}
+                Err(error) => return Err(error),
+            },
+            TuiEvent::Key(key) => {
+                let result = self.handle_key_event(&key);
+                if result == KeyEventResult::Consumed {
+                    return Ok(None);
+                }
+            }
+            _ => {}
+        }
+
         Ok(None)
     }
 

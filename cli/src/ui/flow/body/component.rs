@@ -31,7 +31,7 @@ use super::{
 };
 
 use crate::{
-    event::Action,
+    action::Action,
     ui::framework::{
         component::{ActionResult, Component},
         theme::themed_block,

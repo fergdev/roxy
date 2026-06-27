@@ -7,10 +7,10 @@ use ratatui::{
     layout::{Position, Rect},
     text::Line,
 };
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::{
-    event::Action,
+    action::Action,
     ui::framework::{
         component::{ActionResult, Component},
         theme::themed_tabs,
@@ -87,19 +87,7 @@ impl TabComponent {
     }
 
     fn next(&mut self) {
-        info!(
-            "DEBUGPRINT[60]: {}:{}: current_tab={:#?}",
-            file!(),
-            line!(),
-            self.current_tab
-        );
         self.current_tab = self.current_tab.next();
-        info!(
-            "DEBUGPRINT[59]: {}:{}: current_tab={:#?}",
-            file!(),
-            line!(),
-            self.current_tab
-        );
         self.notify();
     }
     fn notify(&mut self) {
@@ -151,12 +139,6 @@ impl Component for TabComponent {
         }) {
             return Ok(None);
         }
-        info!(
-            "DEBUGPRINT[61]: {}:{}: mouse_event={:#?}",
-            file!(),
-            line!(),
-            mouse_event
-        );
         if let MouseEventKind::Up(_) = mouse_event.kind {
             let component_up_x = mouse_event.column - self.area.x;
             // TODO: map tab_index by counting size of text
@@ -165,19 +147,10 @@ impl Component for TabComponent {
 
             // if a / 5 < ConfigTab::all().len() as u16 {
             let tab_index = (component_up_x / tab_width) as usize;
-            info!(
-                "DEBUGPRINT[62]: {}:{}: tab_index={:#?}",
-                file!(),
-                line!(),
-                tab_index
-            );
             if let Some(tab) = ConfigTab::all().get(tab_index) {
                 self.current_tab = *tab;
                 self.notify();
             }
-            // }
-
-            // self.next();
             return Ok(Some(Action::FocusReq(self.focus.widget_id())));
         }
         Ok(None)

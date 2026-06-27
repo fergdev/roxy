@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
 };
 
-use crate::event::Action;
+use crate::{action::Action, tui::TuiEvent};
 
 use super::framework::{
     component::{ActionResult, Component},
@@ -69,13 +69,13 @@ impl FpsCounter {
 }
 
 impl Component for FpsCounter {
-    fn handle_tui_event(&mut self, tui_event: crate::tui::TuiEvent) -> Result<Option<Action>> {
+    fn dispatch_tui_events(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
         match tui_event {
-            crate::tui::TuiEvent::Tick => {
+            TuiEvent::Tick => {
                 self.app_tick();
                 Ok(None)
             }
-            crate::tui::TuiEvent::Render => {
+            TuiEvent::Render => {
                 self.render_tick();
                 Ok(None)
             }

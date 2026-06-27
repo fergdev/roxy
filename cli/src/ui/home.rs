@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{config::manager::ConfigManager, event::Action, tui::TuiEvent};
+use crate::{action::Action, config::manager::ConfigManager, tui::TuiEvent};
 
 use super::{
     config::ConfigEditor,
@@ -19,6 +19,7 @@ use super::{
 };
 
 use color_eyre::Result;
+use crossterm::event::{KeyEvent, MouseEvent};
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
 use roxy_proxy::flow::FlowStore;
@@ -124,19 +125,8 @@ pub enum ActivePopup {
 }
 
 impl Component for HomeComponent {
-    fn handle_tui_event(&mut self, event: TuiEvent) -> Result<Option<Action>> {
-        let res = match self.active_popup {
-            Some(ActivePopup::ConfigEditor) => self.config_editor.handle_tui_event(event.clone()),
-            Some(ActivePopup::QuitPopup) => self.quit_popup.handle_tui_event(event.clone()),
-            Some(ActivePopup::FlowDetails) => self.flow_details.handle_tui_event(event.clone()),
-            Some(ActivePopup::LogViewer) => self.log_viewer.handle_tui_event(event.clone()),
-            None => Ok(None),
-        };
-        if let Ok(Some(action)) = res {
-            return Ok(Some(action));
-        }
-
-        if let TuiEvent::Tick = event {
+    fn handle_tui_event(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
+        if let TuiEvent::Tick = tui_event {
             if self.flow_store.flows.is_empty() {
                 self.active_view = ActiveView::Splash;
             } else {
@@ -147,29 +137,6 @@ impl Component for HomeComponent {
     }
 
     fn handle_action(&mut self, action: Action) -> ActionResult {
-        let _ = self.fps_counter.handle_action(action.clone());
-
-        let res = match self.active_popup {
-            Some(ActivePopup::ConfigEditor) => self.config_editor.handle_action(action.clone()),
-            Some(ActivePopup::QuitPopup) => self.quit_popup.handle_action(action.clone()),
-            Some(ActivePopup::FlowDetails) => self.flow_details.handle_action(action.clone()),
-            Some(ActivePopup::LogViewer) => self.log_viewer.handle_action(action.clone()),
-            None => ActionResult::Ignored,
-        };
-
-        if res != ActionResult::Ignored {
-            return res;
-        }
-
-        let res = match self.active_view {
-            ActiveView::Splash => self.splash.handle_action(action.clone()),
-            ActiveView::FlowList => self.flow_list.handle_action(action.clone()),
-        };
-
-        if res != ActionResult::Ignored {
-            return res;
-        }
-
         match action {
             Action::LogView => {
                 self.active_popup = Some(ActivePopup::LogViewer);
@@ -228,7 +195,7 @@ impl Component for HomeComponent {
         Ok(())
     }
 
-    fn handle_key_event(&mut self, key: &crossterm::event::KeyEvent) -> KeyEventResult {
+    fn handle_key_event(&mut self, key: &KeyEvent) -> KeyEventResult {
         let res = match self.active_popup {
             Some(ActivePopup::ConfigEditor) => self.config_editor.handle_key_event(key),
             Some(ActivePopup::QuitPopup) => self.quit_popup.handle_key_event(key),
@@ -254,10 +221,7 @@ impl Component for HomeComponent {
         KeyEventResult::Ignored
     }
 
-    fn handle_mouse_event(
-        &mut self,
-        mouse: crossterm::event::MouseEvent,
-    ) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
         let res = match self.active_popup {
             Some(ActivePopup::ConfigEditor) => self.config_editor.handle_mouse_event(mouse)?,
             Some(ActivePopup::QuitPopup) => self.quit_popup.handle_mouse_event(mouse)?,
@@ -276,5 +240,15 @@ impl Component for HomeComponent {
         };
 
         Ok(res)
+    }
+
+    fn children(&mut self) -> Vec<&mut dyn Component> {
+        vec![
+            &mut self.splash,
+            &mut self.config_editor,
+            &mut self.flow_list,
+            &mut self.flow_details,
+            &mut self.log_viewer,
+        ]
     }
 }
