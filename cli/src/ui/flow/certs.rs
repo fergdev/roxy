@@ -779,7 +779,7 @@ impl HasFocus for FlowDetailsCerts {
 }
 
 impl Component for FlowDetailsCerts {
-    fn update(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: Action) -> ActionResult {
         if self.tab.focus.get() {
             match action {
                 Action::Left => {

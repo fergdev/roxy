@@ -61,7 +61,7 @@ impl HasFocus for FlowDetailsHeaders {
 }
 
 impl Component for FlowDetailsHeaders {
-    fn update(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: Action) -> ActionResult {
         if self.focus.get() {
             match action {
                 Action::Up => {

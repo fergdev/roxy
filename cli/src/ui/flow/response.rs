@@ -105,9 +105,9 @@ impl HasFocus for FlowDetailsResponse {
 }
 
 impl Component for FlowDetailsResponse {
-    fn update(&mut self, action: Action) -> ActionResult {
-        self.headers.update(action.clone());
-        self.body.update(action)
+    fn handle_action(&mut self, action: Action) -> ActionResult {
+        self.headers.handle_action(action.clone());
+        self.body.handle_action(action)
     }
 
     fn render(

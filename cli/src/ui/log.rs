@@ -7,12 +7,13 @@ use std::{
 
 use crate::event::Action;
 
-use tracing::{Event, Subscriber, field::Visit};
+use tracing::{Event, Level, Subscriber, field::Visit};
 use tracing_subscriber::{Layer, layer::Context, registry::LookupSpan};
 
 use ratatui::{
     Frame,
     layout::{Alignment, Rect},
+    style::Style,
     text::{Line, Text},
     widgets::{Clear, Paragraph, Wrap},
 };
@@ -34,7 +35,7 @@ impl UiLogLayer {
 }
 
 pub struct LogLine {
-    level: tracing::Level,
+    level: Level,
     message: Option<String>,
 }
 
@@ -103,7 +104,7 @@ impl LogViewer {
 }
 
 impl Component for LogViewer {
-    fn update(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: Action) -> ActionResult {
         match action {
             Action::Top => {
                 self.v_scroll_offset = 0;
@@ -149,30 +150,26 @@ impl Component for LogViewer {
 
         frame.render_widget(Clear, popup_area);
 
-        let colors = with_theme(|t| t.colors.clone());
+        let colors = with_theme(|theme| theme.colors.clone());
         if let Ok(logs) = self.logs.lock() {
             let paragraph = Paragraph::new(Text::from(
                 logs.iter()
-                    .map(|l| {
-                        let style = match l.level {
-                            tracing::Level::ERROR => {
-                                ratatui::style::Style::default().fg(colors.error)
-                            }
-                            tracing::Level::WARN => {
-                                ratatui::style::Style::default().fg(colors.warn)
-                            }
-                            tracing::Level::INFO => {
-                                ratatui::style::Style::default().fg(colors.info)
-                            }
-                            tracing::Level::DEBUG => {
-                                ratatui::style::Style::default().fg(colors.debug)
-                            }
-                            tracing::Level::TRACE => {
-                                ratatui::style::Style::default().fg(colors.trace)
-                            }
+                    .map(|log_line| {
+                        let color = match log_line.level {
+                            Level::ERROR => colors.error,
+                            Level::WARN => colors.warn,
+                            Level::INFO => colors.info,
+                            Level::DEBUG => colors.debug,
+                            Level::TRACE => colors.trace,
                         };
-                        Line::from(l.message.clone().unwrap_or("this is bad".to_string()))
-                            .style(style)
+
+                        Line::from(
+                            log_line
+                                .message
+                                .clone()
+                                .unwrap_or("this is bad".to_string()),
+                        )
+                        .style(Style::default().fg(color))
                     })
                     .collect::<Vec<_>>(),
             ))

@@ -48,7 +48,7 @@ impl QuitPopup {
 }
 
 impl Component for QuitPopup {
-    fn update(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: Action) -> ActionResult {
         match action {
             Action::Left => {
                 self.selected = !self.selected;

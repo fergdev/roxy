@@ -66,12 +66,12 @@ impl ConfigEditor {
 }
 
 impl Component for ConfigEditor {
-    fn update(&mut self, action: Action) -> ActionResult {
-        if self.tab_component.update(action.clone()) == ActionResult::Consumed {
+    fn handle_action(&mut self, action: Action) -> ActionResult {
+        if self.tab_component.handle_action(action.clone()) == ActionResult::Consumed {
             // self.update_fields();
             return ActionResult::Consumed;
         }
-        self.table_component.update(action)
+        self.table_component.handle_action(action)
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {

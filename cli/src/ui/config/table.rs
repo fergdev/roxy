@@ -223,7 +223,7 @@ impl Component for TableComponent {
         Ok(())
     }
 
-    fn update(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: Action) -> ActionResult {
         // On render we check for new config_tab and update.
         if action == Action::Render
             && let Ok(config) = self.on_change.try_recv()

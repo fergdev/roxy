@@ -20,8 +20,8 @@ pub enum ActionResult {
 
 pub trait Component {
     /// Handle tui events.
-    fn handle_events(&mut self, event: TuiEvent) -> Result<Option<Action>> {
-        let action = match event {
+    fn handle_tui_event(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
+        let action = match tui_event {
             TuiEvent::Mouse(mouse_event) => self.handle_mouse_event(mouse_event)?,
             _ => None,
         };
@@ -38,7 +38,7 @@ pub trait Component {
         Ok(None)
     }
 
-    fn update(&mut self, _action: Action) -> ActionResult {
+    fn handle_action(&mut self, _action: Action) -> ActionResult {
         ActionResult::Ignored
     }
 

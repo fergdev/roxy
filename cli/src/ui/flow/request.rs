@@ -108,9 +108,9 @@ impl HasFocus for FlowDetailsRequest {
 }
 
 impl Component for FlowDetailsRequest {
-    fn update(&mut self, action: Action) -> ActionResult {
-        self.headers.update(action.clone());
-        self.body.update(action)
+    fn handle_action(&mut self, action: Action) -> ActionResult {
+        self.headers.handle_action(action.clone());
+        self.body.handle_action(action)
     }
 
     fn render(&mut self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) -> Result<()> {

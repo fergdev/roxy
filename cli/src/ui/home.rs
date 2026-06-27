@@ -124,7 +124,7 @@ pub enum ActivePopup {
 }
 
 impl Component for HomeComponent {
-    fn handle_events(&mut self, event: TuiEvent) -> Result<Option<Action>> {
+    fn handle_tui_event(&mut self, event: TuiEvent) -> Result<Option<Action>> {
         let action = match event {
             TuiEvent::Tick => {
                 if self.flow_store.flows.is_empty() {
@@ -139,14 +139,14 @@ impl Component for HomeComponent {
         Ok(action)
     }
 
-    fn update(&mut self, action: Action) -> ActionResult {
-        let _ = self.fps_counter.update(action.clone());
+    fn handle_action(&mut self, action: Action) -> ActionResult {
+        let _ = self.fps_counter.handle_action(action.clone());
 
         let res = match self.active_popup {
-            Some(ActivePopup::ConfigEditor) => self.config_editor.update(action.clone()),
-            Some(ActivePopup::QuitPopup) => self.quit_popup.update(action.clone()),
-            Some(ActivePopup::FlowDetails) => self.flow_details.update(action.clone()),
-            Some(ActivePopup::LogViewer) => self.log_viewer.update(action.clone()),
+            Some(ActivePopup::ConfigEditor) => self.config_editor.handle_action(action.clone()),
+            Some(ActivePopup::QuitPopup) => self.quit_popup.handle_action(action.clone()),
+            Some(ActivePopup::FlowDetails) => self.flow_details.handle_action(action.clone()),
+            Some(ActivePopup::LogViewer) => self.log_viewer.handle_action(action.clone()),
             None => ActionResult::Ignored,
         };
 
@@ -155,8 +155,8 @@ impl Component for HomeComponent {
         }
 
         let res = match self.active_view {
-            ActiveView::Splash => self.splash.update(action.clone()),
-            ActiveView::FlowList => self.flow_list.update(action.clone()),
+            ActiveView::Splash => self.splash.handle_action(action.clone()),
+            ActiveView::FlowList => self.flow_list.handle_action(action.clone()),
         };
 
         if res != ActionResult::Ignored {

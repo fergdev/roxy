@@ -193,7 +193,7 @@ impl Drop for FlowList {
 }
 
 impl Component for FlowList {
-    fn update(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: Action) -> ActionResult {
         match action {
             Action::Down => {
                 self.next_row();

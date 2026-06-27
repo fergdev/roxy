@@ -116,7 +116,7 @@ impl App {
             }
             _ => {}
         }
-        if let Some(action) = self.home.handle_events(event.clone())? {
+        if let Some(action) = self.home.handle_tui_event(event.clone())? {
             action_tx.send(action)?;
         }
         Ok(())
@@ -143,7 +143,7 @@ impl App {
                 }
                 _ => {}
             }
-            if let ActionResult::Action(action) = self.home.update(action.clone()) {
+            if let ActionResult::Action(action) = self.home.handle_action(action.clone()) {
                 self.action_tx.send(action)?
             };
         }

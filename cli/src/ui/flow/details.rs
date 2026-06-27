@@ -276,7 +276,7 @@ impl HasFocus for FlowDetails {
 }
 
 impl Component for FlowDetails {
-    fn update(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: Action) -> ActionResult {
         if self.tabs.focus.get() {
             match action {
                 Action::Left => {
@@ -291,11 +291,11 @@ impl Component for FlowDetails {
             }
         }
         match self.tab {
-            Tab::Request => self.request.update(action),
-            Tab::Response => self.response.update(action),
-            Tab::Certs => self.certs.update(action),
-            Tab::Timing => self.timing.update(action),
-            Tab::Ws => self.ws.update(action),
+            Tab::Request => self.request.handle_action(action),
+            Tab::Response => self.response.handle_action(action),
+            Tab::Certs => self.certs.handle_action(action),
+            Tab::Timing => self.timing.handle_action(action),
+            Tab::Ws => self.ws.handle_action(action),
         }
     }
 
