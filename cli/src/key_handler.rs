@@ -10,10 +10,10 @@ use tokio::{
     task::JoinHandle,
     time::sleep,
 };
-use tracing::{error, info};
+use tracing::error;
 
 use crate::{
-    config::{keys::key_sequence_to_string, manager::ConfigManager},
+    config::manager::ConfigManager,
     event::{Action, KeyInputMode},
     key_trie::KeyTrie,
 };
@@ -42,6 +42,7 @@ struct Inner {
     more_action_timeout_handle: Option<JoinHandle<()>>,
 }
 
+/// Map's keys to actions based on the current configuation.
 impl KeyHandler {
     pub fn new(config_manager: ConfigManager, action_tx: UnboundedSender<Action>) -> Self {
         let mut config_rx = config_manager.rx.clone();
@@ -63,16 +64,11 @@ impl KeyHandler {
             loop {
                 match config_rx.changed().await {
                     Ok(_) => {
-                        info!("New key config");
                         let mut guard = shared_inner.lock().await;
                         guard.key_trie.clear();
                         let cfg = config_rx.borrow_and_update();
-
-                        // Rebuild the trie with the new config
                         if let Some(bind) = cfg.keybindings.get(&guard.mode) {
                             bind.iter().for_each(|(k, v)| {
-                                // let ks = key_sequence_to_string(k);
-                                // info!("welp {ks:?} {v}");
                                 guard.key_trie.push(k, v.to_owned());
                             });
                         }
@@ -89,34 +85,24 @@ impl KeyHandler {
     }
 
     pub fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
-        // debug!("Key event {key_event:?}");
-
         let mut inner = self.inner.try_lock()?;
-        inner.last_tick_key_events.push(key_event);
 
         if let Some(handle) = &inner.more_action_timeout_handle.take() {
             handle.abort();
         }
 
-        let debug_string = key_sequence_to_string(&inner.last_tick_key_events);
-        info!("Prev events {:?}", debug_string);
+        inner.last_tick_key_events.push(key_event);
         let (action, has_more) = inner.key_trie.get(&inner.last_tick_key_events);
 
         if let Some(action) = action {
             // We have long key combinations available so we will delay sending a final action
             // until all key strokes have been consumed
             if has_more {
-                // info!("Has more");
-
                 let self_timeout = self.clone();
                 let handle = tokio::spawn(async move {
                     let _ = sleep(Duration::from_millis(TIMEOUT_LEN)).await;
-                    // info!("Firing timeout");
                     if let Ok(mut inner) = self_timeout.inner.try_lock() {
-                        // info!("Timeout inner");
                         let _ = inner.action_tx.send(action);
-
-                        // info!("Timeout drain");
                         inner.last_tick_key_events.drain(..);
                         inner.last_key_tick = None;
                     }
@@ -129,7 +115,6 @@ impl KeyHandler {
             inner.action_tx.send(action)?;
         }
 
-        // debug!("No actions availble for key combination ");
         // No action or more actions available, clean up
         inner.last_tick_key_events.drain(..);
         inner.last_key_tick = None;

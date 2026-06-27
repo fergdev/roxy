@@ -22,6 +22,7 @@ pub enum Action {
 
     FocusNext,
     FocusPrev,
+    FocusReq(usize), // (widget_id)
 
     Top,
     Bottom,

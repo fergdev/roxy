@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{config::manager::ConfigManager, event::Action, tui::Event};
+use crate::{config::manager::ConfigManager, event::Action, tui::TuiEvent};
 
 use super::{
     config::ConfigEditor,
@@ -124,10 +124,9 @@ pub enum ActivePopup {
 }
 
 impl Component for HomeComponent {
-    fn handle_events(&mut self, event: Event) -> Result<Option<Action>> {
+    fn handle_events(&mut self, event: TuiEvent) -> Result<Option<Action>> {
         let action = match event {
-            Event::Mouse(mouse_event) => self.handle_mouse_event(mouse_event)?,
-            Event::Tick => {
+            TuiEvent::Tick => {
                 if self.flow_store.flows.is_empty() {
                     self.active_view = ActiveView::Splash;
                 } else {
@@ -246,5 +245,29 @@ impl Component for HomeComponent {
             _ => {}
         };
         KeyEventResult::Ignored
+    }
+
+    fn handle_mouse_event(
+        &mut self,
+        mouse: crossterm::event::MouseEvent,
+    ) -> Result<Option<Action>> {
+        let res = match self.active_popup {
+            Some(ActivePopup::ConfigEditor) => self.config_editor.handle_mouse_event(mouse)?,
+            Some(ActivePopup::QuitPopup) => self.quit_popup.handle_mouse_event(mouse)?,
+            Some(ActivePopup::FlowDetails) => self.flow_details.handle_mouse_event(mouse)?,
+            Some(ActivePopup::LogViewer) => self.log_viewer.handle_mouse_event(mouse)?,
+            None => None,
+        };
+
+        if res.is_some() {
+            return Ok(res);
+        }
+
+        let res = match self.active_view {
+            ActiveView::Splash => self.splash.handle_mouse_event(mouse)?,
+            ActiveView::FlowList => self.flow_list.handle_mouse_event(mouse)?,
+        };
+
+        Ok(res)
     }
 }

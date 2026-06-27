@@ -1,12 +1,8 @@
 use color_eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
-use ratatui::{
-    Frame,
-    layout::{Rect, Size},
-};
-use tokio::sync::mpsc::UnboundedSender;
+use ratatui::{Frame, layout::Rect};
 
-use crate::{event::Action, tui::Event};
+use crate::{event::Action, tui::TuiEvent};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum KeyEventResult {
@@ -23,27 +19,21 @@ pub enum ActionResult {
 }
 
 pub trait Component {
-    fn register_action_handler(&mut self, _tx: UnboundedSender<Action>) -> Result<()> {
-        Ok(())
-    }
-    fn init(&mut self, _area: Size) -> Result<()> {
-        Ok(())
-    }
-
-    fn focus(&mut self) {}
-
-    fn unfocus(&mut self) {}
-
-    fn handle_events(&mut self, event: Event) -> Result<Option<Action>> {
+    /// Handle tui events.
+    fn handle_events(&mut self, event: TuiEvent) -> Result<Option<Action>> {
         let action = match event {
-            Event::Mouse(mouse_event) => self.handle_mouse_event(mouse_event)?,
+            TuiEvent::Mouse(mouse_event) => self.handle_mouse_event(mouse_event)?,
             _ => None,
         };
         Ok(action)
     }
+
+    /// Handle crossterm key events.
     fn handle_key_event(&mut self, _key: &KeyEvent) -> KeyEventResult {
         KeyEventResult::Ignored
     }
+
+    /// Handle crossterm mouse events.
     fn handle_mouse_event(&mut self, _mouse: MouseEvent) -> Result<Option<Action>> {
         Ok(None)
     }
@@ -51,5 +41,7 @@ pub trait Component {
     fn update(&mut self, _action: Action) -> ActionResult {
         ActionResult::Ignored
     }
+
+    /// Draw to the frame within the given area.
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()>;
 }

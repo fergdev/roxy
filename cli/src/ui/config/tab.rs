@@ -1,7 +1,13 @@
 use color_eyre::Result;
+use crossterm::event::{MouseEvent, MouseEventKind};
 use rat_focus::{FocusFlag, HasFocus};
 
-use ratatui::{Frame, layout::Rect, text::Line};
+use ratatui::{
+    Frame,
+    layout::{Position, Rect},
+    text::Line,
+};
+use tracing::{debug, info};
 
 use crate::{
     event::Action,
@@ -60,23 +66,48 @@ impl ConfigTab {
 
 pub(crate) struct TabComponent {
     focus: FocusFlag,
+    area: Rect,
     pub(crate) current_tab: ConfigTab,
+    configtab_tx: tokio::sync::mpsc::UnboundedSender<ConfigTab>,
 }
 
 impl TabComponent {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(configtab_tx: tokio::sync::mpsc::UnboundedSender<ConfigTab>) -> Self {
         Self {
             focus: FocusFlag::new().with_name("ConfigTabs"),
+            area: Rect::default(),
             current_tab: ConfigTab::App,
+            configtab_tx,
         }
     }
 
     fn prev(&mut self) {
         self.current_tab = self.current_tab.prev();
+        self.notify();
     }
 
     fn next(&mut self) {
+        info!(
+            "DEBUGPRINT[60]: {}:{}: current_tab={:#?}",
+            file!(),
+            line!(),
+            self.current_tab
+        );
         self.current_tab = self.current_tab.next();
+        info!(
+            "DEBUGPRINT[59]: {}:{}: current_tab={:#?}",
+            file!(),
+            line!(),
+            self.current_tab
+        );
+        self.notify();
+    }
+    fn notify(&mut self) {
+        self.configtab_tx
+            .send(self.current_tab)
+            .unwrap_or_else(|e| {
+                debug!("Failed to send current tab: {}", e);
+            });
     }
 }
 
@@ -90,7 +121,7 @@ impl HasFocus for TabComponent {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 }
 
@@ -112,7 +143,48 @@ impl Component for TabComponent {
             _ => ActionResult::Ignored,
         }
     }
+
+    fn handle_mouse_event(&mut self, mouse_event: MouseEvent) -> Result<Option<Action>> {
+        if !self.area.contains(Position {
+            x: mouse_event.column,
+            y: mouse_event.row,
+        }) {
+            return Ok(None);
+        }
+        info!(
+            "DEBUGPRINT[61]: {}:{}: mouse_event={:#?}",
+            file!(),
+            line!(),
+            mouse_event
+        );
+        if let MouseEventKind::Up(_) = mouse_event.kind {
+            let component_up_x = mouse_event.column - self.area.x;
+            // TODO: map tab_index by counting size of text
+            // let len = ConfigTab::all().len() as u16;
+            let tab_width = 7;
+
+            // if a / 5 < ConfigTab::all().len() as u16 {
+            let tab_index = (component_up_x / tab_width) as usize;
+            info!(
+                "DEBUGPRINT[62]: {}:{}: tab_index={:#?}",
+                file!(),
+                line!(),
+                tab_index
+            );
+            if let Some(tab) = ConfigTab::all().get(tab_index) {
+                self.current_tab = *tab;
+                self.notify();
+            }
+            // }
+
+            // self.next();
+            return Ok(Some(Action::FocusReq(self.focus.widget_id())));
+        }
+        Ok(None)
+    }
+
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        self.area = area;
         let tab_titles: Vec<Line> = ConfigTab::all()
             .iter()
             .map(|t| Line::raw(t.title()))

@@ -11,10 +11,13 @@ use crossterm::{
         DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
         Event as CrosstermEvent, EventStream, KeyEvent, KeyEventKind, MouseEvent,
     },
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
+    execute,
+    terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use futures_util::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
+#[cfg(not(windows))]
+use signal_hook::low_level::raise;
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
@@ -24,7 +27,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::error;
 
 #[derive(Clone, Debug)]
-pub enum Event {
+pub enum TuiEvent {
     Init,
     Quit,
     Error,
@@ -43,8 +46,8 @@ pub struct Tui {
     pub terminal: ratatui::Terminal<Backend<Stdout>>,
     pub task: JoinHandle<()>,
     pub cancellation_token: CancellationToken,
-    pub event_rx: UnboundedReceiver<Event>,
-    pub event_tx: UnboundedSender<Event>,
+    pub event_rx: UnboundedReceiver<TuiEvent>,
+    pub event_tx: UnboundedSender<TuiEvent>,
     pub frame_rate: f64,
     pub tick_rate: f64,
     pub mouse: bool,
@@ -102,7 +105,7 @@ impl Tui {
     }
 
     async fn event_loop(
-        event_tx: UnboundedSender<Event>,
+        event_tx: UnboundedSender<TuiEvent>,
         cancellation_token: CancellationToken,
         tick_rate: f64,
         frame_rate: f64,
@@ -111,7 +114,7 @@ impl Tui {
         let mut tick_interval = interval(Duration::from_secs_f64(1.0 / tick_rate));
         let mut render_interval = interval(Duration::from_secs_f64(1.0 / frame_rate));
 
-        if event_tx.send(Event::Init).is_err() {
+        if event_tx.send(TuiEvent::Init).is_err() {
             error!("Failed to send init");
         }
 
@@ -120,19 +123,19 @@ impl Tui {
                 _ = cancellation_token.cancelled() => {
                     break;
                 }
-                _ = tick_interval.tick() => Event::Tick,
-                _ = render_interval.tick() => Event::Render,
+                _ = tick_interval.tick() => TuiEvent::Tick,
+                _ = render_interval.tick() => TuiEvent::Render,
                 crossterm_event = event_stream.next().fuse() => match crossterm_event {
                     Some(Ok(event)) => match event {
-                        CrosstermEvent::Key(key) if key.kind == KeyEventKind::Press => Event::Key(key),
-                        // CrosstermEvent::Mouse(mouse) => Event::Mouse(mouse),
-                        CrosstermEvent::Resize(x, y) => Event::Resize(x, y),
-                        CrosstermEvent::FocusLost => Event::FocusLost,
-                        CrosstermEvent::FocusGained => Event::FocusGained,
-                        CrosstermEvent::Paste(s) => Event::Paste(s),
+                        CrosstermEvent::Key(key) if key.kind == KeyEventKind::Press => TuiEvent::Key(key),
+                        CrosstermEvent::Mouse(mouse) => TuiEvent::Mouse(mouse),
+                        CrosstermEvent::Resize(x, y) => TuiEvent::Resize(x, y),
+                        CrosstermEvent::FocusLost => TuiEvent::FocusLost,
+                        CrosstermEvent::FocusGained => TuiEvent::FocusGained,
+                        CrosstermEvent::Paste(s) => TuiEvent::Paste(s),
                         _ => continue,
                     }
-                    Some(Err(_)) => Event::Error,
+                    Some(Err(_)) => TuiEvent::Error,
                     None => break,
                 },
             };
@@ -161,13 +164,13 @@ impl Tui {
     }
 
     pub fn enter(&mut self) -> Result<()> {
-        crossterm::terminal::enable_raw_mode()?;
-        crossterm::execute!(stdout(), EnterAlternateScreen, cursor::Hide)?;
+        terminal::enable_raw_mode()?;
+        execute!(stdout(), EnterAlternateScreen, cursor::Hide)?;
         if self.mouse {
-            crossterm::execute!(stdout(), EnableMouseCapture)?;
+            execute!(stdout(), EnableMouseCapture)?;
         }
         if self.paste {
-            crossterm::execute!(stdout(), EnableBracketedPaste)?;
+            execute!(stdout(), EnableBracketedPaste)?;
         }
         self.start();
         Ok(())
@@ -175,16 +178,16 @@ impl Tui {
 
     pub fn exit(&mut self) -> Result<()> {
         self.stop()?;
-        if crossterm::terminal::is_raw_mode_enabled()? {
+        if terminal::is_raw_mode_enabled()? {
             self.flush()?;
             if self.paste {
-                crossterm::execute!(stdout(), DisableBracketedPaste)?;
+                execute!(stdout(), DisableBracketedPaste)?;
             }
             if self.mouse {
-                crossterm::execute!(stdout(), DisableMouseCapture)?;
+                execute!(stdout(), DisableMouseCapture)?;
             }
-            crossterm::execute!(stdout(), LeaveAlternateScreen, cursor::Show)?;
-            crossterm::terminal::disable_raw_mode()?;
+            execute!(stdout(), LeaveAlternateScreen, cursor::Show)?;
+            terminal::disable_raw_mode()?;
         }
         Ok(())
     }
@@ -196,7 +199,7 @@ impl Tui {
     pub fn suspend(&mut self) -> Result<()> {
         self.exit()?;
         #[cfg(not(windows))]
-        signal_hook::low_level::raise(signal_hook::consts::signal::SIGTSTP)?;
+        raise(signal_hook::consts::signal::SIGTSTP)?;
         Ok(())
     }
 
@@ -205,7 +208,7 @@ impl Tui {
         Ok(())
     }
 
-    pub async fn next_event(&mut self) -> Option<Event> {
+    pub async fn next_event(&mut self) -> Option<TuiEvent> {
         self.event_rx.recv().await
     }
 }

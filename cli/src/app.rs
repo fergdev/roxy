@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::Result;
+use crossterm::event::MouseEvent;
 use rat_focus::{Focus, FocusBuilder};
 use ratatui::layout::Rect;
 use roxy_proxy::flow::FlowStore;
@@ -11,7 +12,7 @@ use tokio::sync::mpsc;
 use crate::config::manager::ConfigManager;
 use crate::event::Action;
 use crate::key_handler::KeyHandler;
-use crate::tui::{Event, Tui};
+use crate::tui::{Tui, TuiEvent};
 use crate::ui::framework::component::{ActionResult, Component, KeyEventResult};
 use crate::ui::framework::notify::Notifier;
 use crate::ui::framework::theme::set_theme;
@@ -92,11 +93,14 @@ impl App {
         };
         let action_tx = self.action_tx.clone();
         match event {
-            Event::Quit => action_tx.send(Action::Quit)?,
-            Event::Tick => action_tx.send(Action::Tick)?,
-            Event::Render => action_tx.send(Action::Render)?,
-            Event::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
-            Event::Key(key) => {
+            TuiEvent::Quit => action_tx.send(Action::Quit)?,
+            TuiEvent::Tick => action_tx.send(Action::Tick)?,
+            TuiEvent::Render => action_tx.send(Action::Render)?,
+            TuiEvent::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
+            TuiEvent::Mouse(mouse_event) => {
+                self.handle_mouse_event(mouse_event)?;
+            }
+            TuiEvent::Key(key) => {
                 // Send raw key events to the component heighrarchy first
                 // so they can intercept and react to them before the key_handler
                 match self.home.handle_key_event(&key) {
@@ -134,11 +138,21 @@ impl App {
                 Action::FocusPrev => {
                     focus.prev();
                 }
+                Action::FocusReq(widget_id) => {
+                    focus.by_widget_id(widget_id);
+                }
                 _ => {}
             }
             if let ActionResult::Action(action) = self.home.update(action.clone()) {
                 self.action_tx.send(action)?
             };
+        }
+        Ok(())
+    }
+
+    fn handle_mouse_event(&mut self, mouse_event: MouseEvent) -> Result<()> {
+        if let Some(action) = self.home.handle_mouse_event(mouse_event)? {
+            self.action_tx.send(action)?;
         }
         Ok(())
     }

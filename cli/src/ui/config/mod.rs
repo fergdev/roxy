@@ -3,9 +3,10 @@ mod tab;
 mod table;
 
 use color_eyre::Result;
-use crossterm::event::KeyEvent;
+use crossterm::event::{KeyEvent, MouseEvent};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use std::path::PathBuf;
+use tokio::sync::mpsc;
 
 use ratatui::{
     Frame,
@@ -43,51 +44,31 @@ struct EditableConfigField {
 
 pub struct ConfigEditor {
     focus: FocusFlag,
+    area: Rect,
     tab_component: TabComponent,
     table_component: TableComponent,
 }
 
-impl HasFocus for ConfigEditor {
-    fn build(&self, builder: &mut FocusBuilder) {
-        let tag = builder.start(self);
-        builder.widget(&self.tab_component);
-        builder.widget(&self.table_component);
-        builder.end(tag);
-    }
-
-    fn area(&self) -> Rect {
-        Rect::default()
-    }
-
-    fn focus(&self) -> rat_focus::FocusFlag {
-        self.focus.clone()
-    }
-}
-
 impl ConfigEditor {
     pub fn new(config_manager: ConfigManager) -> Self {
+        let (config_tab_tx, config_tab_rx) = mpsc::unbounded_channel();
         Self {
             focus: FocusFlag::new().with_name("ConfigEditor"),
-            tab_component: TabComponent::new(),
-            table_component: TableComponent::new(config_manager),
+            area: Rect::default(),
+            tab_component: TabComponent::new(config_tab_tx),
+            table_component: TableComponent::new(config_manager, config_tab_rx),
         }
     }
 
     pub fn shown(&mut self) {
-        self.tab_component.focus().get();
-        self.update_fields();
-    }
-
-    fn update_fields(&mut self) {
-        self.table_component
-            .set_config_tab(&self.tab_component.current_tab);
+        self.tab_component.focus().set(true);
     }
 }
 
 impl Component for ConfigEditor {
     fn update(&mut self, action: Action) -> ActionResult {
         if self.tab_component.update(action.clone()) == ActionResult::Consumed {
-            self.update_fields();
+            // self.update_fields();
             return ActionResult::Consumed;
         }
         self.table_component.update(action)
@@ -95,6 +76,7 @@ impl Component for ConfigEditor {
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         let popup_area = centered_rect(80, 60, area);
+        self.area = popup_area;
         frame.render_widget(Clear, popup_area);
 
         let chunks =
@@ -107,5 +89,27 @@ impl Component for ConfigEditor {
     }
     fn handle_key_event(&mut self, key: &KeyEvent) -> KeyEventResult {
         self.table_component.handle_key_event(key)
+    }
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        if let Some(action) = self.tab_component.handle_mouse_event(mouse)? {
+            return Ok(Some(action));
+        }
+        self.table_component.handle_mouse_event(mouse)
+    }
+}
+impl HasFocus for ConfigEditor {
+    fn build(&self, builder: &mut FocusBuilder) {
+        let tag = builder.start(self);
+        builder.widget(&self.tab_component);
+        builder.widget(&self.table_component);
+        builder.end(tag);
+    }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
+
+    fn focus(&self) -> rat_focus::FocusFlag {
+        self.focus.clone()
     }
 }

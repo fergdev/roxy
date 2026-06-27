@@ -1,14 +1,16 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use crossterm::event::{KeyCode, KeyEvent};
+use color_eyre::eyre::Result;
+use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus, ratatui::layout::Rect};
 use ratatui::{
-    layout::Constraint,
+    layout::{Constraint, Position},
     prelude::Frame,
     style::Stylize,
     text::Span,
     widgets::{Cell, Paragraph, Row, TableState},
 };
+use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{debug, error, info};
 
 use crate::{
@@ -25,28 +27,35 @@ use crate::{
 
 pub(crate) struct TableComponent {
     focus: FocusFlag,
+    area: Rect,
     config_manager: ConfigManager,
     fields: HashMap<ConfigTab, Vec<EditableConfigField>>,
     selected_tab: ConfigTab,
     table_state: TableState,
     is_editing: bool,
     input_buffer: String,
+    on_change: UnboundedReceiver<ConfigTab>,
 }
 
 impl TableComponent {
-    pub(crate) fn new(config_manager: ConfigManager) -> Self {
+    pub(crate) fn new(
+        config_manager: ConfigManager,
+        on_change: UnboundedReceiver<ConfigTab>,
+    ) -> Self {
         let config_rx = config_manager.rx.clone();
         let current_config = config_rx.borrow();
         let fields: HashMap<ConfigTab, Vec<EditableConfigField>> = (&*current_config).into();
 
         Self {
-            focus: FocusFlag::new(),
+            focus: FocusFlag::new().with_name("TableComponent"),
+            area: Rect::default(),
             config_manager,
             fields,
             selected_tab: ConfigTab::App,
             table_state: TableState::default(),
             is_editing: false,
             input_buffer: String::new(),
+            on_change,
         }
     }
 
@@ -79,7 +88,7 @@ impl TableComponent {
                 ConfigValue::Bool(b) => {
                     field.value = ConfigValue::Bool(!*b);
                     field.is_editing = false;
-                    // self.update_config();
+                    self.update_config();
                     return;
                 }
                 ConfigValue::Color(c) => c.to_string(),
@@ -119,9 +128,6 @@ impl TableComponent {
         }
     }
 
-    pub(crate) fn set_config_tab(&mut self, tab: &ConfigTab) {
-        self.selected_tab = tab.to_owned();
-    }
     // fn delete(&mut self) -> bool {
     //     let Some(selected_field_index) = self.table_state.selected() else {
     //         return false;
@@ -172,7 +178,8 @@ impl TableComponent {
 }
 
 impl Component for TableComponent {
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        self.area = area;
         if let Some(fields) = self.fields.get(&self.selected_tab) {
             let rows: Vec<Row> = fields
                 .iter()
@@ -208,14 +215,21 @@ impl Component for TableComponent {
                 &mut self.table_state,
             );
         } else {
-            let empty_paragrah =
-                Paragraph::new("No fields").block(themed_block(None, self.focus.get()));
-            frame.render_widget(empty_paragrah, area);
+            frame.render_widget(
+                Paragraph::new("No fields").block(themed_block(None, self.focus.get())),
+                area,
+            );
         }
         Ok(())
     }
 
     fn update(&mut self, action: Action) -> ActionResult {
+        // On render we check for new config_tab and update.
+        if action == Action::Render
+            && let Ok(config) = self.on_change.try_recv()
+        {
+            self.selected_tab = config;
+        }
         if !self.focus.get() {
             return ActionResult::Ignored;
         }
@@ -268,7 +282,6 @@ impl Component for TableComponent {
                 }
                 KeyCode::Char(c) => {
                     self.input_buffer.push(c);
-                    info!("Pushing {:?}", self.input_buffer);
                 }
                 KeyCode::Backspace => {
                     self.input_buffer.pop();
@@ -279,6 +292,19 @@ impl Component for TableComponent {
         } else {
             KeyEventResult::Ignored
         }
+    }
+
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        if !self.area.contains(Position {
+            x: mouse.column,
+            y: mouse.row,
+        }) {
+            return Ok(None);
+        }
+        if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+            return Ok(Some(Action::FocusReq(self.focus.widget_id())));
+        }
+        Ok(None)
     }
 }
 impl HasFocus for TableComponent {
@@ -291,6 +317,6 @@ impl HasFocus for TableComponent {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 }
