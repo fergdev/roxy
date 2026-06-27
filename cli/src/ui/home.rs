@@ -10,7 +10,7 @@ use super::{
     flow::{details::FlowDetails, list::FlowList},
     fps_counter::FpsCounter,
     framework::{
-        component::{ActionResult, Component, KeyEventResult},
+        component::{ActionResult, Component},
         notify::Notifier,
     },
     log::{LogLine, LogViewer},
@@ -19,8 +19,7 @@ use super::{
 };
 
 use color_eyre::Result;
-use crossterm::event::{KeyEvent, MouseEvent};
-use rat_focus::{FocusFlag, HasFocus};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
 use roxy_proxy::flow::FlowStore;
 
@@ -69,7 +68,7 @@ impl HomeComponent {
 }
 
 impl HasFocus for HomeComponent {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         let tag = builder.start(self);
 
         if let Some(active_popup) = self.active_popup {
@@ -127,10 +126,10 @@ pub enum ActivePopup {
 impl Component for HomeComponent {
     fn handle_tui_event(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
         if let TuiEvent::Tick = tui_event {
-            if self.flow_store.flows.is_empty() {
-                self.active_view = ActiveView::Splash;
+            self.active_view = if self.flow_store.flows.is_empty() {
+                ActiveView::Splash
             } else {
-                self.active_view = ActiveView::FlowList;
+                ActiveView::FlowList
             }
         }
         Ok(None)
@@ -195,60 +194,20 @@ impl Component for HomeComponent {
         Ok(())
     }
 
-    fn handle_key_event(&mut self, key: &KeyEvent) -> KeyEventResult {
-        let res = match self.active_popup {
-            Some(ActivePopup::ConfigEditor) => self.config_editor.handle_key_event(key),
-            Some(ActivePopup::QuitPopup) => self.quit_popup.handle_key_event(key),
-            Some(ActivePopup::FlowDetails) => self.flow_details.handle_key_event(key),
-            Some(ActivePopup::LogViewer) => self.log_viewer.handle_key_event(key),
-            _ => KeyEventResult::Ignored,
-        };
-
-        match res {
-            KeyEventResult::Consumed => return res,
-            KeyEventResult::Action(_) => return res,
-            _ => {}
-        };
-        let res = match self.active_view {
-            ActiveView::Splash => self.splash.handle_key_event(key),
-            ActiveView::FlowList => self.flow_list.handle_key_event(key),
-        };
-        match res {
-            KeyEventResult::Consumed => return res,
-            KeyEventResult::Action(_) => return res,
-            _ => {}
-        };
-        KeyEventResult::Ignored
-    }
-
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
-        let res = match self.active_popup {
-            Some(ActivePopup::ConfigEditor) => self.config_editor.handle_mouse_event(mouse)?,
-            Some(ActivePopup::QuitPopup) => self.quit_popup.handle_mouse_event(mouse)?,
-            Some(ActivePopup::FlowDetails) => self.flow_details.handle_mouse_event(mouse)?,
-            Some(ActivePopup::LogViewer) => self.log_viewer.handle_mouse_event(mouse)?,
-            None => None,
-        };
-
-        if res.is_some() {
-            return Ok(res);
+    fn children(&mut self) -> Vec<&mut dyn Component> {
+        let mut children: Vec<&mut dyn Component> = vec![];
+        match self.active_popup {
+            Some(ActivePopup::ConfigEditor) => children.push(&mut self.config_editor),
+            Some(ActivePopup::QuitPopup) => children.push(&mut self.quit_popup),
+            Some(ActivePopup::FlowDetails) => children.push(&mut self.flow_details),
+            Some(ActivePopup::LogViewer) => children.push(&mut self.log_viewer),
+            None => {}
         }
 
-        let res = match self.active_view {
-            ActiveView::Splash => self.splash.handle_mouse_event(mouse)?,
-            ActiveView::FlowList => self.flow_list.handle_mouse_event(mouse)?,
-        };
-
-        Ok(res)
-    }
-
-    fn children(&mut self) -> Vec<&mut dyn Component> {
-        vec![
-            &mut self.splash,
-            &mut self.config_editor,
-            &mut self.flow_list,
-            &mut self.flow_details,
-            &mut self.log_viewer,
-        ]
+        match self.active_view {
+            ActiveView::Splash => children.push(&mut self.splash),
+            ActiveView::FlowList => children.push(&mut self.flow_list),
+        }
+        children
     }
 }

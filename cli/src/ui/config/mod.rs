@@ -91,7 +91,7 @@ impl HasFocus for ConfigEditor {
         self.area
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 }

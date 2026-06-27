@@ -1,5 +1,5 @@
 use color_eyre::eyre::Result;
-use rat_focus::HasFocus;
+use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     text::Span,
@@ -23,7 +23,7 @@ struct UiState {
 }
 
 pub struct FlowDetailsRequest {
-    focus: rat_focus::FocusFlag,
+    focus: FocusFlag,
     ui_state: watch::Receiver<UiState>,
     line_component: LineComponent,
     headers: FlowDetailsHeaders,
@@ -40,7 +40,7 @@ impl FlowDetailsRequest {
         let body = FlowDetailsBody::new(body_rx);
 
         let this = Self {
-            focus: rat_focus::FocusFlag::new().with_name("FlowRequest"),
+            focus: FocusFlag::new().with_name("FlowRequest"),
             line_component: LineComponent::new("ResponseLine"),
             ui_state: ui_rx,
             headers: flow_headers,
@@ -96,18 +96,14 @@ impl HasFocus for FlowDetailsRequest {
         Rect::default()
     }
 
-    fn focus(&self) -> rat_focus::FocusFlag {
+    fn focus(&self) -> FocusFlag {
         self.focus.clone()
     }
 }
 
 impl Component for FlowDetailsRequest {
     fn children(&mut self) -> Vec<&mut dyn Component> {
-        vec![
-            // &mut self.line_component,
-            &mut self.headers,
-            &mut self.body,
-        ]
+        vec![&mut self.line_component, &mut self.headers, &mut self.body]
     }
 
     fn render(&mut self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) -> Result<()> {

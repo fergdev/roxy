@@ -22,6 +22,12 @@ pub trait Component {
     fn children(&mut self) -> Vec<&mut dyn Component> {
         vec![]
     }
+    fn area(&self) -> Rect {
+        Rect::default()
+    }
+    fn visible(&self) -> bool {
+        self.area() != Rect::default()
+    }
     /// Handle tui events.
     fn handle_tui_event(&mut self, _tui_event: TuiEvent) -> Result<Option<Action>> {
         Ok(None)
@@ -32,7 +38,15 @@ pub trait Component {
                 return Ok(Some(action));
             }
         }
-        self.handle_tui_event(tui_event)
+        match tui_event {
+            TuiEvent::Key(key) => match self.handle_key_event(&key) {
+                KeyEventResult::Consumed => Ok(None),
+                KeyEventResult::Action(action) => Ok(Some(action)),
+                KeyEventResult::Ignored => Ok(None),
+            },
+            TuiEvent::Mouse(mouse) => self.handle_mouse_event(mouse),
+            _ => self.handle_tui_event(tui_event),
+        }
     }
 
     /// Handle crossterm key events.

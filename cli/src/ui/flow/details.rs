@@ -218,13 +218,22 @@ async fn update_flow_view(
 
 struct TabComponent {
     focus: FocusFlag,
+    area: Rect,
 }
 
 impl TabComponent {
     pub fn new() -> Self {
         Self {
             focus: FocusFlag::new().with_name("FlowDetailsTabs"),
+            area: Rect::default(),
         }
+    }
+}
+
+impl Component for TabComponent {
+    fn render(&mut self, _frame: &mut ratatui::Frame<'_>, area: Rect) -> Result<()> {
+        self.area = area;
+        Ok(())
     }
 }
 
@@ -246,23 +255,14 @@ impl HasFocus for FlowDetails {
     fn build(&self, builder: &mut rat_focus::FocusBuilder) {
         let tag = builder.start(self);
         builder.widget(&self.tabs);
-        match self.tab {
-            Tab::Request => {
-                builder.widget(&self.request);
-            }
-            Tab::Response => {
-                builder.widget(&self.response);
-            }
-            Tab::Certs => {
-                builder.widget(&self.certs);
-            }
-            Tab::Timing => {
-                builder.widget(&self.timing);
-            }
-            Tab::Ws => {
-                builder.widget(&self.ws);
-            }
-        }
+        let widget: &dyn HasFocus = match self.tab {
+            Tab::Request => &self.request,
+            Tab::Response => &self.response,
+            Tab::Certs => &self.certs,
+            Tab::Timing => &self.timing,
+            Tab::Ws => &self.ws,
+        };
+        builder.widget(widget);
         builder.end(tag);
     }
 
@@ -278,7 +278,7 @@ impl HasFocus for FlowDetails {
 impl Component for FlowDetails {
     fn children(&mut self) -> Vec<&mut dyn Component> {
         vec![
-            // &mut self.tabs,
+            &mut self.tabs,
             &mut self.request,
             &mut self.response,
             &mut self.certs,
@@ -323,23 +323,14 @@ impl Component for FlowDetails {
         );
         frame.render_widget(tabs, layout[0]);
 
-        match self.tab {
-            Tab::Request => {
-                self.request.render(frame, layout[1])?;
-            }
-            Tab::Response => {
-                self.response.render(frame, layout[1])?;
-            }
-            Tab::Certs => {
-                self.certs.render(frame, layout[1])?;
-            }
-            Tab::Timing => {
-                self.timing.render(frame, layout[1])?;
-            }
-            Tab::Ws => {
-                self.ws.render(frame, layout[1])?;
-            }
-        }
+        let component: &mut dyn Component = match self.tab {
+            Tab::Request => &mut self.request,
+            Tab::Response => &mut self.response,
+            Tab::Certs => &mut self.certs,
+            Tab::Timing => &mut self.timing,
+            Tab::Ws => &mut self.ws,
+        };
+        component.render(frame, layout[1])?;
 
         Ok(())
     }

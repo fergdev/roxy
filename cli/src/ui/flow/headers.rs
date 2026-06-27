@@ -87,13 +87,13 @@ impl Component for FlowDetailsHeaders {
             Some(headers) => {
                 let header_style = Style::default().bold();
                 let mut rows = vec![];
-                for (k, v) in headers {
-                    let value = v.to_str().unwrap_or("error").to_string();
+                for (header_key, header_value) in headers {
+                    let header_value_str = header_value.to_str().unwrap_or("error").to_string();
 
                     rows.push(
                         Row::new(vec![
-                            Cell::from(Span::styled(k.clone().to_string(), header_style)),
-                            Cell::from(value),
+                            Cell::from(Span::styled(header_key.to_string(), header_style)),
+                            Cell::from(header_value_str),
                         ])
                         .height(1_u16),
                     );

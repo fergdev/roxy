@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::Result;
-use crossterm::event::MouseEvent;
+use crossterm::event::{KeyEvent, MouseEvent};
 use rat_focus::{Focus, FocusBuilder};
 use ratatui::layout::Rect;
 use roxy_proxy::flow::FlowStore;
@@ -133,7 +133,7 @@ impl App {
         Ok(())
     }
 
-    fn dispatch_key_event(&mut self, key_event: crossterm::event::KeyEvent) -> Result<()> {
+    fn dispatch_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
         // Send raw key events to the component heighrarchy first
         // so they can intercept and react to them before the key_handler
         match self.home.handle_key_event(&key_event) {

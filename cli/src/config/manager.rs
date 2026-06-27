@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 use tokio::sync::watch;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, trace};
 
 use color_eyre::Result;
 
@@ -18,17 +18,7 @@ pub struct ConfigManager {
 impl ConfigManager {
     pub fn new() -> Result<Self, RoxyConfigError> {
         let args = RoxyArgs::parse();
-        info!("Here");
         let mut config = RoxyConfig::new()?;
-
-        info!("Here");
-
-        info!(
-            "DEBUGPRINT[36]: {}:{} (after info!(Here);)",
-            file!(),
-            line!()
-        );
-
         if let Some(port) = args.port {
             config.app.proxy.port = port;
         }
@@ -42,9 +32,7 @@ impl ConfigManager {
         }
 
         let (tx, rx) = watch::channel(config);
-
         let manager = Self { tx, rx };
-
         manager.spawn_watcher();
 
         Ok(manager)
