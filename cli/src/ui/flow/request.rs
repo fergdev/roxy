@@ -1,6 +1,7 @@
 use color_eyre::eyre::Result;
-use rat_focus::{FocusFlag, HasFocus};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     text::Span,
     widgets::{Clear, Paragraph, Wrap},
@@ -86,7 +87,7 @@ impl FlowDetailsRequest {
 }
 
 impl HasFocus for FlowDetailsRequest {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(&self.line_component);
         builder.leaf_widget(&self.headers);
         builder.leaf_widget(&self.body);
@@ -106,7 +107,7 @@ impl Component for FlowDetailsRequest {
         vec![&mut self.line_component, &mut self.headers, &mut self.body]
     }
 
-    fn render(&mut self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         let data = self.ui_state.borrow_and_update();
 
         let para = Paragraph::new(Span::from(&data.line_data))

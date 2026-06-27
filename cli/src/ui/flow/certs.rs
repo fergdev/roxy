@@ -481,7 +481,7 @@ impl FlowDetailsCerts {
         f.render_widget(paragraph, area);
     }
 
-    fn render_client_tls(&mut self, f: &mut Frame<'_>, area: Rect) {
+    fn render_client_tls(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let client_tls = &self.state.borrow().client.tls;
         let mut lines = vec![];
 
@@ -537,7 +537,7 @@ impl FlowDetailsCerts {
             .block(themed_block(None, self.focus.get()))
             .wrap(Wrap { trim: false })
             .scroll((self.scroll_index as u16, 0));
-        f.render_widget(paragraph, area);
+        frame.render_widget(paragraph, area);
     }
 
     fn render_server(&mut self, frame: &mut Frame<'_>, area: Rect) {
@@ -545,7 +545,7 @@ impl FlowDetailsCerts {
         let tab_titles: Vec<Line> = ServerTab::all().iter().map(|v| v.title().into()).collect();
 
         let tabs = themed_tabs(
-            None,
+            Some("Server"),
             tab_titles,
             self.server_tab.index(),
             self.server_tab_cmp.focus.get(),
@@ -559,7 +559,7 @@ impl FlowDetailsCerts {
         }
     }
 
-    fn render_resolve_client_cert(&mut self, f: &mut Frame<'_>, area: Rect) {
+    fn render_resolve_client_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let certs = &self.state.borrow().server.resolve_client_cert;
         let mut lines = vec![];
 
@@ -600,7 +600,7 @@ impl FlowDetailsCerts {
             .block(themed_block(None, self.focus.get()))
             .wrap(Wrap { trim: false })
             .scroll((self.scroll_index as u16, 0));
-        f.render_widget(paragraph, area);
+        frame.render_widget(paragraph, area);
     }
 
     fn render_server_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {
@@ -639,7 +639,7 @@ impl FlowDetailsCerts {
         frame.render_widget(paragraph, area);
     }
 
-    fn render_server_tls(&mut self, f: &mut Frame<'_>, area: Rect) {
+    fn render_server_tls(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let tls = &self.state.borrow().server.tls;
         let mut lines = vec![];
 
@@ -692,7 +692,7 @@ impl FlowDetailsCerts {
             .block(themed_block(None, self.focus.get()))
             .wrap(Wrap { trim: false })
             .scroll((self.scroll_index as u16, 0));
-        f.render_widget(paragraph, area);
+        frame.render_widget(paragraph, area);
     }
 }
 
@@ -840,7 +840,7 @@ impl Component for FlowDetailsCerts {
         let tab_titles: Vec<Line> = RootTab::all().iter().map(|v| v.title().into()).collect();
 
         let tabs = themed_tabs(
-            None,
+            Some("Certs"),
             tab_titles,
             self.root_tab.index(),
             self.tab.focus.get(),

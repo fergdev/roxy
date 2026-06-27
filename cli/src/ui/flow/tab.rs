@@ -37,7 +37,7 @@ impl HasFocus for TabComponent {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 }
 

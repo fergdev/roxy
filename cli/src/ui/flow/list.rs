@@ -142,29 +142,14 @@ impl FlowList {
     }
 
     fn next_row(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                let len = self.ui_rx.borrow().flows.len();
-                if i + 1 < len { i + 1 } else { i }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
+        self.state.select_next();
+        let i = self.state.selected().unwrap_or(0);
         self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT);
     }
 
     fn previous_row(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i > 0 {
-                    i - 1
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
+        self.state.select_previous();
+        let i = self.state.selected().unwrap_or(0);
         self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT);
     }
 
@@ -207,7 +192,7 @@ impl Component for FlowList {
         }
     }
 
-    fn render(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         let guard = self.ui_rx.borrow_and_update();
 
         let mut rows = vec![];
@@ -216,7 +201,7 @@ impl Component for FlowList {
                 Some(resp) => resp.code.to_string(),
                 None => "-".to_string(),
             };
-            let c = Line::from(vec![
+            let line = Line::from(vec![
                 Span::styled(
                     flow.method.to_string(),
                     Style::default().fg(method_color(&flow.method)),
@@ -225,17 +210,15 @@ impl Component for FlowList {
                 Span::styled(format!(" {status} "), Style::default()),
                 Span::styled(&flow.uri, Style::default().fg(Color::Cyan)),
             ]);
-            rows.push(Row::new(vec![Cell::new(c)]));
+            rows.push(Row::new(vec![Cell::new(line)]));
         }
 
-        let widths = [Constraint::Fill(1)];
-
-        f.render_stateful_widget(
-            themed_table(rows, widths, Some("Flows"), self.focus.get()),
+        frame.render_stateful_widget(
+            themed_table(rows, [Constraint::Fill(1)], Some("Flows"), self.focus.get()),
             area,
             &mut self.state,
         );
-        f.render_stateful_widget(
+        frame.render_stateful_widget(
             Scrollbar::default().orientation(ScrollbarOrientation::VerticalRight),
             area.inner(Margin::default()),
             &mut self.scroll_state,

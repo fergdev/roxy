@@ -53,7 +53,7 @@ pub fn themed_block(title: Option<&str>, has_focus: bool) -> Block<'_> {
         block = block
             .title(title)
             .title_style(title_style)
-            .title_alignment(Alignment::Center)
+            .title_alignment(Alignment::Left)
     }
     block
 }

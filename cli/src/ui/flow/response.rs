@@ -1,5 +1,6 @@
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     text::Span,
     widgets::{Paragraph, Wrap},
@@ -100,21 +101,13 @@ impl HasFocus for FlowDetailsResponse {
 
 impl Component for FlowDetailsResponse {
     fn children(&mut self) -> Vec<&mut dyn Component> {
-        vec![
-            // &mut self.line_component,
-            &mut self.headers,
-            &mut self.body,
-        ]
+        vec![&mut self.line_component, &mut self.headers, &mut self.body]
     }
 
-    fn render(
-        &mut self,
-        f: &mut ratatui::Frame,
-        area: ratatui::prelude::Rect,
-    ) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
         let state = self.ui_state.borrow_and_update();
 
-        let para = Paragraph::new(Span::from(state.data.clone()))
+        let paragraph = Paragraph::new(Span::from(state.data.clone()))
             .block(themed_block(Some("Line"), self.line_component.focus.get()))
             .wrap(Wrap { trim: true });
 
@@ -127,10 +120,10 @@ impl Component for FlowDetailsResponse {
             ])
             .split(area);
 
-        f.render_widget(para, chunks[0]);
+        frame.render_widget(paragraph, chunks[0]);
 
-        self.headers.render(f, chunks[1])?;
-        self.body.render(f, chunks[2])?;
+        self.headers.render(frame, chunks[1])?;
+        self.body.render(frame, chunks[2])?;
         Ok(())
     }
 }
