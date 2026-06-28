@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use color_eyre::Result;
-use rat_focus::{FocusFlag, HasFocus};
+use crossterm::event::{MouseEvent, MouseEventKind};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -9,7 +10,7 @@ use ratatui::{
 };
 use roxy_shared::content::ContentType;
 use tokio::sync::{mpsc, watch};
-use tracing::debug;
+use tracing::{debug, info};
 use x509_parser::nom::HexDisplay;
 
 use std::io::Cursor;
@@ -36,8 +37,8 @@ use crate::{
 };
 
 fn render_plain_text(body: &Bytes) -> Vec<Line<'static>> {
-    let utf = String::from_utf8_lossy(body);
-    utf.lines()
+    String::from_utf8_lossy(body)
+        .lines()
         .map(|line| Line::from(line.to_string()))
         .collect::<Vec<Line>>()
 }
@@ -111,8 +112,7 @@ impl FlowDetailsBody {
                         ContentType::Bmp => Body::Image(image_cache.render_image(&body)),
                         ContentType::OctetStream => {
                             let hex = body.to_hex(8);
-                            let line = vec![hex.into()];
-                            Body::Text(line)
+                            Body::Text(vec![hex.into()])
                         }
                         ContentType::Text => Body::Text(render_plain_text(&body)),
                     },
@@ -120,8 +120,7 @@ impl FlowDetailsBody {
                         if body.is_empty() {
                             Body::None
                         } else {
-                            let lines = render_plain_text(&body);
-                            Body::Text(lines)
+                            Body::Text(render_plain_text(&body))
                         }
                     }
                 };
@@ -142,7 +141,7 @@ impl FlowDetailsBody {
 }
 
 impl HasFocus for FlowDetailsBody {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
 
@@ -151,11 +150,43 @@ impl HasFocus for FlowDetailsBody {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 }
 
 impl Component for FlowDetailsBody {
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        info!(
+            "DEBUGPRINT[93]: {}:{}: mouse={:#?}",
+            file!(),
+            line!(),
+            mouse
+        );
+
+        if !self.focus.get() {
+            info!("DEBUGPRINT[95]: {}:{}: self={:#?}", file!(), line!(), false);
+            return Ok(Some(Action::FocusReq(self.focus.id())));
+        }
+
+        info!(
+            "DEBUGPRINT[94]: {}:{} (after return Ok(Some(Action::FocusReq(self.foc…)",
+            file!(),
+            line!()
+        );
+
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.scroll = self.scroll.saturating_sub(1);
+            }
+            MouseEventKind::ScrollDown => {
+                self.scroll = self.scroll.saturating_add(1);
+            }
+            _ => {
+                // nothing
+            }
+        }
+        Ok(None)
+    }
     fn handle_action(&mut self, action: Action) -> ActionResult {
         if self.focus.get() {
             match action {
@@ -240,5 +271,9 @@ impl Component for FlowDetailsBody {
         }
 
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }

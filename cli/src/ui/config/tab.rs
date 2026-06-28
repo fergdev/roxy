@@ -172,4 +172,8 @@ impl Component for TabComponent {
         frame.render_widget(tabs, area);
         Ok(())
     }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
 }

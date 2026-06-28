@@ -799,4 +799,8 @@ impl Component for FlowDetailsCerts {
         }
         Ok(())
     }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
 }

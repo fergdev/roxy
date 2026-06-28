@@ -22,12 +22,14 @@ impl ConfigManager {
         if let Some(port) = args.port {
             config.app.proxy.port = port;
         }
-        if let Some(path) = args.script {
-            let pg = PathBuf::from(path);
-            if pg.is_file() {
-                config.app.proxy.script_path = Some(pg);
+
+        // Overwrite file preferences with command line arguments if provided
+        if let Some(script_path) = args.script {
+            let script_path_buf = PathBuf::from(script_path);
+            if script_path_buf.is_file() {
+                config.app.proxy.script_path = Some(script_path_buf);
             } else {
-                notify_error!("Invalid script_path: {:?}", pg);
+                notify_error!("Invalid script_path: {:?}", script_path_buf);
             }
         }
 

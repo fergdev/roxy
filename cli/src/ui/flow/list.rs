@@ -48,6 +48,7 @@ pub struct FlowList {
     ui_rx: watch::Receiver<UiState>,
     shutdown_tx: watch::Sender<()>,
     listener_handle: Option<JoinHandle<()>>,
+    area: Rect,
 }
 
 impl HasFocus for FlowList {
@@ -56,7 +57,7 @@ impl HasFocus for FlowList {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 
     fn focus(&self) -> rat_focus::FocusFlag {
@@ -78,6 +79,7 @@ impl FlowList {
             ui_rx,
             listener_handle: None,
             shutdown_tx,
+            area: Rect::default(),
         };
 
         let handle = instance.start_listener(ui_tx, shutdown_rx);
@@ -221,6 +223,10 @@ impl Component for FlowList {
         );
         render_vertical_scrollbar(frame, area, &mut self.scroll_state);
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }
 

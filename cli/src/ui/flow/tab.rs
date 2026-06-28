@@ -60,6 +60,10 @@ impl Component for LineComponent {
         self.area = area;
         Ok(())
     }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
 }
 
 impl HasFocus for LineComponent {
@@ -72,6 +76,6 @@ impl HasFocus for LineComponent {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 }

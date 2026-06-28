@@ -15,6 +15,8 @@ use super::framework::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FpsCounter {
+    area: Rect,
+
     last_tick_update: Instant,
     tick_count: u32,
     ticks_per_second: f64,
@@ -35,6 +37,7 @@ impl Default for FpsCounter {
 impl FpsCounter {
     pub fn new() -> Self {
         Self {
+            area: Rect::default(),
             last_tick_update: Instant::now(),
             tick_count: 0,
             ticks_per_second: 0.0,
@@ -90,6 +93,7 @@ impl Component for FpsCounter {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        self.area = area;
         if !self.visible {
             return Ok(());
         }
@@ -106,5 +110,9 @@ impl Component for FpsCounter {
 
         frame.render_widget(widget, horizontal[1]);
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }

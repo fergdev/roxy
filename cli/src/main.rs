@@ -20,6 +20,7 @@ use roxy_proxy::{
 };
 use roxy_shared::tls::TlsConfig;
 use tokio::sync::mpsc;
+use tracing::error;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {

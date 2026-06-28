@@ -79,6 +79,7 @@ pub struct LogViewer {
     logs: Arc<Mutex<VecDeque<LogLine>>>,
     v_scroll_offset: usize,
     h_scroll_offset: usize,
+    area: Rect,
 }
 
 impl HasFocus for LogViewer {
@@ -102,6 +103,7 @@ impl LogViewer {
             logs,
             v_scroll_offset: 0,
             h_scroll_offset: 0,
+            area: Rect::default(),
         }
     }
 }
@@ -186,5 +188,9 @@ impl Component for LogViewer {
         }
 
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }

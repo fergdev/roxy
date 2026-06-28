@@ -28,6 +28,7 @@ pub struct FlowDetailsResponse {
     line_component: LineComponent,
     headers: FlowDetailsHeaders,
     body: FlowDetailsBody,
+    area: Rect,
 }
 
 impl FlowDetailsResponse {
@@ -44,6 +45,7 @@ impl FlowDetailsResponse {
             ui_state: ui_rx,
             line_component: LineComponent::new("ResponseLine"),
             headers: flow_headers,
+            area: Rect::default(),
             body,
         };
 
@@ -85,7 +87,7 @@ impl HasFocus for FlowDetailsResponse {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 
     fn focus(&self) -> FocusFlag {
@@ -99,6 +101,7 @@ impl Component for FlowDetailsResponse {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+        self.area = area;
         let state = self.ui_state.borrow_and_update();
 
         let paragraph = Paragraph::new(Span::from(state.data.clone()))
@@ -119,5 +122,9 @@ impl Component for FlowDetailsResponse {
         self.headers.render(frame, chunks[1])?;
         self.body.render(frame, chunks[2])?;
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }

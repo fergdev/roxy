@@ -4,7 +4,7 @@ use ratatui::{
     layout::Constraint,
     prelude::Rect,
     text::{Line, Span},
-    widgets::{Cell, Paragraph, Row, Wrap},
+    widgets::{Cell, Paragraph, Row, TableState, Wrap},
 };
 use roxy_proxy::flow::WsMessage;
 use tokio::sync::{
@@ -21,7 +21,8 @@ use crate::ui::framework::{
 pub struct FlowDetailsWs {
     state: watch::Receiver<UiState>,
     focus: FocusFlag,
-    table_state: ratatui::widgets::TableState,
+    table_state: TableState,
+    area: Rect,
 }
 
 #[derive(Default, Clone)]
@@ -51,7 +52,8 @@ impl FlowDetailsWs {
         Self {
             state: ui_rx,
             focus: FocusFlag::new().with_name("FlowWsDetails"),
-            table_state: ratatui::widgets::TableState::default(),
+            table_state: TableState::default(),
+            area: Rect::default(),
         }
     }
 }
@@ -72,6 +74,7 @@ impl HasFocus for FlowDetailsWs {
 
 impl Component for FlowDetailsWs {
     fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+        self.area = area;
         let data = self.state.borrow_and_update().data.clone();
 
         if data.is_empty() {
@@ -97,5 +100,9 @@ impl Component for FlowDetailsWs {
         }
 
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }

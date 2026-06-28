@@ -338,6 +338,19 @@ impl Component for TableComponent {
         if !self.area.contains(position) {
             return Ok(None);
         }
+        if !self.focus.get() {
+            return Ok(Some(Action::FocusReq(self.focus.widget_id())));
+        }
+
+        if mouse.kind == MouseEventKind::ScrollDown {
+            self.table_state.scroll_down_by(1);
+            return Ok(None);
+        }
+        if mouse.kind == MouseEventKind::ScrollUp {
+            self.table_state.scroll_up_by(1);
+            return Ok(None);
+        }
+
         // The actual area for the table consider margins
         let table_area = self.area.inner(Margin {
             vertical: 1,
@@ -345,21 +358,22 @@ impl Component for TableComponent {
         });
 
         if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-            if self.focus.get() {
-                // Calculate the field to select based on the mouse click position and the current
-                // scroll offset.
-                let click_column = mouse.row - table_area.top();
-                let scroll_offset = self.table_state.offset();
-                let scroll_target = scroll_offset.saturating_add(click_column as usize);
-                self.table_state.select(Some(scroll_target));
-                return Ok(None);
-            } else {
-                return Ok(Some(Action::FocusReq(self.focus.widget_id())));
-            }
+            // Calculate the field to select based on the mouse click position and the current
+            // scroll offset.
+            let click_column = mouse.row - table_area.top();
+            let scroll_offset = self.table_state.offset();
+            let scroll_target = scroll_offset.saturating_add(click_column as usize);
+            self.table_state.select(Some(scroll_target));
+            return Ok(None);
         }
         Ok(None)
     }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
 }
+
 impl HasFocus for TableComponent {
     fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(&self.focus);

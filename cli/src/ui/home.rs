@@ -37,6 +37,7 @@ pub struct HomeComponent {
     fps_counter: FpsCounter,
     notifier: Notifier,
     config_manager: ConfigManager,
+    area: Rect,
 }
 
 impl HomeComponent {
@@ -63,6 +64,7 @@ impl HomeComponent {
             fps_counter: FpsCounter::new(),
             notifier,
             config_manager,
+            area: Rect::default(),
         }
     }
 }
@@ -210,5 +212,9 @@ impl Component for HomeComponent {
         }
         children.push(&mut self.fps_counter);
         children
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }

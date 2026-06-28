@@ -6,9 +6,9 @@ pub mod manager;
 use config::ConfigError;
 use std::env;
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use color_eyre::Result;
 use directories::ProjectDirs;
@@ -85,7 +85,7 @@ impl Error for RoxyConfigError {
 }
 
 impl Display for RoxyConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
     }
 }
@@ -126,13 +126,14 @@ impl RoxyConfig {
             error!("No configuration file found. Application may not behave as expected");
         }
 
-        info!("deserialize");
-        let cfg: Self = builder.build()?.try_deserialize().map_err(|e| {
+        let mut cfg: Self = builder.build()?.try_deserialize().map_err(|e| {
             error!("Failed to deserialize config: {}", e);
             ConfigError::Message(format!("Failed to deserialize config: {e}"))
         })?;
 
-        info!("Ok config");
+        cfg.app.data_dir = data_dir;
+        cfg.app.config_dir = config_dir;
+
         Ok(cfg)
     }
 }

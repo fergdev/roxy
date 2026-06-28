@@ -1,6 +1,6 @@
 use color_eyre::Result;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
-use tracing::debug;
+use tracing::error;
 
 use crate::{
     action::{Action, KeyInputMode},
@@ -105,6 +105,11 @@ fn gen_theme(cfg: &RoxyConfig) -> Vec<EditableConfigField> {
             is_editing: false,
         },
         EditableConfigField {
+            key: "surface_hl".into(),
+            value: ConfigValue::Color(cfg.theme.colors.surface_hl),
+            is_editing: false,
+        },
+        EditableConfigField {
             key: "on_surface".into(),
             value: ConfigValue::Color(cfg.theme.colors.on_surface),
             is_editing: false,
@@ -127,6 +132,11 @@ fn gen_theme(cfg: &RoxyConfig) -> Vec<EditableConfigField> {
         EditableConfigField {
             key: "outline_unfocused".into(),
             value: ConfigValue::Color(cfg.theme.colors.outline_unfocused),
+            is_editing: false,
+        },
+        EditableConfigField {
+            key: "success".into(),
+            value: ConfigValue::Color(cfg.theme.colors.success),
             is_editing: false,
         },
         EditableConfigField {
@@ -162,15 +172,12 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
 
     fn try_from(map: HashMap<ConfigTab, Vec<EditableConfigField>>) -> Result<Self, Self::Error> {
         let mut config = RoxyConfig::default();
-        debug!("Try from map");
-
         for (tab, fields) in map {
             match tab {
                 ConfigTab::App => {
                     for field in fields {
                         match field.key.as_str() {
                             "confirm_quit" => {
-                                debug!("Writing confirm quit");
                                 if let ConfigValue::Bool(p) = field.value {
                                     config.app.confirm_quit = p;
                                 }
@@ -185,7 +192,9 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                                     config.app.config_dir = p;
                                 }
                             }
-                            _ => {}
+                            _ => {
+                                error!("Invalid field key for App tab: {}", field.key);
+                            }
                         }
                     }
                 }
@@ -203,7 +212,9 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                                     config.app.proxy.ca_cert_path = Some(p);
                                 }
                             }
-                            _ => {}
+                            _ => {
+                                error!("Invalid field key for Proxy tab: {}", field.key);
+                            }
                         }
                     }
                 }
@@ -212,7 +223,10 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                     for field in fields {
                         let color = match field.value {
                             ConfigValue::Color(c) => c,
-                            _ => continue,
+                            _ => {
+                                error!("Invalid value type for Theme tab: {:?}", field.value);
+                                continue;
+                            }
                         };
 
                         match field.key.as_str() {
@@ -221,18 +235,21 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                             "secondary" => config.theme.colors.secondary = color,
                             "on_secondary" => config.theme.colors.on_secondary = color,
                             "surface" => config.theme.colors.surface = color,
-                            "surface_hl" => config.theme.colors.surface = color,
+                            "surface_hl" => config.theme.colors.surface_hl = color,
                             "on_surface" => config.theme.colors.on_surface = color,
                             "background" => config.theme.colors.background = color,
                             "on_background" => config.theme.colors.on_background = color,
                             "outline" => config.theme.colors.outline = color,
+                            "outline_unfocused" => config.theme.colors.outline_unfocused = color,
                             "error" => config.theme.colors.error = color,
                             "success" => config.theme.colors.success = color,
                             "warn" => config.theme.colors.warn = color,
                             "info" => config.theme.colors.info = color,
                             "debug" => config.theme.colors.debug = color,
                             "trace" => config.theme.colors.trace = color,
-                            _ => {}
+                            _ => {
+                                error!("Invalid field key for Theme tab: {}", field.key);
+                            }
                         }
                     }
                 }
@@ -240,8 +257,8 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                 ConfigTab::KeyBinds => {
                     let mut map = HashMap::new();
                     for field in fields {
-                        if let ConfigValue::String(s) = field.value.clone()
-                            && let Ok(key_event) = parse_key_sequence(&s)
+                        if let ConfigValue::String(key_sequence) = field.value.clone()
+                            && let Ok(key_event) = parse_key_sequence(&key_sequence)
                         {
                             let action = Action::from_str(&field.key)
                                 .map_err(|e| format!("Bad action: {e}"))?;

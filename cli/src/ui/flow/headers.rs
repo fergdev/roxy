@@ -133,4 +133,8 @@ impl Component for FlowDetailsHeaders {
 
         Ok(())
     }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
 }

@@ -241,6 +241,10 @@ impl Component for TabComponent {
         self.area = area;
         Ok(())
     }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
 }
 
 impl HasFocus for TabComponent {
@@ -253,7 +257,7 @@ impl HasFocus for TabComponent {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 }
 
@@ -283,14 +287,16 @@ impl HasFocus for FlowDetails {
 
 impl Component for FlowDetails {
     fn children(&mut self) -> Vec<&mut dyn Component> {
-        vec![
-            &mut self.tabs,
-            &mut self.request,
-            &mut self.response,
-            &mut self.certs,
-            &mut self.timing,
-            &mut self.ws,
-        ]
+        let mut children: Vec<&mut dyn Component> = vec![&mut self.tabs];
+        let selected_child: &mut dyn Component = match self.tab {
+            Tab::Request => &mut self.request,
+            Tab::Response => &mut self.response,
+            Tab::Certs => &mut self.certs,
+            Tab::Timing => &mut self.timing,
+            Tab::Ws => &mut self.ws,
+        };
+        children.push(selected_child);
+        children
     }
     fn handle_action(&mut self, action: Action) -> ActionResult {
         if self.tabs.focus.get() {
@@ -347,6 +353,10 @@ impl Component for FlowDetails {
         component.render(frame, layout[1])?;
 
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }
 

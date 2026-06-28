@@ -29,6 +29,7 @@ pub struct FlowDetailsRequest {
     line_component: LineComponent,
     headers: FlowDetailsHeaders,
     body: FlowDetailsBody,
+    area: Rect,
 }
 
 impl FlowDetailsRequest {
@@ -46,6 +47,7 @@ impl FlowDetailsRequest {
             ui_state: ui_rx,
             headers: flow_headers,
             body,
+            area: Rect::default(),
         };
 
         tokio::spawn(async move {
@@ -85,7 +87,7 @@ impl HasFocus for FlowDetailsRequest {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 
     fn focus(&self) -> FocusFlag {
@@ -99,6 +101,7 @@ impl Component for FlowDetailsRequest {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        self.area = area;
         let data = self.ui_state.borrow_and_update();
 
         let para = Paragraph::new(Span::from(&data.line_data))
@@ -121,5 +124,9 @@ impl Component for FlowDetailsRequest {
         self.body.render(frame, chunks[2])?;
 
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }

@@ -78,6 +78,10 @@ impl Component for ConfigEditor {
 
         Ok(())
     }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
 }
 impl HasFocus for ConfigEditor {
     fn build(&self, builder: &mut FocusBuilder) {

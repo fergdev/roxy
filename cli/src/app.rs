@@ -2,18 +2,18 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::Result;
-use crossterm::event::{KeyEvent, MouseEvent};
 use rat_focus::{Focus, FocusBuilder};
 use ratatui::layout::Rect;
 use roxy_proxy::flow::FlowStore;
 use roxy_proxy::proxy::ProxyManager;
 use tokio::sync::mpsc;
+use tracing::debug;
 
 use crate::action::Action;
 use crate::config::manager::ConfigManager;
 use crate::key_handler::KeyHandler;
 use crate::tui::{Tui, TuiEvent};
-use crate::ui::framework::component::{ActionResult, Component, KeyEventResult};
+use crate::ui::framework::component::{ActionResult, Component};
 use crate::ui::framework::notify::Notifier;
 use crate::ui::framework::theme::set_theme;
 use crate::ui::home::HomeComponent;
@@ -96,12 +96,7 @@ impl App {
             TuiEvent::Resize(w, h) => {
                 self.handle_resize(tui, w, h)?;
             }
-            TuiEvent::Mouse(mouse_event) => {
-                self.dispatch_mouse_event(mouse_event)?;
-            }
-            TuiEvent::Key(key) => {
-                self.dispatch_key_event(key)?;
-            }
+            TuiEvent::Key(key) => self.key_handler.handle_key_event(key)?,
             _ => {}
         }
         if let Some(action) = self.home.dispatch_tui_events(event.clone())? {
@@ -122,6 +117,12 @@ impl App {
                     focus.prev();
                 }
                 Action::FocusReq(widget_id) => {
+                    debug!(
+                        "DEBUGPRINT[97]: {}:{}: widget_id={:#?}",
+                        file!(),
+                        line!(),
+                        widget_id
+                    );
                     focus.by_widget_id(widget_id);
                 }
                 _ => {}
@@ -129,28 +130,6 @@ impl App {
             if let ActionResult::Action(action) = self.home.dispatch_action(action.clone()) {
                 self.action_tx.send(action)?
             };
-        }
-        Ok(())
-    }
-
-    fn dispatch_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
-        // Send raw key events to the component heighrarchy first
-        // so they can intercept and react to them before the key_handler
-        match self.home.handle_key_event(&key_event) {
-            KeyEventResult::Consumed => {
-                return Ok(());
-            }
-            KeyEventResult::Ignored => {}
-            KeyEventResult::Action(action) => {
-                self.action_tx.send(action)?;
-            }
-        }
-        self.key_handler.handle_key_event(key_event)
-    }
-
-    fn dispatch_mouse_event(&mut self, mouse_event: MouseEvent) -> Result<()> {
-        if let Some(action) = self.home.handle_mouse_event(mouse_event)? {
-            self.action_tx.send(action)?;
         }
         Ok(())
     }

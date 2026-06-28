@@ -13,6 +13,7 @@ struct State {
 pub struct FlowTiming {
     state: watch::Receiver<State>,
     focus: FocusFlag,
+    area: Rect,
 }
 
 impl FlowTiming {
@@ -58,6 +59,7 @@ impl FlowTiming {
         Self {
             state: ui_rx,
             focus: FocusFlag::new().with_name("FlowTiming"),
+            area: Rect::default(),
         }
     }
 }
@@ -85,16 +87,21 @@ impl HasFocus for FlowTiming {
 }
 
 impl Component for FlowTiming {
-    fn render(&mut self, f: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+        self.area = area;
         let state = self.state.borrow();
         kv_paragraph(
             &state.lines,
-            f,
+            frame,
             area,
             Some("Timing"),
             self.focus.get(),
             (0, 0),
         );
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }

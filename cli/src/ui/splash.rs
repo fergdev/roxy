@@ -11,6 +11,7 @@ use super::framework::{component::Component, theme::with_theme};
 pub struct Splash {
     focus: FocusFlag,
     port: u16,
+    area: Rect,
 }
 
 impl Splash {
@@ -18,6 +19,7 @@ impl Splash {
         Self {
             port,
             focus: FocusFlag::new().with_name("Splash"),
+            area: Rect::default(),
         }
     }
 }
@@ -78,5 +80,9 @@ impl Component for Splash {
         frame.render_widget(desc, chunks[1]);
         frame.render_widget(addr, chunks[2]);
         Ok(())
+    }
+
+    fn area(&self) -> Rect {
+        self.area
     }
 }
