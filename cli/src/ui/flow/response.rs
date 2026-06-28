@@ -51,28 +51,22 @@ impl FlowDetailsResponse {
             async move {
                 while let Some(req) = req_rx.recv().await {
                     if let Some(resp) = req {
-                        ui_tx
-                            .send(UiState {
-                                data: resp.request_line(),
-                            })
-                            .unwrap_or_else(|e| {
-                                debug!("Failed to send UI state update: {}", e);
-                            });
+                        if let Err(error) = ui_tx.send(UiState {
+                            data: resp.request_line(),
+                        }) {
+                            debug!("Failed to send UI state update: {}", error);
+                        };
 
-                        headers_tx
-                            .send(resp.headers.clone())
-                            .await
-                            .unwrap_or_else(|e| {
-                                debug!("Failed to send headers: {}", e);
-                            });
+                        if let Err(error) = headers_tx.send(resp.headers.clone()).await {
+                            debug!("Failed to send headers: {}", error);
+                        }
 
-                        let content_type = content_type(&resp.headers);
-                        body_tx
-                            .send((content_type, resp.body.clone()))
+                        if let Err(error) = body_tx
+                            .send((content_type(&resp.headers), resp.body.clone()))
                             .await
-                            .unwrap_or_else(|e| {
-                                debug!("Failed to send body: {}", e);
-                            });
+                        {
+                            debug!("Failed to send body: {}", error);
+                        }
                     } else {
                         debug!("Received None request");
                     }

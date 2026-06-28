@@ -1,6 +1,7 @@
 use color_eyre::Result;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
+    Frame,
     layout::{Constraint, Layout, Rect},
     text::Line,
     widgets::Clear,
@@ -14,7 +15,7 @@ use tokio::{
     sync::{mpsc, watch},
     task::JoinHandle,
 };
-use tracing::{error, info};
+use tracing::error;
 
 use crate::{
     action::Action,
@@ -236,7 +237,7 @@ impl TabComponent {
 }
 
 impl Component for TabComponent {
-    fn render(&mut self, _frame: &mut ratatui::Frame<'_>, area: Rect) -> Result<()> {
+    fn render(&mut self, _frame: &mut Frame<'_>, area: Rect) -> Result<()> {
         self.area = area;
         Ok(())
     }
@@ -292,13 +293,6 @@ impl Component for FlowDetails {
         ]
     }
     fn handle_action(&mut self, action: Action) -> ActionResult {
-        info!(
-            "DEBUGPRINT[76]: {}:{}: action={:#?}",
-            file!(),
-            line!(),
-            action
-        );
-
         if self.tabs.focus.get() {
             match action {
                 Action::Left => {
@@ -323,7 +317,7 @@ impl Component for FlowDetails {
         ActionResult::Ignored
     }
 
-    fn render(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame<'_>, area: Rect) -> Result<()> {
         self.area = area;
 
         let popup_area = centered_rect(100, 100, area);

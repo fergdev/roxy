@@ -97,8 +97,7 @@ where
 
     let row_highlight_style = if has_focus {
         Style::default()
-            .fg(colors.on_primary)
-            .bg(colors.primary)
+            .bg(colors.surface_hl)
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default()

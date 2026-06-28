@@ -11,7 +11,7 @@ use tokio::sync::{
     mpsc::{self},
     watch,
 };
-use tracing::{error, info};
+use tracing::error;
 
 use crate::{
     action::Action,
@@ -80,13 +80,7 @@ impl Component for FlowDetailsHeaders {
                     ActionResult::Consumed
                 }
                 Action::PageDown => {
-                    info!(
-                        "DEBUGPRINT[73]: {}:{} (after Action::PageDown => )",
-                        file!(),
-                        line!()
-                    );
                     self.table_state.scroll_down_by(self.area.height);
-                    // self.table_state.select(Some(0));
                     ActionResult::Consumed
                 }
                 Action::Top => {
@@ -96,15 +90,7 @@ impl Component for FlowDetailsHeaders {
                 Action::Bottom => {
                     let headers = self.headers.borrow_and_update();
                     let headers_size = headers.as_ref().map(|h| h.len()).unwrap_or(0);
-                    info!(
-                        "DEBUGPRINT[72]: {}:{}: headers_size={:#?}",
-                        file!(),
-                        line!(),
-                        headers_size
-                    );
-
                     self.table_state.scroll_down_by(headers_size as u16);
-                    // self.table_state.scrol(Some(headers_size));
                     ActionResult::Consumed
                 }
                 _ => ActionResult::Ignored,

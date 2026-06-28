@@ -224,7 +224,7 @@ impl Component for TableComponent {
         Ok(())
     }
 
-    fn handle_tui_event(&mut self, tui_event: crate::tui::TuiEvent) -> Result<Option<Action>> {
+    fn handle_tui_event(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
         // On render we check for new config_tab and update.
         if tui_event == TuiEvent::Render
             && let Ok(config) = self.on_change.try_recv()

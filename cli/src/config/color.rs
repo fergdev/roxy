@@ -18,6 +18,8 @@ pub struct RoxyColors {
     #[serde(deserialize_with = "deserialize_color")]
     pub surface: Color,
     #[serde(deserialize_with = "deserialize_color")]
+    pub surface_hl: Color,
+    #[serde(deserialize_with = "deserialize_color")]
     pub on_surface: Color,
 
     #[serde(deserialize_with = "deserialize_color")]

@@ -9,7 +9,7 @@ use ratatui::{
 use roxy_proxy::flow::InterceptedRequest;
 use roxy_shared::content::content_type;
 use tokio::sync::{mpsc, watch};
-use tracing::{debug, trace};
+use tracing::error;
 
 use crate::ui::{
     flow::tab::LineComponent,
@@ -52,31 +52,24 @@ impl FlowDetailsRequest {
             async move {
                 while let Some(req) = req_rx.recv().await {
                     if let Some(req) = req {
-                        ui_tx
-                            .send(UiState {
-                                line_data: req.line_pretty(),
-                            })
-                            .unwrap_or_else(|e| {
-                                debug!("Failed to send UI state update: {}", e);
-                            });
+                        if let Err(error) = ui_tx.send(UiState {
+                            line_data: req.line_pretty(),
+                        }) {
+                            error!("Failed to send UI state update: {}", error);
+                        };
 
-                        headers_tx
-                            .send(req.headers.clone())
-                            .await
-                            .unwrap_or_else(|e| {
-                                debug!("Failed to send headers: {}", e);
-                            });
+                        if let Err(error) = headers_tx.send(req.headers.clone()).await {
+                            error!("Failed to send headers: {}", error);
+                        };
 
-                        let content_type = content_type(&req.headers);
-                        body_tx
-                            .send((content_type, req.body.clone()))
+                        if let Err(error) = body_tx
+                            .send((content_type(&req.headers), req.body.clone()))
                             .await
-                            .unwrap_or_else(|e| {
-                                debug!("Failed to send body: {}", e);
-                            });
-                        trace!("Received request: {}", req.line_pretty());
+                        {
+                            error!("Failed to send body: {}", error);
+                        };
                     } else {
-                        trace!("Received None request");
+                        error!("Received None request");
                     }
                 }
             }

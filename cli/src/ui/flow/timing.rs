@@ -4,7 +4,7 @@ use roxy_proxy::flow::Timing;
 use time::OffsetDateTime;
 use tokio::sync::{mpsc, watch};
 
-use crate::ui::framework::{component::Component, paragraph};
+use crate::ui::framework::{component::Component, paragraph::kv_paragraph};
 
 struct State {
     lines: Vec<(String, String)>,
@@ -23,30 +23,30 @@ impl FlowTiming {
             async move {
                 while let Some(timing) = rx.recv().await {
                     let lines = vec![
-                        timing_line(&timing.client_conn_established, "client_conn_established"),
-                        timing_line(&timing.server_conn_initiated, "server_conn_initiated"),
+                        timing_line("client_conn_established", &timing.client_conn_established),
+                        timing_line("server_conn_initiated", &timing.server_conn_initiated),
                         timing_line(
-                            &timing.server_conn_http_handshake,
                             "server_conn_http_handshake",
+                            &timing.server_conn_http_handshake,
                         ),
                         timing_line(
-                            &timing.server_conn_tcp_handshake,
                             "server_conn_TCP_handshake",
+                            &timing.server_conn_tcp_handshake,
                         ),
                         timing_line(
-                            &timing.server_conn_tls_handshake,
                             "server_conn_TLS_handshake",
+                            &timing.server_conn_tls_handshake,
                         ),
                         timing_line(
-                            &timing.client_conn_tls_handshake,
                             "client_conn_TLS_handshake",
+                            &timing.client_conn_tls_handshake,
                         ),
-                        timing_line(&timing.first_request_bytes, "first_reques_byte"),
-                        timing_line(&timing.request_complete, "request_complete"),
-                        timing_line(&timing.first_response_bytes, "first_respons_byte"),
-                        timing_line(&timing.response_complete, "response_complete"),
-                        timing_line(&timing.client_conn_closed, "client_conn_closed"),
-                        timing_line(&timing.server_conn_closed, "server_conn_closed"),
+                        timing_line("first_reques_byte", &timing.first_request_bytes),
+                        timing_line("request_complete", &timing.request_complete),
+                        timing_line("first_respons_byte", &timing.first_response_bytes),
+                        timing_line("response_complete", &timing.response_complete),
+                        timing_line("client_conn_closed", &timing.client_conn_closed),
+                        timing_line("server_conn_closed", &timing.server_conn_closed),
                     ];
                     ui_tx.send(State { lines }).unwrap_or_else(|e| {
                         tracing::debug!("Failed to send UI state update: {}", e);
@@ -62,7 +62,7 @@ impl FlowTiming {
     }
 }
 
-fn timing_line(time: &Option<OffsetDateTime>, key: &str) -> (String, String) {
+fn timing_line(key: &str, time: &Option<OffsetDateTime>) -> (String, String) {
     (
         key.to_owned(),
         time.map(|t| t.to_string())
@@ -87,7 +87,7 @@ impl HasFocus for FlowTiming {
 impl Component for FlowTiming {
     fn render(&mut self, f: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
         let state = self.state.borrow();
-        paragraph::kv_paragraph(
+        kv_paragraph(
             &state.lines,
             f,
             area,

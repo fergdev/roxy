@@ -134,31 +134,32 @@ pub(crate) fn process_client_tls(data: &Option<ServerTlsConnectionData>) -> Vec<
 
     match data {
         Some(capture) => {
-            let protocol_version = match capture.protocol_version {
-                Some(version) => format!("{version:?}"),
-                None => "None".to_string(),
-            };
-            lines.push(("protocol_version".to_string(), protocol_version));
+            lines.push((
+                "protocol_version".to_string(),
+                match capture.protocol_version {
+                    Some(version) => format!("{version:?}"),
+                    None => "None".to_string(),
+                },
+            ));
 
-            let cipher_suite = match capture.cipher_suite {
-                Some(cipher_suite) => format!("{cipher_suite:?}"),
-                None => "None".to_string(),
-            };
-            lines.push(("cipher_suite".to_string(), cipher_suite));
+            lines.push((
+                "cipher_suite".to_string(),
+                match capture.cipher_suite {
+                    Some(cipher_suite) => format!("{cipher_suite:?}"),
+                    None => "None".to_string(),
+                },
+            ));
 
-            let sni = match &capture.sni {
-                Some(sni) => format!("{sni:?}"),
-                None => "None".to_string(),
-            };
-            lines.push(("sni".to_string(), format!("{sni:?}")));
+            lines.push(("sni".to_string(), format!("{:?}", capture.sni)));
 
-            let key_exchange_group = match &capture.key_exchange_group {
-                Some(key_exchange_group) => format!("{key_exchange_group:?}"),
-                None => "None".to_string(),
-            };
-            lines.push(("key_exchange_group".to_string(), key_exchange_group));
-            let alpn = &capture.alpn;
-            lines.push(("alpn".to_string(), format!("{alpn:?}")));
+            lines.push((
+                "key_exchange_group".to_string(),
+                match &capture.key_exchange_group {
+                    Some(key_exchange_group) => format!("{key_exchange_group:?}"),
+                    None => "None".to_string(),
+                },
+            ));
+            lines.push(("alpn".to_string(), format!("{:?}", capture.alpn)));
         }
         None => {
             lines.push(("No data".to_string(), String::new()));

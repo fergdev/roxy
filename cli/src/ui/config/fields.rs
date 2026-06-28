@@ -221,6 +221,7 @@ impl TryFrom<HashMap<ConfigTab, Vec<EditableConfigField>>> for RoxyConfig {
                             "secondary" => config.theme.colors.secondary = color,
                             "on_secondary" => config.theme.colors.on_secondary = color,
                             "surface" => config.theme.colors.surface = color,
+                            "surface_hl" => config.theme.colors.surface = color,
                             "on_surface" => config.theme.colors.on_surface = color,
                             "background" => config.theme.colors.background = color,
                             "on_background" => config.theme.colors.on_background = color,

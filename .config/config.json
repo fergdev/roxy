@@ -38,6 +38,7 @@
       "secondary": "#ff9e64",
       "on_secondary": "#1d202f",
       "surface": "#1e1b21",
+      "surface_hl": "#1f2335",
       "on_surface": "#c0caf5",
       "background": "#1f2335",
       "on_background": "#a9b1d6",
