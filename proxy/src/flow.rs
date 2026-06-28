@@ -1,8 +1,10 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use bytes::Bytes;
 use dashmap::DashMap;
 
 use http::header::{CONTENT_LENGTH, TRANSFER_ENCODING};
+use http::response::Parts;
 use http::{StatusCode, Version};
 use roxy_shared::alpn::AlpnProtocol;
 
@@ -57,7 +59,7 @@ impl FlowStore {
         let (notifier, _) = watch::channel(());
         let (notifier_new_flow, _) = watch::channel(()); // TODO: write this
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
-        let s = Self {
+        let out = Self {
             flows: Arc::new(DashMap::new()),
             ordered_ids: Arc::new(RwLock::new(Vec::new())),
             notifier,
@@ -65,8 +67,8 @@ impl FlowStore {
             event_tx,
         };
 
-        s.event_proc(event_rx);
-        s
+        out.event_proc(event_rx);
+        out
     }
 
     pub async fn new_flow_cxt(&self, cxt: &FlowContext, req: InterceptedRequest) -> i64 {
@@ -119,10 +121,13 @@ impl FlowStore {
 
     #[allow(clippy::expect_used)]
     fn event_proc(&self, mut event_rx: UnboundedReceiver<(i64, FlowEvent)>) {
-        let fs = self.clone();
+        let flow_store = self.clone();
         tokio::spawn(async move {
             while let Some((flow_id, event)) = event_rx.recv().await {
-                let flow = fs.flows.get(&flow_id).expect("FlowId not in map {flow_id}");
+                let flow = flow_store
+                    .flows
+                    .get(&flow_id)
+                    .expect("FlowId not in map {flow_id}");
 
                 let mut guard = flow.write().await;
                 match event {
@@ -165,7 +170,7 @@ impl FlowStore {
                 }
                 drop(guard);
 
-                fs.notify();
+                flow_store.notify();
             }
         });
     }
@@ -326,7 +331,7 @@ pub struct InterceptedRequest {
     pub method: http::Method,
     pub version: HttpVersion,
     pub headers: HeaderMap,
-    pub body: bytes::Bytes,
+    pub body: Bytes,
     pub trailers: Option<HeaderMap>,
 }
 
@@ -340,7 +345,7 @@ impl Default for InterceptedRequest {
             method: http::Method::GET,
             version: HttpVersion(Version::HTTP_11),
             headers: HeaderMap::new(),
-            body: bytes::Bytes::new(),
+            body: Bytes::new(),
             trailers: None,
         }
     }
@@ -351,7 +356,7 @@ impl InterceptedRequest {
         uri: RUri,
         alpn: AlpnProtocol,
         parts: http::request::Parts,
-        body_bytes: bytes::Bytes,
+        body_bytes: Bytes,
         trailers: Option<HeaderMap>,
     ) -> Self {
         let encoding = get_content_encoding(&parts.headers);
@@ -434,7 +439,7 @@ pub struct InterceptedResponse {
     pub version: HttpVersion,
     pub headers: HeaderMap,
     pub encoding: Option<Vec<Encodings>>,
-    pub body: bytes::Bytes,
+    pub body: Bytes,
     pub trailers: Option<HeaderMap>,
 }
 
@@ -446,18 +451,14 @@ impl Default for InterceptedResponse {
             version: HttpVersion(Version::HTTP_11),
             headers: HeaderMap::new(),
             encoding: None,
-            body: bytes::Bytes::new(),
+            body: Bytes::new(),
             trailers: None,
         }
     }
 }
 
 impl InterceptedResponse {
-    pub fn from_http(
-        parts: http::response::Parts,
-        body_bytes: bytes::Bytes,
-        trailers: Option<HeaderMap>,
-    ) -> Self {
+    pub fn from_http(parts: Parts, body_bytes: Bytes, trailers: Option<HeaderMap>) -> Self {
         let encoding = get_content_encoding(&parts.headers);
         let body = match &encoding {
             Some(enc) => match decode_body(&body_bytes, enc) {

@@ -6,6 +6,7 @@ use http::Version;
 use http::header::HOST;
 use http_body_util::Empty;
 use http_body_util::combinators::BoxBody;
+use hyper::body::Incoming;
 use hyper_util::rt::TokioIo;
 use roxy_shared::RoxyCA;
 use roxy_shared::alpn::AlpnProtocol;
@@ -51,7 +52,7 @@ const GET_BYTES: &[u8] = b"GET ";
 pub struct ProxyManager {
     port_tcp: u16,
     port_udp: u16,
-    ca: RoxyCA,
+    roxy_ca: RoxyCA,
     script_engine: ScriptEngine,
     tls_config: TlsConfig,
     pub flow_store: FlowStore,
@@ -70,7 +71,7 @@ impl ProxyManager {
         ProxyManager {
             port_tcp: port,
             port_udp: port,
-            ca,
+            roxy_ca: ca,
             script_engine,
             tls_config,
             flow_store,
@@ -84,12 +85,17 @@ impl ProxyManager {
             TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], self.port_tcp))).await?;
         let udp_socket = UdpSocket::bind(SocketAddr::from(([127, 0, 0, 1], self.port_udp)))?;
 
-        let http_handle = start_tcp(self.cxt(), tcp_listener)
-            .await
-            .map_err(|_| HttpError::Alpn)?; // TODO: Wrong error
-        let h3_handle = start_h3(self.cxt(), udp_socket)
-            .await
-            .map_err(|_| HttpError::Alpn)?; // TODO: Wrong error
+        let http_handle = start_tcp(self.cxt(), tcp_listener).await.map_err(|error| {
+            HttpError::Io(std::io::Error::other(format!(
+                "Failed to start TCP listener: {error}"
+            )))
+        })?;
+
+        let h3_handle = start_h3(self.cxt(), udp_socket).await.map_err(|error| {
+            HttpError::Io(std::io::Error::other(format!(
+                "Failed to start H3 listener: {error:?}"
+            )))
+        })?;
         self.h3_handle = Some(Arc::new(h3_handle));
         self.http_handle = Some(Arc::new(http_handle));
 
@@ -98,7 +104,7 @@ impl ProxyManager {
 
     fn cxt(&self) -> ProxyContext {
         ProxyContext {
-            ca: self.ca.clone(),
+            roxy_ca: self.roxy_ca.clone(),
             script_engine: self.script_engine.clone(),
             flow_store: self.flow_store.clone(),
             tls_config: self.tls_config.clone(),
@@ -159,7 +165,7 @@ impl FlowContext {
 
 #[derive(Debug, Clone)]
 pub struct ProxyContext {
-    pub ca: RoxyCA,
+    pub roxy_ca: RoxyCA,
     pub script_engine: ScriptEngine,
     pub flow_store: FlowStore,
     pub tls_config: TlsConfig,
@@ -184,10 +190,12 @@ async fn start_tcp(
         while let Ok((stream, addr)) = tcp_listeneter.accept().await {
             let cxt = cxt.clone();
             tokio::task::spawn(async move {
-                let io = TokioIo::new(stream);
                 if let Err(err) = ServerBuilder::new()
                     .title_case_headers(true)
-                    .serve_connection(io, service_fn(|req| proxy(cxt.clone(), addr, req)))
+                    .serve_connection(
+                        TokioIo::new(stream),
+                        service_fn(|req| proxy(cxt.clone(), addr, req)),
+                    )
                     .with_upgrades()
                     .await
                 {
@@ -203,7 +211,7 @@ async fn start_tcp(
 async fn proxy(
     cxt: ProxyContext,
     socket_addr: SocketAddr,
-    req: Request<hyper::body::Incoming>,
+    req: Request<Incoming>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, HttpError> {
     if Method::CONNECT == req.method() {
         trace!("CONNECT request: {:?}", req.uri());
@@ -213,11 +221,11 @@ async fn proxy(
         }
 
         let uri: RUri = RUri::new(req.uri().clone());
-        let flow_cxt = FlowContext::new(socket_addr, uri, cxt.clone());
+        let flow_context = FlowContext::new(socket_addr, uri, cxt.clone());
         tokio::spawn(async {
             match hyper::upgrade::on(req).await {
                 Ok(upgraded) => {
-                    if let Err(e) = tunnel(flow_cxt, upgraded).await {
+                    if let Err(e) = tunnel(flow_context, upgraded).await {
                         trace!("server io error: {}", e);
                     };
                 }
@@ -298,6 +306,8 @@ async fn tunnel(
     let client_stream = TokioIo::new(upgraded);
 
     let (client_stream, peeked_bytes) = PeekStream::new(client_stream, 1024).await?;
+
+    // GET request indicates this is a websocket connection, not TLS
     if peeked_bytes.starts_with(GET_BYTES) {
         return handle_ws(flow_cxt, client_stream).await;
     }
@@ -305,7 +315,7 @@ async fn tunnel(
 
     let (leaf, key_pair) = flow_cxt
         .proxy_cxt
-        .ca
+        .roxy_ca
         .sign_leaf_uri(&flow_cxt.target_uri)
         .map_err(|e| io::Error::other(format!("Failed to sign leaf certificate: {e}")))?;
 

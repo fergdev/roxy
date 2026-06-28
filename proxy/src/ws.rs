@@ -72,7 +72,7 @@ where
     } = flow_cxt
         .proxy_cxt
         .tls_config
-        .rustls_client_config(flow_cxt.proxy_cxt.ca.roots());
+        .rustls_client_config(flow_cxt.proxy_cxt.roxy_ca.roots());
 
     let url = format!("wss://{}", flow_cxt.target_uri);
     let req = url.clone().into_client_request().map_err(Error::other)?;

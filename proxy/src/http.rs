@@ -31,7 +31,7 @@ use crate::proxy::FlowContext;
 
 pub(crate) async fn handle_http(
     flow_cxt: FlowContext,
-    client_request: Request<hyper::body::Incoming>,
+    client_request: Request<Incoming>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, HttpError> {
     proxy(flow_cxt, AlpnProtocol::None, Scheme::HTTP, client_request).await
 }
@@ -120,7 +120,7 @@ async fn proxy(
     let emitter = FlowEventEmitter::new(flow_id, flow_cxt.proxy_cxt.flow_store.clone());
 
     let client = ClientContext::builder()
-        .with_roxy_ca(flow_cxt.proxy_cxt.ca.clone())
+        .with_roxy_ca(flow_cxt.proxy_cxt.roxy_ca.clone())
         .with_tls_config(flow_cxt.proxy_cxt.tls_config.clone())
         .with_emitter(Box::new(emitter))
         .build();

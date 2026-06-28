@@ -31,6 +31,7 @@ use crate::{
 // If there are multiple proxies involved, proxies along the chain MUST check whether their upstream connection supports HTTP/3 datagrams. If it does not, that proxy MUST remove the "Datagram-Flow-Id" header before forwarding the CONNECT-UDP request.
 //
 
+#[derive(Debug)]
 pub enum H3Error {
     RustLs,
     NoCipherSuite,
@@ -55,7 +56,7 @@ impl From<std::io::Error> for H3Error {
 
 pub async fn start_h3(cxt: ProxyContext, udp_socket: UdpSocket) -> Result<JoinHandle<()>, H3Error> {
     let addr = udp_socket.local_addr()?;
-    let (leaf, kp) = cxt.ca.local_leaf();
+    let (leaf, kp) = cxt.roxy_ca.local_leaf();
     let mut tls_config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(vec![leaf], kp)?;
@@ -159,7 +160,7 @@ async fn do_conn(new_conn: quinn::Incoming, cxt: ProxyContext) -> Result<(), Box
                         }
 
                         let client = ClientContext::builder()
-                            .with_roxy_ca(flow_cxt.proxy_cxt.ca.clone())
+                            .with_roxy_ca(flow_cxt.proxy_cxt.roxy_ca.clone())
                             .build();
                         let resp = client.request(req).await?;
 

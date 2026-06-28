@@ -78,7 +78,7 @@ impl TestContext {
     }
 }
 
-fn criterion_benchmark_roxy(c: &mut Criterion) {
+fn criterion_benchmark_roxy(criterion: &mut Criterion) {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -89,8 +89,8 @@ fn criterion_benchmark_roxy(c: &mut Criterion) {
         let (server_addr, server_handle) = h1_server(roxy_servers::HttpServers::H11).await.unwrap();
 
         let target_uri: RUri = format!("http://{server_addr}").parse().unwrap();
-        c.bench_function("http get roxy", |b| {
-            b.iter(|| async {
+        criterion.bench_function("http get roxy", |bencher| {
+            bencher.iter(|| async {
                 let req = http::Request::builder()
                     .method(Method::GET)
                     .version(Version::HTTP_11)
@@ -120,7 +120,7 @@ fn criterion_benchmark_roxy(c: &mut Criterion) {
     });
 }
 
-fn criterion_benchmark_roxy_multi(c: &mut Criterion) {
+fn criterion_benchmark_roxy_multi(criterion: &mut Criterion) {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -130,8 +130,8 @@ fn criterion_benchmark_roxy_multi(c: &mut Criterion) {
 
         let (server_addr, server_handle) = h1_server(roxy_servers::HttpServers::H11).await.unwrap();
 
-        c.bench_function("http get roxy multi", |b| {
-            b.iter(|| async {
+        criterion.bench_function("http get roxy multi", |bencher| {
+            bencher.iter(|| async {
                 let mut handles = vec![];
                 let proxy_uri: RUri = cxt.proxy_addr.clone();
                 let target_uri: RUri = format!("http://{server_addr}").parse().unwrap();
@@ -177,7 +177,7 @@ fn criterion_benchmark_roxy_multi(c: &mut Criterion) {
 }
 
 #[allow(clippy::zombie_processes)]
-fn criterion_benchmark_mitm(c: &mut Criterion) {
+fn criterion_benchmark_mitm(criterion: &mut Criterion) {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -206,8 +206,8 @@ fn criterion_benchmark_mitm(c: &mut Criterion) {
         let proxy_uri: RUri = format!("http://localhost:{proxy_port}").parse().unwrap();
         let target_uri: RUri = format!("http://{server_addr}").parse().unwrap();
 
-        c.bench_function("http get mitm", |b| {
-            b.iter(|| async {
+        criterion.bench_function("http get mitm", |bencher| {
+            bencher.iter(|| async {
                 let req = http::Request::builder()
                     .method(Method::GET)
                     .version(Version::HTTP_11)
@@ -241,7 +241,7 @@ fn criterion_benchmark_mitm(c: &mut Criterion) {
 }
 
 #[allow(clippy::zombie_processes)]
-fn criterion_benchmark_mitm_multi(c: &mut Criterion) {
+fn criterion_benchmark_mitm_multi(criterion: &mut Criterion) {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -267,8 +267,8 @@ fn criterion_benchmark_mitm_multi(c: &mut Criterion) {
 
         let (server_addr, server_handle) = h1_server(roxy_servers::HttpServers::H11).await.unwrap();
 
-        c.bench_function("http get mitm multi", |b| {
-            b.iter(|| async {
+        criterion.bench_function("http get mitm multi", |bencher| {
+            bencher.iter(|| async {
                 let mut handles = vec![];
                 let proxy_uri: RUri = format!("http://localhost:{proxy_port}").parse().unwrap();
                 let target_uri: RUri = format!("http://{server_addr}").parse().unwrap();

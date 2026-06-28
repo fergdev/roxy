@@ -48,29 +48,27 @@ impl FlowDetailsRequest {
             body,
         };
 
-        tokio::spawn({
-            async move {
-                while let Some(req) = req_rx.recv().await {
-                    if let Some(req) = req {
-                        if let Err(error) = ui_tx.send(UiState {
-                            line_data: req.line_pretty(),
-                        }) {
-                            error!("Failed to send UI state update: {}", error);
-                        };
+        tokio::spawn(async move {
+            while let Some(req) = req_rx.recv().await {
+                if let Some(req) = req {
+                    if let Err(error) = ui_tx.send(UiState {
+                        line_data: req.line_pretty(),
+                    }) {
+                        error!("Failed to send UI state update: {}", error);
+                    };
 
-                        if let Err(error) = headers_tx.send(req.headers.clone()).await {
-                            error!("Failed to send headers: {}", error);
-                        };
+                    if let Err(error) = headers_tx.send(req.headers.clone()).await {
+                        error!("Failed to send headers: {}", error);
+                    };
 
-                        if let Err(error) = body_tx
-                            .send((content_type(&req.headers), req.body.clone()))
-                            .await
-                        {
-                            error!("Failed to send body: {}", error);
-                        };
-                    } else {
-                        error!("Received None request");
-                    }
+                    if let Err(error) = body_tx
+                        .send((content_type(&req.headers), req.body.clone()))
+                        .await
+                    {
+                        error!("Failed to send body: {}", error);
+                    };
+                } else {
+                    error!("Received None request");
                 }
             }
         });

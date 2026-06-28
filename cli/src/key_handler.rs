@@ -94,8 +94,8 @@ impl KeyHandler {
         inner.last_tick_key_events.push(key_event);
 
         // Leave here for easy debuggin
-        // let dbg = key_sequence_to_string(&inner.last_tick_key_events);
-        // info!("DEBUGPRINT[70]: {}:{}: dbg={:#?}", file!(), line!(), dbg);
+        // let dbg = crate::config::keys::key_sequence_to_string(&inner.last_tick_key_events);
+        // tracing::info!("DEBUGPRINT[70]: {}:{}: dbg={:#?}", file!(), line!(), dbg);
 
         let (action, has_more) = inner.key_trie.get(&inner.last_tick_key_events);
 

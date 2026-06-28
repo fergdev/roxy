@@ -29,7 +29,6 @@ pub struct RoxyColors {
 
     #[serde(deserialize_with = "deserialize_color")]
     pub outline: Color,
-
     #[serde(deserialize_with = "deserialize_color")]
     pub outline_unfocused: Color,
 

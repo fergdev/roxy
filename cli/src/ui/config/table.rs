@@ -1,10 +1,10 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus, ratatui::layout::Rect};
 use ratatui::{
-    layout::{Constraint, Position},
+    layout::{Constraint, Margin, Position},
     prelude::Frame,
     style::Stylize,
     text::Span,
@@ -118,13 +118,16 @@ impl TableComponent {
 
     fn update_config(&mut self) {
         debug!("Writing config");
-        let cfg = RoxyConfig::try_from(self.fields.clone());
-        match cfg {
+        match RoxyConfig::try_from(self.fields.clone()) {
             Ok(cfg) => {
-                let _ = self.config_manager.update(cfg);
+                if let Err(error) = self.config_manager.update(cfg) {
+                    error!("Error writing config: '{error}'");
+                } else {
+                    debug!("Config written successfully");
+                }
             }
-            Err(e) => {
-                error!("Error writing config: '${e}'");
+            Err(error) => {
+                error!("Error converting fields to config: '${error}'");
             }
         }
     }
@@ -185,21 +188,24 @@ impl Component for TableComponent {
             let rows: Vec<Row> = fields
                 .iter()
                 .map(|field| {
-                    let value_string = if field.is_editing {
-                        self.input_buffer.to_owned()
+                    let value_string: &dyn Display = if field.is_editing {
+                        &self.input_buffer
                     } else {
                         match &field.value {
-                            ConfigValue::Color(color) => format!("{color}"),
-                            ConfigValue::String(string) => string.clone(),
-                            ConfigValue::U16(u) => u.to_string(),
-                            ConfigValue::Bool(bool) => bool.to_string(),
-                            ConfigValue::Path(path) => path.display().to_string(),
+                            ConfigValue::Color(color) => color,
+                            ConfigValue::String(string) => string,
+                            ConfigValue::U16(u) => u,
+                            ConfigValue::Bool(bool) => bool,
+                            ConfigValue::Path(path) => &path.display(),
                         }
                     };
 
-                    let mut value_span = Span::raw(value_string);
+                    let mut value_span = Span::raw(value_string.to_string());
                     if field.is_editing {
                         value_span = value_span.underlined()
+                    }
+                    if let ConfigValue::Color(color) = field.value {
+                        value_span = value_span.fg(color)
                     }
                     Row::new(vec![
                         Cell::from(Span::raw(&field.key)),
@@ -254,49 +260,58 @@ impl Component for TableComponent {
         if !self.focus.get() {
             return ActionResult::Ignored;
         }
+
+        // On select takes priority over other actions, we always handle it
+        // to get in and out of edit mode.
+        if Action::Select == action {
+            self.on_select();
+            return ActionResult::Consumed;
+        }
+
+        if self.is_editing() {
+            return ActionResult::Ignored;
+        }
+
         match action {
-            Action::Select => {
-                self.on_select();
+            Action::Left => {
+                self.table_state.select_previous_column();
                 ActionResult::Consumed
             }
-            Action::Left => {
-                if self.is_editing() {
-                    ActionResult::Ignored
-                } else {
-                    self.table_state.select_previous_column();
-                    ActionResult::Consumed
-                }
-            }
             Action::Right => {
-                if self.is_editing() {
-                    ActionResult::Ignored
-                } else {
-                    self.table_state.select_next_column();
-                    ActionResult::Consumed
-                }
+                self.table_state.select_next_column();
+                ActionResult::Consumed
             }
             Action::Up => {
-                if self.is_editing() {
-                    ActionResult::Ignored
-                } else {
-                    self.table_state.select_previous();
-                    ActionResult::Consumed
-                }
+                self.table_state.select_previous();
+                ActionResult::Consumed
             }
             Action::Down => {
-                if self.is_editing() {
-                    ActionResult::Ignored
-                } else {
-                    self.table_state.select_next();
-                    ActionResult::Consumed
-                }
+                self.table_state.select_next();
+                ActionResult::Consumed
+            }
+            Action::PageUp => {
+                self.table_state.scroll_up_by(self.area.height);
+                ActionResult::Consumed
+            }
+            Action::PageDown => {
+                self.table_state.scroll_down_by(self.area.height);
+                ActionResult::Consumed
+            }
+            Action::Top => {
+                self.table_state
+                    .scroll_up_by(self.table_state.selected().unwrap_or(0) as u16);
+                ActionResult::Consumed
+            }
+            Action::Bottom => {
+                self.table_state.scroll_down_by(u16::MAX);
+                ActionResult::Consumed
             }
             _ => ActionResult::Ignored,
         }
     }
 
     fn handle_key_event(&mut self, key: &KeyEvent) -> KeyEventResult {
-        if self.is_editing() {
+        if self.focus().get() && self.is_editing() {
             match key.code {
                 KeyCode::Esc | KeyCode::Enter => {
                     self.on_select();
@@ -316,14 +331,31 @@ impl Component for TableComponent {
     }
 
     fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
-        if !self.area.contains(Position {
+        let position = Position {
             x: mouse.column,
             y: mouse.row,
-        }) {
+        };
+        if !self.area.contains(position) {
             return Ok(None);
         }
+        // The actual area for the table consider margins
+        let table_area = self.area.inner(Margin {
+            vertical: 1,
+            horizontal: 1,
+        });
+
         if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-            return Ok(Some(Action::FocusReq(self.focus.widget_id())));
+            if self.focus.get() {
+                // Calculate the field to select based on the mouse click position and the current
+                // scroll offset.
+                let click_column = mouse.row - table_area.top();
+                let scroll_offset = self.table_state.offset();
+                let scroll_target = scroll_offset.saturating_add(click_column as usize);
+                self.table_state.select(Some(scroll_target));
+                return Ok(None);
+            } else {
+                return Ok(Some(Action::FocusReq(self.focus.widget_id())));
+            }
         }
         Ok(None)
     }
