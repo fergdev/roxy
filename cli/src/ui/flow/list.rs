@@ -3,10 +3,10 @@ use hyper::Method;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
-    layout::{Constraint, Margin, Rect},
+    layout::{Constraint, Rect},
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, TableState},
+    widgets::{Cell, Row, ScrollbarState, TableState},
 };
 use roxy_proxy::flow::FlowStore;
 use tokio::{sync::watch, task::JoinHandle};
@@ -17,6 +17,7 @@ use crate::{
     app::ITEM_HEIGHT,
     ui::framework::{
         component::{ActionResult, Component},
+        scrollbar::render_vertical_scrollbar,
         theme::themed_table,
     },
 };
@@ -218,11 +219,7 @@ impl Component for FlowList {
             area,
             &mut self.state,
         );
-        frame.render_stateful_widget(
-            Scrollbar::default().orientation(ScrollbarOrientation::VerticalRight),
-            area.inner(Margin::default()),
-            &mut self.scroll_state,
-        );
+        render_vertical_scrollbar(frame, area, &mut self.scroll_state);
         Ok(())
     }
 }

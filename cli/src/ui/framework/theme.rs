@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Alignment, Constraint},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph, Row, Table, Tabs},
 };
@@ -59,7 +59,8 @@ pub fn themed_block(title: Option<&str>, has_focus: bool) -> Block<'_> {
 }
 
 pub fn tertiary_text() -> Style {
-    Style::default().fg(Color::Yellow).bold()
+    let colors = with_theme(|t| t.colors.clone());
+    Style::default().fg(colors.on_surface).bold()
 }
 
 pub fn themed_tabs<'a>(
@@ -72,11 +73,7 @@ pub fn themed_tabs<'a>(
 
     Tabs::new(titles)
         .style(Style::default().fg(colors.on_surface).bg(colors.surface))
-        .highlight_style(
-            Style::default()
-                .fg(colors.secondary)
-                .add_modifier(Modifier::BOLD),
-        )
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
         .block(themed_block(title, has_focus))
         .select(selected)
 }

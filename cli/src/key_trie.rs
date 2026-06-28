@@ -5,6 +5,9 @@ use tracing::error;
 
 use crate::action::Action;
 
+/// Simple key_trie to make keybindings to actions while determining if more keys are expected
+/// from the user. This is used to determine if a keybinding is complete or if more keys are
+/// expected.
 #[derive(Default)]
 pub struct KeyTrie {
     root: KeyNode,

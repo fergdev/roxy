@@ -19,7 +19,7 @@ pub fn kv_paragraph(
         .iter()
         .map(|(k, v)| {
             Line::from(vec![
-                Span::styled(format!("{k}:"), tertiary_text()),
+                Span::styled(format!("{k}: "), tertiary_text()),
                 Span::raw(v),
             ])
         })

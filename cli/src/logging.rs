@@ -32,8 +32,8 @@ fn project_directory() -> Option<ProjectDirs> {
 }
 
 fn get_data_dir() -> PathBuf {
-    if let Some(s) = data_folder() {
-        s
+    if let Some(data_dir_path) = data_folder() {
+        data_dir_path
     } else if let Some(proj_dirs) = project_directory() {
         proj_dirs.data_local_dir().to_path_buf()
     } else {

@@ -20,7 +20,7 @@ impl CachedRender {
 
     pub fn render_if_changed<W: WidgetRef + 'static>(
         &mut self,
-        f: &mut Frame,
+        frame: &mut Frame,
         area: Rect,
         data: &str,
         make_widget: impl Fn() -> W,
@@ -38,7 +38,7 @@ impl CachedRender {
         }
 
         if let Some(widget) = self.widget.as_ref() {
-            widget.render_ref(area, f.buffer_mut());
+            widget.render_ref(area, frame.buffer_mut());
         }
     }
 }
