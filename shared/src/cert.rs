@@ -20,6 +20,16 @@ pub struct ServerVerificationCapture {
     pub tls: TlsVerify,
 }
 
+#[derive(Debug, Clone)]
+pub struct VerifyServerCert {
+    pub end_entity: Bytes,
+    pub intermediates: Vec<Bytes>,
+    pub server_name: ServerName<'static>,
+    pub ocsp_response: Bytes,
+    pub now: UnixTime,
+    pub error: Option<rustls::Error>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct ClientVerificationCapture {
     pub cert: Option<VerifyClientCert>,
@@ -30,16 +40,6 @@ pub struct ClientVerificationCapture {
 pub struct VerifyClientCert {
     pub end_entity: Bytes,
     pub intermediates: Vec<Bytes>,
-    pub now: UnixTime,
-    pub error: Option<rustls::Error>,
-}
-
-#[derive(Debug, Clone)]
-pub struct VerifyServerCert {
-    pub end_entity: Bytes,
-    pub intermediates: Vec<Bytes>,
-    pub server_name: ServerName<'static>,
-    pub ocsp_response: Bytes,
     pub now: UnixTime,
     pub error: Option<rustls::Error>,
 }

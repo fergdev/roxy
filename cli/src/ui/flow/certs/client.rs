@@ -1,169 +1,134 @@
-use roxy_shared::cert::{CapturedClientHello, ServerTlsConnectionData};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
+use ratatui::{
+    Frame,
+    layout::{Constraint, Layout, Rect},
+};
+use roxy_shared::cert::{CapturedClientHello, ClientVerificationCapture, ServerTlsConnectionData};
+use strum::EnumIter;
 
-pub(crate) fn process_client_hello(
-    client_hello: &Option<CapturedClientHello>,
-) -> Vec<(String, String)> {
-    let mut lines = vec![];
-    match client_hello {
-        Some(capture) => {
-            lines.push((
-                "Server name".to_string(),
-                if let Some(server_name) = &capture.server_name {
-                    server_name.to_string()
-                } else {
-                    "None".to_string()
-                },
-            ));
+use crate::ui::{
+    flow::certs::{
+        client_certs::ClientCertComponent, client_hello::ClientHelloComponent,
+        client_tls::ClientTlsComponent,
+    },
+    framework::{component::Component, tab::TabComponent},
+};
 
-            lines.push((
-                "Signature schemes".to_string(),
-                if capture.signature_schemes.is_empty() {
-                    "None".to_string()
-                } else {
-                    capture
-                        .signature_schemes
-                        .iter()
-                        .map(|s| format!("{s:?}").to_string())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                },
-            ));
-            lines.push((
-                "ALPN".to_string(),
-                if let Some(alpn) = &capture.alpn {
-                    if alpn.is_empty() {
-                        "Empty".to_string()
-                    } else {
-                        alpn.iter()
-                            .map(|s| s.to_string())
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    }
-                } else {
-                    "None".to_string()
-                },
-            ));
-
-            lines.push((
-                "server_cert_types".to_string(),
-                if let Some(server_cert_types) = &capture.server_cert_types {
-                    if server_cert_types.is_empty() {
-                        "Empty".to_string()
-                    } else {
-                        server_cert_types
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    }
-                } else {
-                    "None".to_string()
-                },
-            ));
-
-            lines.push((
-                "client_cert_types".to_string(),
-                if let Some(client_cert_types) = &capture.server_cert_types {
-                    if client_cert_types.is_empty() {
-                        "Empty".to_string()
-                    } else {
-                        client_cert_types
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    }
-                } else {
-                    "None".to_string()
-                },
-            ));
-            lines.push((
-                "cipher_suites".to_string(),
-                if capture.cipher_suites.is_empty() {
-                    "Empty".to_string()
-                } else {
-                    capture
-                        .cipher_suites
-                        .iter()
-                        .map(|s| format!("{s:?}").to_string())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                },
-            ));
-            lines.push((
-                "certificate_authorities".to_string(),
-                if let Some(certificate_authorities) = &capture.certificate_authorities {
-                    if certificate_authorities.is_empty() {
-                        "Empty".to_string()
-                    } else {
-                        certificate_authorities
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    }
-                } else {
-                    "None".to_string()
-                },
-            ));
-
-            lines.push((
-                "named_groups".to_string(),
-                if let Some(named_groups) = &capture.named_groups {
-                    if named_groups.is_empty() {
-                        "Empty".to_string()
-                    } else {
-                        named_groups
-                            .iter()
-                            .map(|s| format!("{s:?}").to_string())
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    }
-                } else {
-                    "None".to_string()
-                },
-            ));
-        }
-        None => lines.push(("No data".to_string(), "".to_string())),
-    }
-    lines
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+pub(crate) enum ClientTab {
+    Hello,
+    Certs,
+    Tls,
 }
 
-pub(crate) fn process_client_tls(data: &Option<ServerTlsConnectionData>) -> Vec<(String, String)> {
-    let mut lines: Vec<(String, String)> = vec![];
+impl ClientTab {
+    fn all() -> &'static [ClientTab] {
+        &[Self::Hello, Self::Certs, Self::Tls]
+    }
 
-    match data {
-        Some(capture) => {
-            lines.push((
-                "protocol_version".to_string(),
-                match capture.protocol_version {
-                    Some(version) => format!("{version:?}"),
-                    None => "None".to_string(),
-                },
-            ));
-
-            lines.push((
-                "cipher_suite".to_string(),
-                match capture.cipher_suite {
-                    Some(cipher_suite) => format!("{cipher_suite:?}"),
-                    None => "None".to_string(),
-                },
-            ));
-
-            lines.push(("sni".to_string(), format!("{:?}", capture.sni)));
-
-            lines.push((
-                "key_exchange_group".to_string(),
-                match &capture.key_exchange_group {
-                    Some(key_exchange_group) => format!("{key_exchange_group:?}"),
-                    None => "None".to_string(),
-                },
-            ));
-            lines.push(("alpn".to_string(), format!("{:?}", capture.alpn)));
-        }
-        None => {
-            lines.push(("No data".to_string(), String::new()));
+    fn title(&self) -> &'static str {
+        match self {
+            Self::Hello => "Hello",
+            Self::Certs => "Certs",
+            Self::Tls => "Tls",
         }
     }
-    lines
+}
+
+#[derive(Default, Clone)]
+pub(crate) struct ClientState {
+    pub(crate) hello: Option<CapturedClientHello>,
+    pub(crate) certs: Option<ClientVerificationCapture>,
+    pub(crate) tls: Option<ServerTlsConnectionData>,
+}
+
+pub(crate) struct ClientCertificateComponent {
+    area: Rect,
+    focus: FocusFlag,
+
+    tab: TabComponent,
+
+    hello_component: ClientHelloComponent,
+    cert_component: ClientCertComponent,
+    tls_component: ClientTlsComponent,
+}
+
+impl ClientCertificateComponent {
+    pub fn new() -> Self {
+        Self {
+            area: Rect::default(),
+            focus: FocusFlag::new().with_name("ClientCertificateComponent"),
+            tab: TabComponent::new(
+                "Client".to_string(),
+                ClientTab::all()
+                    .iter()
+                    .map(|t| t.title().to_string())
+                    .collect(),
+            ),
+            hello_component: ClientHelloComponent::new(),
+            cert_component: ClientCertComponent::new(),
+            tls_component: ClientTlsComponent::new(),
+        }
+    }
+
+    pub(crate) fn set_state(&mut self, client_state: ClientState) {
+        self.hello_component.set_state(&client_state.hello);
+        self.cert_component.set_state(&client_state.certs);
+        self.tls_component.set_state(client_state.tls);
+    }
+}
+
+impl Component for ClientCertificateComponent {
+    fn children(&mut self) -> Vec<&mut dyn Component> {
+        if self.tab.current_tab == 0 {
+            vec![&mut self.tab, &mut self.hello_component]
+        } else if self.tab.current_tab == 1 {
+            vec![&mut self.tab, &mut self.cert_component]
+        } else {
+            vec![&mut self.tab, &mut self.tls_component]
+        }
+    }
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::Result<()> {
+        self.area = area;
+
+        let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
+        self.tab.render(frame, layout[0])?;
+
+        let tab = ClientTab::all()[self.tab.current_tab];
+        match tab {
+            ClientTab::Hello => self.hello_component.render(frame, layout[1])?,
+            ClientTab::Certs => self.cert_component.render(frame, layout[1])?,
+            ClientTab::Tls => self.tls_component.render(frame, layout[1])?,
+        }
+        Ok(())
+    }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
+    }
+    fn area(&self) -> Rect {
+        self.area
+    }
+}
+
+impl HasFocus for ClientCertificateComponent {
+    fn build(&self, builder: &mut FocusBuilder) {
+        let tag = builder.start(self);
+        builder.widget(&self.tab);
+        let client_tab = ClientTab::all()[self.tab.current_tab];
+        match client_tab {
+            ClientTab::Hello => builder.widget(&self.hello_component),
+            ClientTab::Certs => builder.widget(&self.cert_component),
+            ClientTab::Tls => builder.widget(&self.tls_component),
+        };
+        builder.end(tag)
+    }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
+
+    fn focus(&self) -> rat_focus::FocusFlag {
+        self.focus.clone()
+    }
 }

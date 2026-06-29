@@ -1,41 +1,37 @@
 mod client;
+mod client_certs;
+mod client_hello;
+mod client_tls;
 mod server;
+mod server_certs;
+mod server_resolve_client_cert;
+mod server_tls;
+
 use bytes::Bytes;
+use color_eyre::eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::Style,
     text::{Line, Span},
-    widgets::{Paragraph, ScrollbarState, Wrap},
 };
 use roxy_proxy::flow::FlowCerts;
-use roxy_shared::cert::{
-    CapturedClientHello, CapturedResolveClientCert, ClientTlsConnectionData,
-    ClientVerificationCapture, ServerTlsConnectionData, ServerVerificationCapture, TlsVerify,
-};
 use strum::EnumIter;
 use tokio::{
     sync::{mpsc::Receiver, watch},
     task::JoinHandle,
 };
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use x509_parser::parse_x509_certificate;
 
 use crate::{
     action::Action,
     ui::{
         flow::certs::{
-            client::{process_client_hello, process_client_tls},
-            server::process_server_tls,
+            client::{ClientCertificateComponent, ClientState},
+            server::{ServerCertificateComponent, ServerState},
         },
-        framework::{
-            component::{ActionResult, Component},
-            paragraph::kv_paragraph,
-            scrollbar::{render_horizontal_scrollbar, render_vertical_scrollbar},
-            tab::TabComponent,
-            theme::{tertiary_text, themed_block},
-        },
+        framework::{component::Component, tab::TabComponent, theme::tertiary_text},
     },
 };
 
@@ -100,19 +96,18 @@ pub struct FlowDetailsCerts {
     state: watch::Receiver<UiState>,
     focus: FocusFlag,
     area: Rect,
-    handle: JoinHandle<()>,
+    handle: Option<JoinHandle<()>>,
 
     root_tab_cmp: TabComponent,
-    client_tab_cmp: TabComponent,
-    server_tab_cmp: TabComponent,
-
-    scroll_index_vertical: ScrollbarState,
-    scroll_index_horizontal: ScrollbarState,
+    client_cmp: ClientCertificateComponent,
+    server_cmp: ServerCertificateComponent,
 }
 
 impl Drop for FlowDetailsCerts {
     fn drop(&mut self) {
-        self.handle.abort();
+        if let Some(handle) = &mut self.handle {
+            handle.abort();
+        }
     }
 }
 
@@ -141,65 +136,24 @@ impl RootTab {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
-enum ClientTab {
-    Hello,
-    Certs,
-    Tls,
-}
-
-impl ClientTab {
-    fn all() -> &'static [ClientTab] {
-        &[Self::Hello, Self::Certs, Self::Tls]
-    }
-
-    fn title(&self) -> &'static str {
-        match self {
-            Self::Hello => "Hello",
-            Self::Certs => "Certs",
-            Self::Tls => "Tls",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
-enum ServerTab {
-    ResolveClientCert,
-    Certs,
-    Tls,
-}
-
-impl ServerTab {
-    fn all() -> &'static [ServerTab] {
-        &[Self::ResolveClientCert, Self::Certs, Self::Tls]
-    }
-
-    fn title(&self) -> &'static str {
-        match self {
-            Self::ResolveClientCert => "Resolve",
-            Self::Certs => "Certs",
-            Self::Tls => "Tls",
-        }
-    }
-}
-
-#[derive(Default, Clone)]
-struct ClientState {
-    hello: Option<CapturedClientHello>,
-    certs: Option<ClientVerificationCapture>,
-    tls: Option<ServerTlsConnectionData>,
-}
-
-#[derive(Default, Clone)]
-struct ServerState {
-    resolve_client_cert: Option<CapturedResolveClientCert>,
-    certs: Option<ServerVerificationCapture>,
-    tls: Option<ClientTlsConnectionData>,
-}
-
 impl FlowDetailsCerts {
     pub fn new(mut cert_rx: Receiver<FlowCerts>) -> Self {
         let (ui_tx, ui_rx) = watch::channel(UiState::default());
+        let mut s = Self {
+            state: ui_rx,
+            focus: FocusFlag::new().with_name("FlowCerts"),
+            area: Rect::default(),
+            handle: None,
+            root_tab_cmp: TabComponent::new(
+                "Certs".to_string(),
+                RootTab::all()
+                    .iter()
+                    .map(|v| v.title().to_string())
+                    .collect(),
+            ),
+            client_cmp: ClientCertificateComponent::new(),
+            server_cmp: ServerCertificateComponent::new(),
+        };
 
         let handle = tokio::spawn({
             async move {
@@ -221,307 +175,73 @@ impl FlowDetailsCerts {
                 }
             }
         });
+        s.handle = Some(handle);
+        s
+    }
+}
 
-        Self {
-            state: ui_rx,
-            focus: FocusFlag::new().with_name("FlowCerts"),
-            area: Rect::default(),
-            handle,
-            root_tab_cmp: TabComponent::new(
-                "Certs".to_string(),
-                RootTab::all()
-                    .iter()
-                    .map(|v| v.title().to_string())
-                    .collect(),
-            ),
-            client_tab_cmp: TabComponent::new(
-                "ClientTab".to_string(),
-                ClientTab::all()
-                    .iter()
-                    .map(|v| v.title().to_string())
-                    .collect(),
-            ),
-            server_tab_cmp: TabComponent::new(
-                "ServerTab".to_string(),
-                ServerTab::all()
-                    .iter()
-                    .map(|v| v.title().to_string())
-                    .collect(),
-            ),
-            scroll_index_vertical: ScrollbarState::default(),
-            scroll_index_horizontal: ScrollbarState::default(),
+impl Component for FlowDetailsCerts {
+    fn children(&mut self) -> Vec<&mut dyn Component> {
+        debug!(
+            "DEBUGPRINT[105]: {}:{} (after fn children(&mut self) -> Vec<&mut dyn C…)",
+            file!(),
+            line!()
+        );
+        let root_tab = RootTab::all()[self.root_tab_cmp.current_tab];
+        if matches!(root_tab, RootTab::Client) {
+            vec![&mut self.root_tab_cmp, &mut self.client_cmp]
+        } else {
+            vec![&mut self.root_tab_cmp, &mut self.server_cmp]
         }
     }
 
-    fn render_client(&mut self, frame: &mut Frame<'_>, area: Rect) {
+    fn handle_tui_event(&mut self, tui_event: crate::tui::TuiEvent) -> Result<Option<Action>> {
+        if tui_event == crate::tui::TuiEvent::Render {
+            let state = self.state.borrow().clone();
+            self.client_cmp.set_state(state.client);
+            self.server_cmp.set_state(state.server);
+        }
+        Ok(None)
+    }
+
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        self.area = area;
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
-        let _ = self.client_tab_cmp.render(frame, layout[0]);
-        let client_tab = ClientTab::all()[self.client_tab_cmp.current_tab];
-        match client_tab {
-            ClientTab::Hello => self.render_client_hello(frame, layout[1]),
-            ClientTab::Certs => self.render_client_cert(frame, layout[1]),
-            ClientTab::Tls => self.render_client_tls(frame, layout[1]),
+        self.root_tab_cmp.render(frame, layout[0])?;
+        let root_tab = RootTab::all()[self.root_tab_cmp.current_tab];
+        match root_tab {
+            RootTab::Client => self.client_cmp.render(frame, layout[1]),
+            RootTab::Server => self.server_cmp.render(frame, layout[1]),
         }
     }
 
-    fn render_client_hello(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let data = process_client_hello(&self.state.borrow().client.hello);
-        self.scroll_index_vertical = self
-            .scroll_index_vertical
-            .content_length(data.len())
-            .viewport_content_length(self.area.height as usize);
-        let max_line_length = data
-            .iter()
-            .map(|(key, value)| key.len() + value.len())
-            .max()
-            .unwrap_or(0);
-        self.scroll_index_horizontal = self
-            .scroll_index_horizontal
-            .content_length(max_line_length)
-            .viewport_content_length(self.area.width as usize);
-        kv_paragraph(
-            &data,
-            frame,
-            area,
-            Some("Hello"),
-            self.focus.get(),
-            (
-                self.scroll_index_vertical.get_position() as u16,
-                self.scroll_index_horizontal.get_position() as u16,
-            ),
-        );
-        render_vertical_scrollbar(frame, area, &mut self.scroll_index_vertical);
-        render_horizontal_scrollbar(frame, area, &mut self.scroll_index_horizontal);
+    fn area(&self) -> Rect {
+        self.area
     }
 
-    fn render_client_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let certs = &self.state.borrow().client.certs;
-        let mut lines = vec![];
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
+    }
+}
 
-        match &certs {
-            Some(capture) => {
-                lines.push("Capture".into());
-                match &capture.cert {
-                    Some(cert) => {
-                        lines.push("End entity".into());
-
-                        match CertInfo::from_der(cert.end_entity.clone()) {
-                            Some(ci) => {
-                                render_cert(&ci, &mut lines);
-                            }
-                            None => {
-                                lines.push("Failed to render cert".into());
-                            }
-                        }
-
-                        for aaa in &cert.intermediates {
-                            match CertInfo::from_der(aaa.clone()) {
-                                Some(ci) => {
-                                    render_cert(&ci, &mut lines);
-                                }
-                                None => {
-                                    lines.push("Failed to render cert".into());
-                                }
-                            }
-                        }
-                        lines.push("End entity".into());
-                    }
-                    None => {
-                        lines.push("No certs".into());
-                    }
-                }
-
-                match &capture.tls {
-                    TlsVerify::Tls13(tls_capture) => lines.push(format!("{tls_capture:?}").into()),
-                    TlsVerify::Tls12(tls_capture) => lines.push(format!("{tls_capture:?}").into()),
-                    TlsVerify::None => lines.push("No tls data".into()),
-                }
-            }
-            None => {
-                lines.push("No data".into());
-            }
-        }
-
-        self.scroll_index_vertical = self
-            .scroll_index_vertical
-            .content_length(lines.len())
-            .viewport_content_length(self.area.height as usize);
-
-        let paragraph = Paragraph::new(lines)
-            .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false })
-            .scroll((
-                self.scroll_index_vertical.get_position() as u16,
-                self.scroll_index_horizontal.get_position() as u16,
-            ));
-        frame.render_widget(paragraph, area);
+impl HasFocus for FlowDetailsCerts {
+    fn build(&self, builder: &mut FocusBuilder) {
+        let tag = builder.start(self);
+        builder.widget(&self.root_tab_cmp);
+        let root_tab = RootTab::all()[self.root_tab_cmp.current_tab];
+        match root_tab {
+            RootTab::Client => builder.widget(&self.client_cmp),
+            RootTab::Server => builder.widget(&self.server_cmp),
+        };
+        builder.end(tag);
     }
 
-    fn render_client_tls(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let client_tls = &self.state.borrow().client.tls;
-
-        let data = process_client_tls(client_tls);
-
-        self.scroll_index_vertical = self
-            .scroll_index_vertical
-            .content_length(data.len())
-            .viewport_content_length(self.area.height as usize);
-
-        kv_paragraph(
-            &data,
-            frame,
-            area,
-            Some("Tls"),
-            self.focus.get(),
-            (
-                self.scroll_index_vertical.get_position() as u16,
-                self.scroll_index_horizontal.get_position() as u16,
-            ),
-        );
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
     }
 
-    fn render_server(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
-
-        let _ = self.server_tab_cmp.render(frame, layout[0]);
-        let server_tab = ServerTab::all()[self.server_tab_cmp.current_tab];
-        match server_tab {
-            ServerTab::ResolveClientCert => self.render_resolve_client_cert(frame, layout[1]),
-            ServerTab::Certs => self.render_server_cert(frame, layout[1]),
-            ServerTab::Tls => self.render_server_tls(frame, layout[1]),
-        }
-    }
-
-    fn render_resolve_client_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let certs = &self.state.borrow().server.resolve_client_cert;
-        let mut lines = vec![];
-
-        match &certs {
-            Some(capture) => {
-                lines.push(Line::from(Span::styled(
-                    "root_hint_subjects",
-                    Style::default().bold(),
-                )));
-                if capture.root_hint_subjects.is_empty() {
-                    lines.push("Empty".into());
-                } else {
-                    capture
-                        .root_hint_subjects
-                        .iter()
-                        .for_each(|s| lines.push(s.to_owned().into()));
-                }
-
-                lines.push(Line::from(Span::styled(
-                    "sigschemes",
-                    Style::default().bold(),
-                )));
-                if capture.sigschemes.is_empty() {
-                    lines.push("Empty".into());
-                } else {
-                    capture
-                        .sigschemes
-                        .iter()
-                        .for_each(|s| lines.push(format!("{s:?}").into()));
-                }
-            }
-            None => {
-                lines.push("No data".into());
-            }
-        }
-
-        self.scroll_index_vertical = self
-            .scroll_index_vertical
-            .content_length(lines.len())
-            .viewport_content_length(self.area.height as usize);
-
-        let paragraph = Paragraph::new(lines)
-            .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false })
-            .scroll((
-                self.scroll_index_vertical.get_position() as u16,
-                self.scroll_index_horizontal.get_position() as u16,
-            ));
-        frame.render_widget(paragraph, area);
-    }
-
-    fn render_server_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let certs = &self.state.borrow().server.certs;
-        let mut lines = vec![];
-        let header_style = Style::default().bold().underlined();
-
-        match certs {
-            Some(capture) => match &capture.cert {
-                Some(cert) => {
-                    lines.push(Line::from(vec![Span::styled("End entity", header_style)]));
-                    match CertInfo::from_der(cert.end_entity.clone()) {
-                        Some(cert_info) => {
-                            render_cert(&cert_info, &mut lines);
-                        }
-                        None => {
-                            lines.push("Failed to render cert".into());
-                        }
-                    }
-                    for (index, certificate) in cert.intermediates.iter().enumerate() {
-                        lines.push(Line::from(vec![Span::styled(
-                            format!("Intermediatary {index}"),
-                            header_style,
-                        )]));
-                        match CertInfo::from_der(certificate.clone()) {
-                            Some(ci) => {
-                                render_cert(&ci, &mut lines);
-                            }
-                            None => {
-                                lines.push("Failed to render cert".into());
-                            }
-                        }
-                    }
-                }
-                None => {
-                    lines.push("No certs".into());
-                }
-            },
-            None => {
-                lines.push("No data".into());
-            }
-        }
-
-        self.scroll_index_vertical = self
-            .scroll_index_vertical
-            .content_length(lines.len())
-            .viewport_content_length(self.area.height as usize);
-
-        let paragraph = Paragraph::new(lines)
-            .block(themed_block(None, self.focus.get()))
-            .wrap(Wrap { trim: false })
-            .scroll((
-                self.scroll_index_vertical.get_position() as u16,
-                self.scroll_index_horizontal.get_position() as u16,
-            ));
-        frame.render_widget(paragraph, area);
-
-        render_vertical_scrollbar(frame, area, &mut self.scroll_index_vertical);
-        render_horizontal_scrollbar(frame, area, &mut self.scroll_index_horizontal);
-    }
-
-    fn render_server_tls(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let tls = &self.state.borrow().server.tls;
-        let data = process_server_tls(tls);
-
-        self.scroll_index_vertical = self
-            .scroll_index_vertical
-            .content_length(data.len())
-            .viewport_content_length(self.area.height as usize);
-        kv_paragraph(
-            &data,
-            frame,
-            area,
-            Some("Tls"),
-            self.focus.get(),
-            (
-                self.scroll_index_vertical.get_position() as u16,
-                self.scroll_index_horizontal.get_position() as u16,
-            ),
-        );
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
 
@@ -585,107 +305,5 @@ fn render_cert<'a>(cert: &CertInfo, lines: &mut Vec<Line<'a>>) {
             Span::styled("Iussuer: ", tertiary_text()),
             Span::raw(subject_cn.to_owned()),
         ]))
-    }
-}
-
-impl HasFocus for FlowDetailsCerts {
-    fn build(&self, builder: &mut FocusBuilder) {
-        builder.leaf_widget(&self.root_tab_cmp);
-        let root_tab = RootTab::all()[self.root_tab_cmp.current_tab];
-        match root_tab {
-            RootTab::Client => builder.leaf_widget(&self.client_tab_cmp),
-            RootTab::Server => builder.leaf_widget(&self.server_tab_cmp),
-        };
-        builder.leaf_widget(self);
-    }
-
-    fn focus(&self) -> FocusFlag {
-        self.focus.clone()
-    }
-
-    fn area(&self) -> Rect {
-        Rect::default()
-    }
-}
-
-impl Component for FlowDetailsCerts {
-    fn children(&mut self) -> Vec<&mut dyn Component> {
-        vec![
-            &mut self.root_tab_cmp,
-            &mut self.client_tab_cmp,
-            &mut self.server_tab_cmp,
-        ]
-    }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.focus.get() {
-            match action {
-                Action::Down => {
-                    self.scroll_index_vertical.next();
-                    return ActionResult::Consumed;
-                }
-                Action::Up => {
-                    self.scroll_index_vertical.prev();
-                    return ActionResult::Consumed;
-                }
-                Action::Left => {
-                    self.scroll_index_horizontal.prev();
-                    return ActionResult::Consumed;
-                }
-                Action::Right => {
-                    self.scroll_index_horizontal.next();
-                    return ActionResult::Consumed;
-                }
-                Action::Start => {
-                    self.scroll_index_horizontal.first();
-                    return ActionResult::Consumed;
-                }
-                Action::End => {
-                    self.scroll_index_horizontal.last();
-                    return ActionResult::Consumed;
-                }
-                Action::PageUp => {
-                    for _ in 0..self.area.height as usize {
-                        self.scroll_index_vertical.prev();
-                    }
-                    return ActionResult::Consumed;
-                }
-                Action::PageDown => {
-                    for _ in 0..self.area.height as usize {
-                        self.scroll_index_vertical.next();
-                    }
-                    return ActionResult::Consumed;
-                }
-                Action::Top => {
-                    self.scroll_index_vertical.first();
-                    return ActionResult::Consumed;
-                }
-                Action::Bottom => {
-                    self.scroll_index_vertical.last();
-                    return ActionResult::Consumed;
-                }
-                _ => {}
-            }
-        }
-        ActionResult::Ignored
-    }
-
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
-        self.area = area;
-        let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
-        self.root_tab_cmp.render(frame, layout[0])?;
-        let root_tab = RootTab::all()[self.root_tab_cmp.current_tab];
-        match root_tab {
-            RootTab::Client => self.render_client(frame, layout[1]),
-            RootTab::Server => self.render_server(frame, layout[1]),
-        }
-        Ok(())
-    }
-
-    fn area(&self) -> Rect {
-        self.area
-    }
-
-    fn focus(&mut self) -> &mut FocusFlag {
-        &mut self.focus
     }
 }

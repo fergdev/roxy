@@ -10,7 +10,7 @@ use ratatui::{
 };
 use roxy_shared::content::ContentType;
 use tokio::sync::{mpsc, watch};
-use tracing::{debug, info};
+use tracing::debug;
 use x509_parser::nom::HexDisplay;
 
 use std::io::Cursor;
