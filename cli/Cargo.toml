@@ -52,7 +52,7 @@ time = { workspace = true }
 clap = { version = "4.5.40", features = ["derive"] }
 directories = "6.0.0"
 rs-snowflake = "0.6.0"
-image = "=0.25.9"
+image = "=0.25.10"
 
 # Serde
 serde = { workspace = true }
