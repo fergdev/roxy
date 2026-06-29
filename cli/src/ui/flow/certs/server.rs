@@ -9,9 +9,9 @@ use crate::ui::{
     flow::certs::{
         server_certs::ServerCertsComponent,
         server_resolve_client_cert::ServerResolveClientCertComponent,
-        server_tls::ServerTlsComponent,
+        server_tls::process_server_tls,
     },
-    framework::{component::Component, tab::TabComponent},
+    framework::{component::Component, kv_component::KvComponent, tab::TabComponent},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
@@ -50,7 +50,7 @@ pub(crate) struct ServerCertificateComponent {
 
     resolve_client_component: ServerResolveClientCertComponent,
     cert_component: ServerCertsComponent,
-    tls_component: ServerTlsComponent,
+    tls_component: KvComponent,
 }
 
 impl ServerCertificateComponent {
@@ -67,15 +67,17 @@ impl ServerCertificateComponent {
             ),
             resolve_client_component: ServerResolveClientCertComponent::new(),
             cert_component: ServerCertsComponent::new(),
-            tls_component: ServerTlsComponent::new(),
+            // tls_component: ServerTlsComponent::new(),
+            tls_component: KvComponent::new("Server TLS"),
         }
     }
 
-    pub(crate) fn set_state(&mut self, server_state: ServerState) {
+    pub(crate) fn set_state(&mut self, server_state: &ServerState) {
         self.resolve_client_component
-            .set_state(server_state.resolve_client_cert);
-        self.cert_component.set_state(server_state.certs);
-        self.tls_component.set_state(server_state.tls);
+            .set_state(&server_state.resolve_client_cert);
+        self.cert_component.set_state(&server_state.certs);
+        self.tls_component
+            .set_state(process_server_tls(&server_state.tls));
     }
 }
 

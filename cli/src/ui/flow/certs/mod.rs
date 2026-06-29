@@ -21,7 +21,7 @@ use tokio::{
     sync::{mpsc::Receiver, watch},
     task::JoinHandle,
 };
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 use x509_parser::parse_x509_certificate;
 
 use crate::{
@@ -182,11 +182,6 @@ impl FlowDetailsCerts {
 
 impl Component for FlowDetailsCerts {
     fn children(&mut self) -> Vec<&mut dyn Component> {
-        debug!(
-            "DEBUGPRINT[105]: {}:{} (after fn children(&mut self) -> Vec<&mut dyn C…)",
-            file!(),
-            line!()
-        );
         let root_tab = RootTab::all()[self.root_tab_cmp.current_tab];
         if matches!(root_tab, RootTab::Client) {
             vec![&mut self.root_tab_cmp, &mut self.client_cmp]
@@ -197,9 +192,11 @@ impl Component for FlowDetailsCerts {
 
     fn handle_tui_event(&mut self, tui_event: crate::tui::TuiEvent) -> Result<Option<Action>> {
         if tui_event == crate::tui::TuiEvent::Render {
-            let state = self.state.borrow().clone();
-            self.client_cmp.set_state(state.client);
-            self.server_cmp.set_state(state.server);
+            let state = self.state.borrow_and_update();
+            if state.has_changed() {
+                self.client_cmp.set_state(&state.client);
+                self.server_cmp.set_state(&state.server);
+            }
         }
         Ok(None)
     }

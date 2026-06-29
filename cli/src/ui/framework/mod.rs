@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod component;
+pub mod kv_component;
 pub mod notify;
 pub mod paragraph;
 pub mod scrollbar;

@@ -31,8 +31,8 @@ impl ServerResolveClientCertComponent {
         }
     }
 
-    pub(crate) fn set_state(&mut self, resolve_client_cert: Option<CapturedResolveClientCert>) {
-        self.data = resolve_client_cert;
+    pub(crate) fn set_state(&mut self, resolve_client_cert: &Option<CapturedResolveClientCert>) {
+        self.data = resolve_client_cert.clone();
     }
 
     fn render_resolve_client_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {

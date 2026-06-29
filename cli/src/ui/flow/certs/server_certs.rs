@@ -1,4 +1,5 @@
 use color_eyre::eyre::Result;
+use crossterm::event::{MouseEvent, MouseEventKind};
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
@@ -9,12 +10,15 @@ use ratatui::{
 };
 use roxy_shared::cert::ServerVerificationCapture;
 
-use crate::ui::{
-    flow::certs::{CertInfo, render_cert},
-    framework::{
-        component::Component,
-        scrollbar::{render_horizontal_scrollbar, render_vertical_scrollbar},
-        theme::themed_block,
+use crate::{
+    action::Action,
+    ui::{
+        flow::certs::{CertInfo, render_cert},
+        framework::{
+            component::{ActionResult, Component},
+            scrollbar::{render_horizontal_scrollbar, render_vertical_scrollbar},
+            theme::themed_block,
+        },
     },
 };
 
@@ -39,8 +43,8 @@ impl ServerCertsComponent {
         }
     }
 
-    pub(crate) fn set_state(&mut self, certs: Option<ServerVerificationCapture>) {
-        self.data = certs;
+    pub(crate) fn set_state(&mut self, certs: &Option<ServerVerificationCapture>) {
+        self.data = certs.clone();
     }
     fn render_server_cert(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let mut lines = vec![];
@@ -114,6 +118,34 @@ impl Component for ServerCertsComponent {
         self.render_server_cert(frame, area);
 
         Ok(())
+    }
+
+    fn handle_action(&mut self, action: Action) -> ActionResult {
+        match action {
+            Action::Up => {
+                self.scroll_index_vertical.prev();
+                ActionResult::Consumed
+            }
+            Action::Down => {
+                self.scroll_index_vertical.next();
+                ActionResult::Consumed
+            }
+            _ => ActionResult::Ignored,
+        }
+    }
+
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.scroll_index_vertical.prev();
+                Ok(None)
+            }
+            MouseEventKind::ScrollDown => {
+                self.scroll_index_vertical.next();
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
     }
 }
 

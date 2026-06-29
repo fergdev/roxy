@@ -8,10 +8,10 @@ use strum::EnumIter;
 
 use crate::ui::{
     flow::certs::{
-        client_certs::ClientCertComponent, client_hello::ClientHelloComponent,
-        client_tls::ClientTlsComponent,
+        client_certs::ClientCertComponent, client_hello::process_client_hello,
+        client_tls::process_client_tls,
     },
-    framework::{component::Component, tab::TabComponent},
+    framework::{component::Component, kv_component::KvComponent, tab::TabComponent},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
@@ -48,9 +48,9 @@ pub(crate) struct ClientCertificateComponent {
 
     tab: TabComponent,
 
-    hello_component: ClientHelloComponent,
+    hello_component: KvComponent,
     cert_component: ClientCertComponent,
-    tls_component: ClientTlsComponent,
+    tls_component: KvComponent,
 }
 
 impl ClientCertificateComponent {
@@ -65,16 +65,18 @@ impl ClientCertificateComponent {
                     .map(|t| t.title().to_string())
                     .collect(),
             ),
-            hello_component: ClientHelloComponent::new(),
+            hello_component: KvComponent::new("Hello"),
             cert_component: ClientCertComponent::new(),
-            tls_component: ClientTlsComponent::new(),
+            tls_component: KvComponent::new("tls"),
         }
     }
 
-    pub(crate) fn set_state(&mut self, client_state: ClientState) {
-        self.hello_component.set_state(&client_state.hello);
+    pub(crate) fn set_state(&mut self, client_state: &ClientState) {
+        self.hello_component
+            .set_state(process_client_hello(&client_state.hello));
         self.cert_component.set_state(&client_state.certs);
-        self.tls_component.set_state(client_state.tls);
+        self.tls_component
+            .set_state(process_client_tls(&client_state.tls));
     }
 }
 
