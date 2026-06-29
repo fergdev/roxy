@@ -1,3 +1,4 @@
+pub mod button_group;
 pub mod cache;
 pub mod component;
 pub mod kv_component;

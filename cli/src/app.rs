@@ -67,7 +67,7 @@ impl App {
             let mut focus = FocusBuilder::build_for(&self.home);
 
             // Enable for logging of focus related changes
-            // focus.enable_log();
+            focus.enable_log();
 
             self.handle_events(&mut tui).await?;
             self.handle_actions(&mut tui, &mut focus)?;

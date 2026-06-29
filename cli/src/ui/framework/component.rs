@@ -71,8 +71,21 @@ pub trait Component {
             }
         }
         if self.focus().get() {
+            // debug!(
+            //     "ActionHandle[117]: {}:{}: name={:#?}",
+            //     file!(),
+            //     line!(),
+            //     self.focus().name()
+            // );
             self.handle_action(action)
         } else {
+            // debug!(
+            //     "ActionIgnored[117]: {}:{}: name={:#?}",
+            //     file!(),
+            //     line!(),
+            //     self.focus().name()
+            // );
+
             ActionResult::Ignored
         }
     }

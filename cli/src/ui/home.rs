@@ -58,7 +58,7 @@ impl HomeComponent {
             splash,
             flow_list,
             config_editor: ConfigEditor::new(config_manager.clone()),
-            quit_popup: QuitPopup::default(),
+            quit_popup: QuitPopup::new(),
             flow_details: FlowDetails::new(flow_store.clone()),
             log_viewer: LogViewer::new(log_buffer),
             fps_counter: FpsCounter::new(),
@@ -159,7 +159,9 @@ impl Component for HomeComponent {
                     } else {
                         self.active_popup = Some(ActivePopup::QuitPopup);
                         self.quit_popup.reset();
-                        ActionResult::Consumed
+                        ActionResult::Action(Action::FocusReq(
+                            self.quit_popup.button_group.focus().widget_id(),
+                        ))
                     }
                 }
             },
