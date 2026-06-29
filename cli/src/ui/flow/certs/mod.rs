@@ -25,18 +25,16 @@ use x509_parser::parse_x509_certificate;
 use crate::{
     action::Action,
     ui::{
-        flow::{
-            certs::{
-                client::{process_client_hello, process_client_tls},
-                server::process_server_tls,
-            },
-            tab::TabComponent,
+        flow::certs::{
+            client::{process_client_hello, process_client_tls},
+            server::process_server_tls,
         },
         framework::{
             component::{ActionResult, Component},
             paragraph::kv_paragraph,
             scrollbar::{render_horizontal_scrollbar, render_vertical_scrollbar},
-            theme::{tertiary_text, themed_block, themed_tabs},
+            tab::TabComponent,
+            theme::{tertiary_text, themed_block},
         },
     },
 };
@@ -104,13 +102,9 @@ pub struct FlowDetailsCerts {
     area: Rect,
     handle: JoinHandle<()>,
 
-    tab: TabComponent,
+    root_tab_cmp: TabComponent,
     client_tab_cmp: TabComponent,
     server_tab_cmp: TabComponent,
-
-    root_tab: RootTab,
-    client_tab: ClientTab,
-    server_tab: ServerTab,
 
     scroll_index_vertical: ScrollbarState,
     scroll_index_horizontal: ScrollbarState,
@@ -145,30 +139,6 @@ impl RootTab {
             Self::Server => "Server",
         }
     }
-
-    fn index(&self) -> usize {
-        Self::all().iter().position(|&t| t == *self).unwrap_or(0)
-    }
-
-    fn prev(&self) -> Self {
-        let all_tabs = Self::all();
-        let index = self.index();
-        if index == 0 {
-            *all_tabs.last().unwrap_or(&Self::Server)
-        } else {
-            all_tabs[index - 1]
-        }
-    }
-
-    fn next(&self) -> Self {
-        let all_tabs = Self::all();
-        let index = self.index();
-        if index == all_tabs.len() - 1 {
-            *all_tabs.first().unwrap_or(&Self::Client)
-        } else {
-            all_tabs[index + 1]
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
@@ -190,30 +160,6 @@ impl ClientTab {
             Self::Tls => "Tls",
         }
     }
-
-    fn index(&self) -> usize {
-        Self::all().iter().position(|&t| t == *self).unwrap_or(0)
-    }
-
-    fn prev(&self) -> Self {
-        let all_tabs = Self::all();
-        let index = self.index();
-        if index == 0 {
-            *all_tabs.last().unwrap_or(&Self::Tls)
-        } else {
-            all_tabs[index - 1]
-        }
-    }
-
-    fn next(&self) -> Self {
-        let all_tabs = Self::all();
-        let index = self.index();
-        if index == all_tabs.len() - 1 {
-            *all_tabs.first().unwrap_or(&Self::Hello)
-        } else {
-            all_tabs[index + 1]
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
@@ -233,30 +179,6 @@ impl ServerTab {
             Self::ResolveClientCert => "Resolve",
             Self::Certs => "Certs",
             Self::Tls => "Tls",
-        }
-    }
-
-    fn index(&self) -> usize {
-        Self::all().iter().position(|&t| t == *self).unwrap_or(0)
-    }
-
-    fn prev(&self) -> Self {
-        let all_tabs = Self::all();
-        let index = self.index();
-        if index == 0 {
-            *all_tabs.last().unwrap_or(&Self::ResolveClientCert)
-        } else {
-            all_tabs[index - 1]
-        }
-    }
-
-    fn next(&self) -> Self {
-        let all_tabs = Self::all();
-        let index = self.index();
-        if index == all_tabs.len() - 1 {
-            *all_tabs.first().unwrap_or(&Self::Tls)
-        } else {
-            all_tabs[index + 1]
         }
     }
 }
@@ -305,12 +227,27 @@ impl FlowDetailsCerts {
             focus: FocusFlag::new().with_name("FlowCerts"),
             area: Rect::default(),
             handle,
-            tab: TabComponent::new("FlowTabCerts"),
-            client_tab_cmp: TabComponent::new("ClientTab"),
-            server_tab_cmp: TabComponent::new("ServerTab"),
-            root_tab: RootTab::Client,
-            client_tab: ClientTab::Hello,
-            server_tab: ServerTab::ResolveClientCert,
+            root_tab_cmp: TabComponent::new(
+                "Certs".to_string(),
+                RootTab::all()
+                    .iter()
+                    .map(|v| v.title().to_string())
+                    .collect(),
+            ),
+            client_tab_cmp: TabComponent::new(
+                "ClientTab".to_string(),
+                ClientTab::all()
+                    .iter()
+                    .map(|v| v.title().to_string())
+                    .collect(),
+            ),
+            server_tab_cmp: TabComponent::new(
+                "ServerTab".to_string(),
+                ServerTab::all()
+                    .iter()
+                    .map(|v| v.title().to_string())
+                    .collect(),
+            ),
             scroll_index_vertical: ScrollbarState::default(),
             scroll_index_horizontal: ScrollbarState::default(),
         }
@@ -318,20 +255,9 @@ impl FlowDetailsCerts {
 
     fn render_client(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
-
-        let tab_titles: Vec<Line> = ClientTab::all()
-            .iter()
-            .map(|v| v.title().into())
-            .collect::<_>();
-
-        let tabs = themed_tabs(
-            Some("Client"),
-            tab_titles,
-            self.client_tab.index(),
-            self.client_tab_cmp.focus.get(),
-        );
-        frame.render_widget(tabs, layout[0]);
-        match self.client_tab {
+        let _ = self.client_tab_cmp.render(frame, layout[0]);
+        let client_tab = ClientTab::all()[self.client_tab_cmp.current_tab];
+        match client_tab {
             ClientTab::Hello => self.render_client_hello(frame, layout[1]),
             ClientTab::Certs => self.render_client_cert(frame, layout[1]),
             ClientTab::Tls => self.render_client_tls(frame, layout[1]),
@@ -456,17 +382,10 @@ impl FlowDetailsCerts {
 
     fn render_server(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
-        let tab_titles: Vec<Line> = ServerTab::all().iter().map(|v| v.title().into()).collect();
 
-        let tabs = themed_tabs(
-            Some("Server"),
-            tab_titles,
-            self.server_tab.index(),
-            self.server_tab_cmp.focus.get(),
-        );
-
-        frame.render_widget(tabs, layout[0]);
-        match self.server_tab {
+        let _ = self.server_tab_cmp.render(frame, layout[0]);
+        let server_tab = ServerTab::all()[self.server_tab_cmp.current_tab];
+        match server_tab {
             ServerTab::ResolveClientCert => self.render_resolve_client_cert(frame, layout[1]),
             ServerTab::Certs => self.render_server_cert(frame, layout[1]),
             ServerTab::Tls => self.render_server_tls(frame, layout[1]),
@@ -671,8 +590,9 @@ fn render_cert<'a>(cert: &CertInfo, lines: &mut Vec<Line<'a>>) {
 
 impl HasFocus for FlowDetailsCerts {
     fn build(&self, builder: &mut FocusBuilder) {
-        builder.leaf_widget(&self.tab);
-        match self.root_tab {
+        builder.leaf_widget(&self.root_tab_cmp);
+        let root_tab = RootTab::all()[self.root_tab_cmp.current_tab];
+        match root_tab {
             RootTab::Client => builder.leaf_widget(&self.client_tab_cmp),
             RootTab::Server => builder.leaf_widget(&self.server_tab_cmp),
         };
@@ -689,46 +609,14 @@ impl HasFocus for FlowDetailsCerts {
 }
 
 impl Component for FlowDetailsCerts {
+    fn children(&mut self) -> Vec<&mut dyn Component> {
+        vec![
+            &mut self.root_tab_cmp,
+            &mut self.client_tab_cmp,
+            &mut self.server_tab_cmp,
+        ]
+    }
     fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.tab.focus.get() {
-            match action {
-                Action::Left => {
-                    self.root_tab = self.root_tab.prev();
-                    return ActionResult::Consumed;
-                }
-                Action::Right => {
-                    self.root_tab = self.root_tab.next();
-                    return ActionResult::Consumed;
-                }
-                _ => {}
-            }
-        }
-        if self.client_tab_cmp.focus.get() {
-            match action {
-                Action::Left => {
-                    self.client_tab = self.client_tab.prev();
-                    return ActionResult::Consumed;
-                }
-                Action::Right => {
-                    self.client_tab = self.client_tab.next();
-                    return ActionResult::Consumed;
-                }
-                _ => {}
-            }
-        }
-        if self.server_tab_cmp.focus.get() {
-            match action {
-                Action::Left => {
-                    self.server_tab = self.server_tab.prev();
-                    return ActionResult::Consumed;
-                }
-                Action::Right => {
-                    self.server_tab = self.server_tab.next();
-                    return ActionResult::Consumed;
-                }
-                _ => {}
-            }
-        }
         if self.focus.get() {
             match action {
                 Action::Down => {
@@ -784,16 +672,9 @@ impl Component for FlowDetailsCerts {
     fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
         self.area = area;
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
-        let tab_titles: Vec<Line> = RootTab::all().iter().map(|v| v.title().into()).collect();
-
-        let tabs = themed_tabs(
-            Some("Certs"),
-            tab_titles,
-            self.root_tab.index(),
-            self.tab.focus.get(),
-        );
-        frame.render_widget(tabs, layout[0]);
-        match self.root_tab {
+        self.root_tab_cmp.render(frame, layout[0])?;
+        let root_tab = RootTab::all()[self.root_tab_cmp.current_tab];
+        match root_tab {
             RootTab::Client => self.render_client(frame, layout[1]),
             RootTab::Server => self.render_server(frame, layout[1]),
         }
@@ -802,5 +683,9 @@ impl Component for FlowDetailsCerts {
 
     fn area(&self) -> Rect {
         self.area
+    }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
     }
 }

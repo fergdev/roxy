@@ -228,6 +228,10 @@ impl Component for FlowList {
     fn area(&self) -> Rect {
         self.area
     }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
+    }
 }
 
 fn method_color(method: &Method) -> Color {

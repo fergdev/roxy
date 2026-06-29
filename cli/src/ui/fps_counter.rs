@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use color_eyre::Result;
+use rat_focus::FocusFlag;
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -16,6 +17,7 @@ use super::framework::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct FpsCounter {
     area: Rect,
+    focus: FocusFlag,
 
     last_tick_update: Instant,
     tick_count: u32,
@@ -38,6 +40,7 @@ impl FpsCounter {
     pub fn new() -> Self {
         Self {
             area: Rect::default(),
+            focus: FocusFlag::new().with_name("FpsCounter"),
             last_tick_update: Instant::now(),
             tick_count: 0,
             ticks_per_second: 0.0,
@@ -114,5 +117,9 @@ impl Component for FpsCounter {
 
     fn area(&self) -> Rect {
         self.area
+    }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
     }
 }

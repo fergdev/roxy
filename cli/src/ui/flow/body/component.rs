@@ -156,23 +156,9 @@ impl HasFocus for FlowDetailsBody {
 
 impl Component for FlowDetailsBody {
     fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
-        info!(
-            "DEBUGPRINT[93]: {}:{}: mouse={:#?}",
-            file!(),
-            line!(),
-            mouse
-        );
-
         if !self.focus.get() {
-            info!("DEBUGPRINT[95]: {}:{}: self={:#?}", file!(), line!(), false);
             return Ok(Some(Action::FocusReq(self.focus.id())));
         }
-
-        info!(
-            "DEBUGPRINT[94]: {}:{} (after return Ok(Some(Action::FocusReq(self.foc…)",
-            file!(),
-            line!()
-        );
 
         match mouse.kind {
             MouseEventKind::ScrollUp => {
@@ -275,5 +261,9 @@ impl Component for FlowDetailsBody {
 
     fn area(&self) -> Rect {
         self.area
+    }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
     }
 }

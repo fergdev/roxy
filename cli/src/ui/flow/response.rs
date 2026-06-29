@@ -11,7 +11,7 @@ use tokio::sync::{mpsc, watch};
 use tracing::debug;
 
 use crate::ui::{
-    flow::tab::LineComponent,
+    flow::line::LineComponent,
     framework::{component::Component, theme::themed_block},
 };
 
@@ -126,5 +126,9 @@ impl Component for FlowDetailsResponse {
 
     fn area(&self) -> Rect {
         self.area
+    }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
     }
 }

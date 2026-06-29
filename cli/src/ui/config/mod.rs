@@ -5,7 +5,6 @@ mod table;
 use color_eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use std::path::PathBuf;
-use tokio::sync::mpsc;
 
 use ratatui::{
     Frame,
@@ -15,8 +14,13 @@ use ratatui::{
 };
 
 use crate::{
+    action::Action,
     config::manager::ConfigManager,
-    ui::config::{tab::TabComponent, table::TableComponent},
+    tui::TuiEvent,
+    ui::{
+        config::{tab::ConfigTab, table::TableComponent},
+        framework::tab::TabComponent,
+    },
 };
 
 use super::framework::{component::Component, util::centered_rect};
@@ -46,12 +50,17 @@ pub struct ConfigEditor {
 
 impl ConfigEditor {
     pub fn new(config_manager: ConfigManager) -> Self {
-        let (config_tab_tx, config_tab_rx) = mpsc::unbounded_channel();
         Self {
             focus: FocusFlag::new().with_name("ConfigEditor"),
             area: Rect::default(),
-            tab_component: TabComponent::new(config_tab_tx),
-            table_component: TableComponent::new(config_manager, config_tab_rx),
+            tab_component: TabComponent::new(
+                "Confg Editor".to_string(),
+                ConfigTab::all()
+                    .iter()
+                    .map(|t| t.title().to_string())
+                    .collect::<Vec<_>>(),
+            ),
+            table_component: TableComponent::new(config_manager, ConfigTab::App),
         }
     }
 
@@ -63,6 +72,14 @@ impl ConfigEditor {
 impl Component for ConfigEditor {
     fn children(&mut self) -> Vec<&mut dyn Component> {
         vec![&mut self.tab_component, &mut self.table_component]
+    }
+
+    fn handle_tui_event(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
+        if tui_event == TuiEvent::Render {
+            self.table_component
+                .set_selected_tab(ConfigTab::all()[self.tab_component.current_tab]);
+        }
+        Ok(None)
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
@@ -81,6 +98,10 @@ impl Component for ConfigEditor {
 
     fn area(&self) -> Rect {
         self.area
+    }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
     }
 }
 impl HasFocus for ConfigEditor {

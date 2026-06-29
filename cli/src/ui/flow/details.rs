@@ -3,7 +3,6 @@ use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    text::Line,
     widgets::Clear,
 };
 
@@ -17,13 +16,9 @@ use tokio::{
 };
 use tracing::error;
 
-use crate::{
-    action::Action,
-    ui::framework::{
-        component::{ActionResult, Component},
-        theme::themed_tabs,
-        util::centered_rect,
-    },
+use crate::ui::{
+    framework::tab::TabComponent,
+    framework::{component::Component, util::centered_rect},
 };
 
 use super::response::FlowDetailsResponse;
@@ -40,7 +35,6 @@ enum Tab {
     Ws,
 }
 
-// TODO: strum this?
 impl Tab {
     fn all() -> &'static [Tab] {
         &[
@@ -61,38 +55,13 @@ impl Tab {
             Tab::Ws => "Ws",
         }
     }
-
-    fn index(&self) -> usize {
-        Self::all().iter().position(|&t| t == *self).unwrap_or(0)
-    }
-
-    fn prev(&self) -> Self {
-        let all_tabs = Self::all();
-        let index = self.index();
-        if index == 0 {
-            *all_tabs.iter().last().unwrap_or(&Self::Ws)
-        } else {
-            all_tabs[index - 1]
-        }
-    }
-
-    fn next(&self) -> Self {
-        let all_tabs = Self::all();
-        let index = self.index();
-        if index == all_tabs.len() - 1 {
-            *all_tabs.first().unwrap_or(&Self::Request)
-        } else {
-            all_tabs[index + 1]
-        }
-    }
 }
 
 pub struct FlowDetails {
     focus: FocusFlag,
     area: Rect,
-    tabs: TabComponent,
+    tab_component: TabComponent,
     selected_flow: Option<i64>,
-    tab: Tab,
     listener_handle: JoinHandle<()>,
     flow_id_tx: watch::Sender<Option<i64>>,
     request: FlowDetailsRequest,
@@ -143,9 +112,14 @@ impl FlowDetails {
         Self {
             focus: FocusFlag::new().with_name("FlowDetails"),
             area: Rect::default(),
-            tabs: TabComponent::new(),
+            tab_component: TabComponent::new(
+                "Details".to_string(),
+                Tab::all()
+                    .iter()
+                    .map(|t| t.title().to_string())
+                    .collect::<Vec<_>>(),
+            ),
             selected_flow: None,
-            tab: Tab::Request,
             listener_handle: handle,
             flow_id_tx: tx,
             request,
@@ -157,25 +131,11 @@ impl FlowDetails {
     }
 
     pub fn set_flow(&mut self, flow_id: i64) {
-        self.tabs.focus.set(true);
+        self.tab_component.focus.set(true);
         self.selected_flow = Some(flow_id);
         self.flow_id_tx.send(Some(flow_id)).unwrap_or_else(|_| {
             error!("Failed to send flow ID, channel closed");
         });
-    }
-
-    fn next_tab(&mut self) {
-        self.tab = self.tab.next();
-    }
-
-    fn prev_tab(&mut self) {
-        self.tab = self.tab.prev();
-    }
-    fn start_tab(&mut self) {
-        self.tab = Tab::default();
-    }
-    fn end_tab(&mut self) {
-        self.tab = Tab::Ws;
     }
 }
 
@@ -222,50 +182,13 @@ async fn update_flow_view(
     }
 }
 
-struct TabComponent {
-    focus: FocusFlag,
-    area: Rect,
-}
-
-impl TabComponent {
-    pub fn new() -> Self {
-        Self {
-            focus: FocusFlag::new().with_name("FlowDetailsTabs"),
-            area: Rect::default(),
-        }
-    }
-}
-
-impl Component for TabComponent {
-    fn render(&mut self, _frame: &mut Frame<'_>, area: Rect) -> Result<()> {
-        self.area = area;
-        Ok(())
-    }
-
-    fn area(&self) -> Rect {
-        self.area
-    }
-}
-
-impl HasFocus for TabComponent {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
-        builder.leaf_widget(self);
-    }
-
-    fn focus(&self) -> FocusFlag {
-        self.focus.clone()
-    }
-
-    fn area(&self) -> Rect {
-        self.area
-    }
-}
-
 impl HasFocus for FlowDetails {
     fn build(&self, builder: &mut rat_focus::FocusBuilder) {
         let tag = builder.start(self);
-        builder.widget(&self.tabs);
-        let widget: &dyn HasFocus = match self.tab {
+
+        builder.widget(&self.tab_component);
+        let tab = Tab::all()[self.tab_component.current_tab];
+        let widget: &dyn HasFocus = match tab {
             Tab::Request => &self.request,
             Tab::Response => &self.response,
             Tab::Certs => &self.certs,
@@ -287,40 +210,15 @@ impl HasFocus for FlowDetails {
 
 impl Component for FlowDetails {
     fn children(&mut self) -> Vec<&mut dyn Component> {
-        let mut children: Vec<&mut dyn Component> = vec![&mut self.tabs];
-        let selected_child: &mut dyn Component = match self.tab {
+        let tab = Tab::all()[self.tab_component.current_tab];
+        let selected_child: &mut dyn Component = match tab {
             Tab::Request => &mut self.request,
             Tab::Response => &mut self.response,
             Tab::Certs => &mut self.certs,
             Tab::Timing => &mut self.timing,
             Tab::Ws => &mut self.ws,
         };
-        children.push(selected_child);
-        children
-    }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.tabs.focus.get() {
-            match action {
-                Action::Left => {
-                    self.prev_tab();
-                    return ActionResult::Consumed;
-                }
-                Action::Right => {
-                    self.next_tab();
-                    return ActionResult::Consumed;
-                }
-                Action::Start => {
-                    self.start_tab();
-                    return ActionResult::Consumed;
-                }
-                Action::End => {
-                    self.end_tab();
-                    return ActionResult::Consumed;
-                }
-                _ => {}
-            }
-        }
-        ActionResult::Ignored
+        vec![&mut self.tab_component, selected_child]
     }
 
     fn render(&mut self, frame: &mut Frame<'_>, area: Rect) -> Result<()> {
@@ -332,18 +230,11 @@ impl Component for FlowDetails {
 
         let layout =
             Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(popup_area);
-        let tab_titles: Vec<Line> = Tab::all().iter().map(|t| Line::raw(t.title())).collect();
-        let tab_index = self.tab.index();
 
-        let tabs = themed_tabs(
-            Some("Flow details"),
-            tab_titles,
-            tab_index,
-            self.tabs.focus.get(),
-        );
-        frame.render_widget(tabs, layout[0]);
+        self.tab_component.render(frame, layout[0])?;
 
-        let component: &mut dyn Component = match self.tab {
+        let tab = Tab::all()[self.tab_component.current_tab];
+        let component: &mut dyn Component = match tab {
             Tab::Request => &mut self.request,
             Tab::Response => &mut self.response,
             Tab::Certs => &mut self.certs,
@@ -357,6 +248,10 @@ impl Component for FlowDetails {
 
     fn area(&self) -> Rect {
         self.area
+    }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
     }
 }
 

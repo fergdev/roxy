@@ -97,4 +97,8 @@ impl Component for QuitPopup {
     fn area(&self) -> Rect {
         self.area
     }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
+    }
 }

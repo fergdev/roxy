@@ -1,5 +1,6 @@
 use color_eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
+use rat_focus::FocusFlag;
 use ratatui::{
     Frame,
     layout::{Position, Rect},
@@ -29,6 +30,7 @@ pub trait Component {
     fn visible(&self) -> bool {
         self.area().width > 0 && self.area().height > 0
     }
+    fn focus(&mut self) -> &mut FocusFlag;
     /// Handle tui events.
     fn dispatch_tui_events(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
         for child in self.children() {
@@ -68,13 +70,18 @@ pub trait Component {
                 ActionResult::Ignored => {}
             }
         }
-        self.handle_action(action)
+        if self.focus().get() {
+            self.handle_action(action)
+        } else {
+            ActionResult::Ignored
+        }
     }
 
     fn handle_tui_event(&mut self, _tui_event: TuiEvent) -> Result<Option<Action>> {
         Ok(None)
     }
 
+    /// Handle actions, only invoked when the component has focus.
     fn handle_action(&mut self, _action: Action) -> ActionResult {
         ActionResult::Ignored
     }
@@ -84,7 +91,8 @@ pub trait Component {
         KeyEventResult::Ignored
     }
 
-    /// Handle crossterm mouse events.
+    /// Handle crossterm mouse events, only invoked when the mouse event is within the component's
+    /// area.
     fn handle_mouse_event(&mut self, _mouse: MouseEvent) -> Result<Option<Action>> {
         Ok(None)
     }

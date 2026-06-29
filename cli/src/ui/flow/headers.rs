@@ -1,3 +1,5 @@
+use color_eyre::eyre::Result;
+use crossterm::event::{MouseEvent, MouseEventKind};
 use hyper::HeaderMap;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
@@ -64,43 +66,57 @@ impl HasFocus for FlowDetailsHeaders {
 }
 
 impl Component for FlowDetailsHeaders {
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        if self.focus.get() {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.table_state.scroll_up_by(1);
+                    return Ok(None);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.table_state.scroll_down_by(1);
+                    return Ok(None);
+                }
+                _ => {}
+            }
+        } else {
+            return Ok(Some(Action::FocusReq(self.focus.id())));
+        }
+        Ok(None)
+    }
     fn handle_action(&mut self, action: Action) -> ActionResult {
         if self.focus.get() {
+            let mut res = ActionResult::Consumed;
             match action {
                 Action::Up => {
                     self.table_state.select_previous();
-                    ActionResult::Consumed
                 }
                 Action::Down => {
                     self.table_state.select_next();
-                    ActionResult::Consumed
                 }
                 Action::PageUp => {
                     self.table_state.scroll_up_by(self.area.height);
-                    ActionResult::Consumed
                 }
                 Action::PageDown => {
                     self.table_state.scroll_down_by(self.area.height);
-                    ActionResult::Consumed
                 }
                 Action::Top => {
                     self.table_state.select(Some(0));
-                    ActionResult::Consumed
                 }
                 Action::Bottom => {
                     let headers = self.headers.borrow_and_update();
                     let headers_size = headers.as_ref().map(|h| h.len()).unwrap_or(0);
                     self.table_state.scroll_down_by(headers_size as u16);
-                    ActionResult::Consumed
                 }
-                _ => ActionResult::Ignored,
+                _ => res = ActionResult::Ignored,
             }
+            res
         } else {
             ActionResult::Ignored
         }
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         self.area = area;
         frame.render_widget(Clear, area);
         let headers = self.headers.borrow_and_update();
@@ -136,5 +152,9 @@ impl Component for FlowDetailsHeaders {
 
     fn area(&self) -> Rect {
         self.area
+    }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
     }
 }

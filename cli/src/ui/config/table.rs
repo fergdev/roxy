@@ -10,13 +10,11 @@ use ratatui::{
     text::Span,
     widgets::{Cell, Paragraph, Row, TableState},
 };
-use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{debug, error, info};
 
 use crate::{
     action::Action,
     config::{RoxyConfig, color::parse_color, manager::ConfigManager},
-    tui::TuiEvent,
     ui::{
         config::{ConfigValue, EditableConfigField, tab::ConfigTab},
         framework::{
@@ -35,14 +33,10 @@ pub(crate) struct TableComponent {
     table_state: TableState,
     is_editing: bool,
     input_buffer: String,
-    on_change: UnboundedReceiver<ConfigTab>,
 }
 
 impl TableComponent {
-    pub(crate) fn new(
-        config_manager: ConfigManager,
-        on_change: UnboundedReceiver<ConfigTab>,
-    ) -> Self {
+    pub(crate) fn new(config_manager: ConfigManager, selected_tab: ConfigTab) -> Self {
         let config_rx = config_manager.rx.clone();
         let current_config = config_rx.borrow();
         let fields: HashMap<ConfigTab, Vec<EditableConfigField>> = (&*current_config).into();
@@ -52,12 +46,19 @@ impl TableComponent {
             area: Rect::default(),
             config_manager,
             fields,
-            selected_tab: ConfigTab::App,
+            selected_tab,
             table_state: TableState::default(),
             is_editing: false,
             input_buffer: String::new(),
-            on_change,
         }
+    }
+
+    pub(crate) fn set_selected_tab(&mut self, tab: ConfigTab) {
+        if self.selected_tab == tab {
+            return;
+        }
+        self.selected_tab = tab;
+        self.table_state.select(Some(0));
     }
 
     fn is_editing(&self) -> bool {
@@ -131,54 +132,6 @@ impl TableComponent {
             }
         }
     }
-
-    // fn delete(&mut self) -> bool {
-    //     let Some(selected_field_index) = self.table_state.selected() else {
-    //         return false;
-    //     };
-    //
-    //     // Delete keybinding
-    //     if self.tab_component.current_tab == ConfigTab::KeyBinds {
-    //         let fields = match self.fields.get_mut(&self.tab_component.current_tab) {
-    //             Some(f) => f,
-    //             None => {
-    //                 return false;
-    //             }
-    //         };
-    //
-    //         fields.remove(selected_field_index);
-    //         self.update_config();
-    //         return true;
-    //     }
-    //
-    //     false
-    // }
-    //
-    // fn add(&mut self) -> bool {
-    //     let Some(selected_field_index) = self.table_state.selected() else {
-    //         return false;
-    //     };
-    //
-    //     // Add keybinding
-    //     if self.tab_component.current_tab == ConfigTab::KeyBinds {
-    //         let fields = match self.fields.get_mut(&self.tab_component.current_tab) {
-    //             Some(f) => f,
-    //             None => {
-    //                 return false;
-    //             }
-    //         };
-    //
-    //         let ecf = EditableConfigField {
-    //             key: "Add".to_string(),
-    //             value: ConfigValue::String("u".to_string()),
-    //             is_editing: false,
-    //         };
-    //         fields.insert(selected_field_index, ecf);
-    //         self.update_config();
-    //         return true;
-    //     }
-    //     todo!()
-    // }
 }
 
 impl Component for TableComponent {
@@ -217,43 +170,25 @@ impl Component for TableComponent {
             let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
 
             frame.render_stateful_widget(
-                themed_table(rows, widths, None, self.focus.get()),
+                themed_table(
+                    rows,
+                    widths,
+                    Some(self.selected_tab.title()),
+                    self.focus.get(),
+                ),
                 area,
                 &mut self.table_state,
             );
         } else {
             frame.render_widget(
-                Paragraph::new("No fields").block(themed_block(None, self.focus.get())),
+                Paragraph::new("No fields").block(themed_block(
+                    Some(self.selected_tab.title()),
+                    self.focus.get(),
+                )),
                 area,
             );
         }
         Ok(())
-    }
-
-    fn handle_tui_event(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
-        // On render we check for new config_tab and update.
-        if tui_event == TuiEvent::Render
-            && let Ok(config) = self.on_change.try_recv()
-        {
-            self.selected_tab = config;
-        }
-
-        match tui_event {
-            TuiEvent::Mouse(mouse) => match self.handle_mouse_event(mouse) {
-                Ok(Some(action)) => return Ok(Some(action)),
-                Ok(None) => {}
-                Err(error) => return Err(error),
-            },
-            TuiEvent::Key(key) => {
-                let result = self.handle_key_event(&key);
-                if result == KeyEventResult::Consumed {
-                    return Ok(None);
-                }
-            }
-            _ => {}
-        }
-
-        Ok(None)
     }
 
     fn handle_action(&mut self, action: Action) -> ActionResult {
@@ -272,42 +207,36 @@ impl Component for TableComponent {
             return ActionResult::Ignored;
         }
 
+        let mut result = ActionResult::Consumed;
         match action {
             Action::Left => {
                 self.table_state.select_previous_column();
-                ActionResult::Consumed
             }
             Action::Right => {
                 self.table_state.select_next_column();
-                ActionResult::Consumed
             }
             Action::Up => {
                 self.table_state.select_previous();
-                ActionResult::Consumed
             }
             Action::Down => {
                 self.table_state.select_next();
-                ActionResult::Consumed
             }
             Action::PageUp => {
                 self.table_state.scroll_up_by(self.area.height);
-                ActionResult::Consumed
             }
             Action::PageDown => {
                 self.table_state.scroll_down_by(self.area.height);
-                ActionResult::Consumed
             }
             Action::Top => {
                 self.table_state
                     .scroll_up_by(self.table_state.selected().unwrap_or(0) as u16);
-                ActionResult::Consumed
             }
             Action::Bottom => {
                 self.table_state.scroll_down_by(u16::MAX);
-                ActionResult::Consumed
             }
-            _ => ActionResult::Ignored,
+            _ => result = ActionResult::Ignored,
         }
+        result
     }
 
     fn handle_key_event(&mut self, key: &KeyEvent) -> KeyEventResult {
@@ -371,6 +300,10 @@ impl Component for TableComponent {
 
     fn area(&self) -> Rect {
         self.area
+    }
+
+    fn focus(&mut self) -> &mut FocusFlag {
+        &mut self.focus
     }
 }
 
