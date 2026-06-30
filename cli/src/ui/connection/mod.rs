@@ -85,6 +85,18 @@ impl Component for ConnectionsComponent {
     fn handle_action(&mut self, action: Action) -> ActionResult {
         let mut result = ActionResult::Consumed;
         match action {
+            Action::Top => {
+                self.scroll_index_vertical.first();
+            }
+            Action::Bottom => {
+                self.scroll_index_vertical.last();
+            }
+            Action::Start => {
+                self.scroll_index_horizontal.first();
+            }
+            Action::End => {
+                self.scroll_index_horizontal.last();
+            }
             Action::Up => {
                 self.scroll_index_vertical.prev();
             }
