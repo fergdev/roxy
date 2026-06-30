@@ -1,12 +1,12 @@
 use color_eyre::eyre::Result;
-use crossterm::event::{MouseEvent, MouseEventKind};
+use crossterm::event::MouseEvent;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::Rect,
     style::Style,
     text::{Line, Span},
-    widgets::{Paragraph, ScrollbarState, Wrap},
+    widgets::{Paragraph, Wrap},
 };
 use roxy_shared::cert::ServerVerificationCapture;
 
@@ -16,7 +16,7 @@ use crate::{
         flow::certs::{CertInfo, render_cert},
         framework::{
             component::{ActionResult, Component},
-            scrollbar::{render_horizontal_scrollbar, render_vertical_scrollbar},
+            scroll::TwoAxisScrollState,
             theme::themed_block,
         },
     },
@@ -28,8 +28,7 @@ pub(crate) struct ServerCertsComponent {
 
     data: Option<ServerVerificationCapture>,
 
-    scroll_index_vertical: ScrollbarState,
-    scroll_index_horizontal: ScrollbarState,
+    scroll: TwoAxisScrollState,
 }
 
 impl ServerCertsComponent {
@@ -38,8 +37,7 @@ impl ServerCertsComponent {
             area: Rect::default(),
             focus: FocusFlag::new().with_name("ServerResolve"),
             data: None,
-            scroll_index_vertical: ScrollbarState::default(),
-            scroll_index_horizontal: ScrollbarState::default(),
+            scroll: TwoAxisScrollState::default(),
         }
     }
 
@@ -86,22 +84,18 @@ impl ServerCertsComponent {
             }
         }
 
-        self.scroll_index_vertical = self
-            .scroll_index_vertical
-            .content_length(lines.len())
-            .viewport_content_length(self.area.height as usize);
+        let height = lines.len();
+        let width: usize = lines.iter().fold(0, |acc, line| acc.max(line.width()));
+
+        self.scroll.set_content_size((width as u16, height as u16));
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(Some("Certs"), self.focus.get()))
             .wrap(Wrap { trim: false })
-            .scroll((
-                self.scroll_index_vertical.get_position() as u16,
-                self.scroll_index_horizontal.get_position() as u16,
-            ));
+            .scroll(self.scroll.offset());
         frame.render_widget(paragraph, area);
 
-        render_vertical_scrollbar(frame, area, &mut self.scroll_index_vertical);
-        render_horizontal_scrollbar(frame, area, &mut self.scroll_index_horizontal);
+        self.scroll.render(frame, area);
     }
 }
 
@@ -120,31 +114,19 @@ impl Component for ServerCertsComponent {
         Ok(())
     }
 
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        match action {
-            Action::Up => {
-                self.scroll_index_vertical.prev();
-                ActionResult::Consumed
-            }
-            Action::Down => {
-                self.scroll_index_vertical.next();
-                ActionResult::Consumed
-            }
-            _ => ActionResult::Ignored,
-        }
-    }
-
     fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
-        match mouse.kind {
-            MouseEventKind::ScrollUp => {
-                self.scroll_index_vertical.prev();
-                Ok(None)
-            }
-            MouseEventKind::ScrollDown => {
-                self.scroll_index_vertical.next();
-                Ok(None)
-            }
-            _ => Ok(None),
+        if !self.focus.get() {
+            return Ok(Some(Action::FocusReq(self.focus.id())));
+        }
+
+        self.scroll.handle_mouse_event(mouse);
+        Ok(None)
+    }
+    fn handle_action(&mut self, action: Action) -> ActionResult {
+        if self.scroll.handle_action(action.clone()) {
+            ActionResult::Consumed
+        } else {
+            ActionResult::Ignored
         }
     }
 }

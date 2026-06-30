@@ -1,0 +1,102 @@
+use crossterm::event::{MouseEvent, MouseEventKind};
+use ratatui::{Frame, layout::Rect, widgets::ScrollbarState};
+
+use crate::{
+    action::Action,
+    ui::framework::scrollbar::{render_horizontal_scrollbar, render_vertical_scrollbar},
+};
+
+#[derive(Debug, Default)]
+pub struct TwoAxisScrollState {
+    vertical: ScrollbarState,
+    horizontal: ScrollbarState,
+}
+
+impl TwoAxisScrollState {
+    pub fn handle_mouse_event(&mut self, mouse: MouseEvent) {
+        match mouse.kind {
+            MouseEventKind::ScrollLeft => {
+                self.horizontal.prev();
+            }
+            MouseEventKind::ScrollRight => {
+                self.horizontal.next();
+            }
+            MouseEventKind::ScrollUp => {
+                self.vertical.prev();
+            }
+            MouseEventKind::ScrollDown => {
+                self.vertical.next();
+            }
+            _ => {}
+        }
+    }
+
+    pub fn handle_action(&mut self, action: Action) -> bool {
+        let mut consumed = true;
+        match action {
+            Action::Top => {
+                self.vertical.first();
+            }
+            Action::Bottom => {
+                self.vertical.last();
+            }
+            Action::Start => {
+                self.horizontal.first();
+            }
+            Action::End => {
+                self.horizontal.last();
+            }
+            Action::PageUp => {
+                let curr_pos = self.vertical.get_position();
+                self.vertical = self.vertical.position(curr_pos.saturating_sub(5));
+                // self.horizontal.first();
+            }
+            Action::PageDown => {
+                let curr_pos = self.vertical.get_position();
+                self.vertical = self.vertical.position(curr_pos.saturating_add(5));
+            }
+            Action::Up => {
+                self.vertical.prev();
+            }
+            Action::Down => {
+                self.vertical.next();
+            }
+            Action::Left => {
+                self.horizontal.prev();
+            }
+            Action::Right => {
+                self.horizontal.next();
+            }
+            _ => consumed = false,
+        }
+        consumed
+    }
+
+    pub(crate) fn offset(&self) -> (u16, u16) {
+        (
+            self.vertical.get_position() as u16,
+            self.horizontal.get_position() as u16,
+        )
+    }
+
+    pub(crate) fn set_content_size(&mut self, size: (u16, u16)) {
+        self.set_content_width(size.0);
+        self.set_content_height(size.1);
+    }
+    pub(crate) fn set_content_height(&mut self, len: u16) {
+        self.vertical = self.vertical.content_length(len as usize)
+    }
+    pub(crate) fn set_content_width(&mut self, len: u16) {
+        self.horizontal = self.horizontal.content_length(len as usize)
+    }
+
+    pub(crate) fn set_viewport_size(&mut self, len: (u16, u16)) {
+        self.vertical = self.vertical.viewport_content_length(len.0 as usize);
+        self.horizontal = self.horizontal.viewport_content_length(len.1 as usize);
+    }
+
+    pub(crate) fn render(&mut self, frame: &mut Frame, area: Rect) {
+        render_vertical_scrollbar(frame, area, &mut self.vertical);
+        render_horizontal_scrollbar(frame, area, &mut self.horizontal);
+    }
+}

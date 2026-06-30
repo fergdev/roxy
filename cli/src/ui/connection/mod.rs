@@ -1,10 +1,10 @@
 use color_eyre::eyre::Result;
-use crossterm::event::{MouseEvent, MouseEventKind};
+use crossterm::event::MouseEvent;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     layout::Rect,
     text::Line,
-    widgets::{Clear, Paragraph, ScrollbarState},
+    widgets::{Clear, Paragraph},
 };
 use roxy_proxy::flow_store::ProxyConnection;
 use tokio::{sync::watch, task::JoinHandle};
@@ -13,10 +13,7 @@ use tracing::error;
 use crate::{
     action::Action,
     ui::framework::{
-        component::Component,
-        scrollbar::{render_horizontal_scrollbar, render_vertical_scrollbar},
-        theme::themed_block,
-        util::centered_rect,
+        component::Component, scroll::TwoAxisScrollState, theme::themed_block, util::centered_rect,
     },
 };
 
@@ -29,8 +26,7 @@ pub struct ConnectionsComponent {
     ui_rx: watch::Receiver<Vec<String>>,
     handle: JoinHandle<()>,
 
-    scroll_index_vertical: ScrollbarState,
-    scroll_index_horizontal: ScrollbarState,
+    scroll: TwoAxisScrollState,
 }
 
 impl ConnectionsComponent {
@@ -62,8 +58,7 @@ impl ConnectionsComponent {
             focus: FocusFlag::new().with_name("ConnectionsComponent"),
             ui_rx,
             handle,
-            scroll_index_vertical: ScrollbarState::default(),
-            scroll_index_horizontal: ScrollbarState::default(),
+            scroll: TwoAxisScrollState::default(),
         }
     }
 }
@@ -84,56 +79,16 @@ impl Component for ConnectionsComponent {
     }
 
     fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
-        match mouse.kind {
-            MouseEventKind::ScrollLeft => {
-                self.scroll_index_horizontal.prev();
-            }
-            MouseEventKind::ScrollRight => {
-                self.scroll_index_horizontal.next();
-            }
-            MouseEventKind::ScrollUp => {
-                self.scroll_index_vertical.prev();
-            }
-            MouseEventKind::ScrollDown => {
-                self.scroll_index_vertical.next();
-            }
-            _ => {}
-        }
+        self.scroll.handle_mouse_event(mouse);
         Ok(Some(Action::FocusReq(self.focus.widget_id())))
     }
 
     fn handle_action(&mut self, action: Action) -> ActionResult {
-        let mut result = ActionResult::Consumed;
-        match action {
-            Action::Top => {
-                self.scroll_index_vertical.first();
-            }
-            Action::Bottom => {
-                self.scroll_index_vertical.last();
-            }
-            Action::Start => {
-                self.scroll_index_horizontal.first();
-            }
-            Action::End => {
-                self.scroll_index_horizontal.last();
-            }
-            Action::Up => {
-                self.scroll_index_vertical.prev();
-            }
-            Action::Down => {
-                self.scroll_index_vertical.next();
-            }
-            Action::Left => {
-                self.scroll_index_horizontal.prev();
-            }
-            Action::Right => {
-                self.scroll_index_horizontal.next();
-            }
-            _ => {
-                result = ActionResult::Ignored;
-            }
+        if self.scroll.handle_action(action) {
+            ActionResult::Consumed
+        } else {
+            ActionResult::Ignored
         }
-        result
     }
 
     fn render(&mut self, frame: &mut ratatui::Frame, area: Rect) -> Result<()> {
@@ -149,20 +104,16 @@ impl Component for ConnectionsComponent {
         let height = lines.len();
         let width = lines.iter().map(|line| line.width()).max().unwrap_or(0);
 
-        self.scroll_index_vertical = self.scroll_index_vertical.content_length(height);
-        self.scroll_index_horizontal = self.scroll_index_horizontal.content_length(width);
+        self.scroll.set_content_height(height as u16);
+        self.scroll.set_content_width(width as u16);
 
         frame.render_widget(
             Paragraph::new(lines)
                 .block(themed_block(Some("Connections"), self.focus.get()))
-                .scroll((
-                    self.scroll_index_vertical.get_position() as u16,
-                    self.scroll_index_horizontal.get_position() as u16,
-                )),
+                .scroll(self.scroll.offset()),
             popup_area,
         );
-        render_vertical_scrollbar(frame, popup_area, &mut self.scroll_index_vertical);
-        render_horizontal_scrollbar(frame, popup_area, &mut self.scroll_index_horizontal);
+        self.scroll.render(frame, popup_area);
         Ok(())
     }
 }

@@ -3,7 +3,7 @@ use crossterm::event::{MouseEvent, MouseEventKind};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect},
+    layout::{Constraint, Layout, Offset, Rect},
 };
 use tokio::sync::watch::Sender;
 
@@ -30,12 +30,17 @@ pub enum ButtonGroupEvent {
 }
 
 impl ButtonGroup {
-    pub fn new(label: &str, titles: Vec<String>, sender: Sender<ButtonGroupEvent>) -> Self {
+    pub fn new(
+        label: &str,
+        titles: Vec<String>,
+        selected_index: usize,
+        sender: Sender<ButtonGroupEvent>,
+    ) -> Self {
         Self {
             focus: FocusFlag::new().with_name(&format!("ToggleButton:{label}")),
             area: Rect::default(),
             titles,
-            selected_index: 0,
+            selected_index,
             sender,
         }
     }
@@ -106,12 +111,12 @@ impl Component for ButtonGroup {
             Layout::horizontal([Constraint::Ratio(1, self.titles.len() as u32)]).split(area);
 
         for title_index in 0..self.titles.len() {
-            let lb = button_layout[0].offset(ratatui::layout::Offset {
+            let lb = button_layout[0].offset(Offset {
                 x: (title_index * width as usize) as i32,
                 y: 0,
             });
-            let selected = title_index == self.selected_index;
-            frame.render_widget(themed_button(&self.titles[title_index], selected), lb);
+            let is_selected = title_index == self.selected_index;
+            frame.render_widget(themed_button(&self.titles[title_index], is_selected), lb);
         }
         Ok(())
     }

@@ -1,14 +1,23 @@
+use color_eyre::eyre::Result;
+use crossterm::event::MouseEvent;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::Rect,
     style::Style,
     text::{Line, Span},
-    widgets::{Paragraph, ScrollbarState, Wrap},
+    widgets::Paragraph,
 };
 use roxy_shared::cert::CapturedResolveClientCert;
 
-use crate::ui::framework::{component::Component, theme::themed_block};
+use crate::{
+    action::Action,
+    ui::framework::{
+        component::{ActionResult, Component},
+        scroll::TwoAxisScrollState,
+        theme::themed_block,
+    },
+};
 
 pub(crate) struct ServerResolveClientCertComponent {
     area: Rect,
@@ -16,8 +25,7 @@ pub(crate) struct ServerResolveClientCertComponent {
 
     data: Option<CapturedResolveClientCert>,
 
-    scroll_index_vertical: ScrollbarState,
-    scroll_index_horizontal: ScrollbarState,
+    scroll: TwoAxisScrollState,
 }
 
 impl ServerResolveClientCertComponent {
@@ -26,8 +34,7 @@ impl ServerResolveClientCertComponent {
             area: Rect::default(),
             focus: FocusFlag::new().with_name("ServerResolve"),
             data: None,
-            scroll_index_vertical: ScrollbarState::default(),
-            scroll_index_horizontal: ScrollbarState::default(),
+            scroll: TwoAxisScrollState::default(),
         }
     }
 
@@ -71,18 +78,13 @@ impl ServerResolveClientCertComponent {
             }
         }
 
-        self.scroll_index_vertical = self
-            .scroll_index_vertical
-            .content_length(lines.len())
-            .viewport_content_length(self.area.height as usize);
+        self.scroll.set_content_height(lines.len() as u16);
+        let width = lines.iter().map(|line| line.width()).max().unwrap_or(0);
+        self.scroll.set_content_width(width as u16);
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(Some("Resolve client cert"), self.focus.get()))
-            .wrap(Wrap { trim: false })
-            .scroll((
-                self.scroll_index_vertical.get_position() as u16,
-                self.scroll_index_horizontal.get_position() as u16,
-            ));
+            .scroll(self.scroll.offset());
         frame.render_widget(paragraph, area);
     }
 }
@@ -96,10 +98,25 @@ impl Component for ServerResolveClientCertComponent {
         &mut self.focus
     }
 
-    fn render(&mut self, frame: &mut ratatui::Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut ratatui::Frame, area: Rect) -> Result<()> {
         self.area = area;
         self.render_resolve_client_cert(frame, area);
         Ok(())
+    }
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        if !self.focus.get() {
+            return Ok(Some(Action::FocusReq(self.focus.id())));
+        }
+
+        self.scroll.handle_mouse_event(mouse);
+        Ok(None)
+    }
+    fn handle_action(&mut self, action: Action) -> ActionResult {
+        if self.scroll.handle_action(action.clone()) {
+            ActionResult::Consumed
+        } else {
+            ActionResult::Ignored
+        }
     }
 }
 

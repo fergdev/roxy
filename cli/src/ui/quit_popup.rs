@@ -65,13 +65,14 @@ impl QuitPopup {
             button_group: ButtonGroup::new(
                 "QuitPopup",
                 vec!["Yes".to_string(), "No".to_string()],
+                1,
                 tx,
             ),
         }
     }
 
     pub fn reset(&mut self) {
-        self.button_group.selected_index = 0;
+        self.button_group.selected_index = 1;
         self.button_group.focus().set(true);
     }
 }

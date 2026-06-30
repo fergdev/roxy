@@ -1,24 +1,22 @@
+use color_eyre::eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::Rect,
-    widgets::{Paragraph, ScrollbarState, Wrap},
+    widgets::{Paragraph, Wrap},
 };
 use roxy_shared::cert::{ClientVerificationCapture, TlsVerify};
 
 use crate::ui::{
     flow::certs::{CertInfo, render_cert},
-    framework::{component::Component, theme::themed_block},
+    framework::{component::Component, scroll::TwoAxisScrollState, theme::themed_block},
 };
 
 pub struct ClientCertComponent {
     area: Rect,
     focus: FocusFlag,
-
     data: Option<ClientVerificationCapture>,
-
-    scroll_index_vertical: ScrollbarState,
-    scroll_index_horizontal: ScrollbarState,
+    scroll: TwoAxisScrollState,
 }
 
 impl ClientCertComponent {
@@ -27,8 +25,7 @@ impl ClientCertComponent {
             focus: FocusFlag::new().with_name("ClientHelloComponent"),
             area: Rect::default(),
             data: None,
-            scroll_index_vertical: ScrollbarState::default(),
-            scroll_index_horizontal: ScrollbarState::default(),
+            scroll: TwoAxisScrollState::default(),
         }
     }
 
@@ -83,18 +80,15 @@ impl ClientCertComponent {
             }
         }
 
-        self.scroll_index_vertical = self
-            .scroll_index_vertical
-            .content_length(lines.len())
-            .viewport_content_length(self.area.height as usize);
+        let height = lines.len();
+        let width = lines.iter().map(|line| line.width()).max().unwrap_or(0);
+        self.scroll.set_content_height(height as u16);
+        self.scroll.set_content_width(width as u16);
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(Some("Certs"), self.focus.get()))
             .wrap(Wrap { trim: false })
-            .scroll((
-                self.scroll_index_vertical.get_position() as u16,
-                self.scroll_index_horizontal.get_position() as u16,
-            ));
+            .scroll(self.scroll.offset());
         frame.render_widget(paragraph, area);
     }
 }
@@ -108,7 +102,7 @@ impl Component for ClientCertComponent {
         &mut self.focus
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         self.area = area;
         self.render_client_cert(frame, area);
         Ok(())

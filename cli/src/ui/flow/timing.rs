@@ -1,11 +1,19 @@
 use color_eyre::eyre::Result;
+use crossterm::event::MouseEvent;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
 use roxy_proxy::flow::Timing;
 use time::OffsetDateTime;
 use tokio::sync::{mpsc, watch};
 
-use crate::ui::framework::{component::Component, paragraph::kv_paragraph};
+use crate::{
+    action::Action,
+    ui::framework::{
+        component::{ActionResult, Component},
+        paragraph::kv_paragraph,
+        scroll::TwoAxisScrollState,
+    },
+};
 
 struct State {
     lines: Vec<(String, String)>,
@@ -15,6 +23,7 @@ pub struct FlowTiming {
     state: watch::Receiver<State>,
     focus: FocusFlag,
     area: Rect,
+    scroll: TwoAxisScrollState,
 }
 
 impl FlowTiming {
@@ -39,6 +48,7 @@ impl FlowTiming {
             state: ui_rx,
             focus: FocusFlag::new().with_name("FlowTiming"),
             area: Rect::default(),
+            scroll: TwoAxisScrollState::default(),
         }
     }
 }
@@ -105,7 +115,21 @@ impl Component for FlowTiming {
             self.focus.get(),
             (0, 0),
         );
+        self.scroll.render(frame, area);
         Ok(())
+    }
+
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        self.scroll.handle_mouse_event(mouse);
+        Ok(Some(Action::FocusReq(self.focus.id())))
+    }
+
+    fn handle_action(&mut self, action: Action) -> ActionResult {
+        if self.scroll.handle_action(action.clone()) {
+            ActionResult::Consumed
+        } else {
+            ActionResult::Ignored
+        }
     }
 
     fn area(&self) -> Rect {

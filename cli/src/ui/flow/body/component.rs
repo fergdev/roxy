@@ -1,12 +1,12 @@
 use bytes::Bytes;
 use color_eyre::Result;
-use crossterm::event::{MouseEvent, MouseEventKind};
+use crossterm::event::MouseEvent;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::Rect,
     text::Line,
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph},
 };
 use roxy_shared::content::ContentType;
 use tokio::sync::{mpsc, watch};
@@ -31,6 +31,7 @@ use crate::{
         flow::body::image_cache::ImageCache,
         framework::{
             component::{ActionResult, Component},
+            scroll::TwoAxisScrollState,
             theme::themed_block,
         },
     },
@@ -57,14 +58,6 @@ impl UiState {
     fn default() -> Self {
         Self { data: Body::None }
     }
-
-    fn len(&self) -> u16 {
-        match &self.data {
-            Body::None => 0,
-            Body::Text(lines) => (lines.len() + 1) as u16,
-            Body::Image(_) => 0,
-        }
-    }
 }
 
 pub struct FlowDetailsBody {
@@ -72,7 +65,8 @@ pub struct FlowDetailsBody {
     image_cache: ImageCache,
     focus: FocusFlag,
     area: Rect,
-    scroll: u16,
+
+    scroll: TwoAxisScrollState,
 }
 
 impl FlowDetailsBody {
@@ -135,7 +129,7 @@ impl FlowDetailsBody {
             image_cache: ic,
             focus: FocusFlag::new().with_name("FlowBody"),
             area: Rect::default(),
-            scroll: 0,
+            scroll: TwoAxisScrollState::default(),
         }
     }
 }
@@ -160,57 +154,12 @@ impl Component for FlowDetailsBody {
             return Ok(Some(Action::FocusReq(self.focus.id())));
         }
 
-        match mouse.kind {
-            MouseEventKind::ScrollUp => {
-                self.scroll = self.scroll.saturating_sub(1);
-            }
-            MouseEventKind::ScrollDown => {
-                self.scroll = self.scroll.saturating_add(1);
-            }
-            _ => {
-                // nothing
-            }
-        }
+        self.scroll.handle_mouse_event(mouse);
         Ok(None)
     }
     fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.focus.get() {
-            match action {
-                Action::Up => {
-                    if self.scroll > 0 {
-                        self.scroll -= 1;
-                    }
-
-                    ActionResult::Consumed
-                }
-                Action::Down => {
-                    let len = self.state.borrow().len() + 5;
-
-                    if self.scroll > len {
-                        self.scroll = len;
-                    }
-                    ActionResult::Consumed
-                }
-                Action::PageUp => {
-                    if self.scroll > 0 {
-                        self.scroll = self.scroll.saturating_sub(self.area.height);
-                    }
-                    ActionResult::Consumed
-                }
-                Action::PageDown => {
-                    self.scroll = self.scroll.saturating_add(self.area.height);
-                    ActionResult::Consumed
-                }
-                Action::Top => {
-                    self.scroll = 0;
-                    ActionResult::Consumed
-                }
-                Action::Bottom => {
-                    self.scroll = u16::MAX;
-                    ActionResult::Consumed
-                }
-                _ => ActionResult::Ignored,
-            }
+        if self.scroll.handle_action(action.clone()) {
+            ActionResult::Consumed
         } else {
             ActionResult::Ignored
         }
@@ -218,9 +167,6 @@ impl Component for FlowDetailsBody {
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         self.area = area;
-        if self.state.has_changed().unwrap_or(true) {
-            self.scroll = 0;
-        }
         match self.state.borrow_and_update().data {
             Body::None => {
                 let para = Paragraph::new("No body")
@@ -229,20 +175,19 @@ impl Component for FlowDetailsBody {
                 frame.render_widget(para, area);
             }
             Body::Text(ref lines) => {
-                let height = area.height;
-                let len = lines.len() as u16;
-                let max_scroll_index = len.saturating_sub(height);
-
-                // TODO: work
-                // +5 is an arbitrary number to compensate for wrapping, caclulate this from the
-                // length of the lines
-                self.scroll = self.scroll.clamp(0, max_scroll_index + 5);
-
+                self.scroll.set_content_height(lines.len() as u16);
+                let width = lines
+                    .iter()
+                    .map(|line| line.width() as u16)
+                    .max()
+                    .unwrap_or(0);
+                self.scroll.set_content_width(width);
+                self.scroll.set_viewport_size((area.width, area.height));
                 let para = Paragraph::new(lines.to_owned())
-                    .wrap(Wrap { trim: false })
                     .block(themed_block(Some("Body"), self.focus.get()))
-                    .scroll((self.scroll, 0));
+                    .scroll(self.scroll.offset());
                 frame.render_widget(para, area);
+                self.scroll.render(frame, area);
             }
             Body::Image(ref id) => {
                 if let Some(id) = id {

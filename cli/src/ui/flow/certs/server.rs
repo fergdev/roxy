@@ -67,7 +67,6 @@ impl ServerCertificateComponent {
             ),
             resolve_client_component: ServerResolveClientCertComponent::new(),
             cert_component: ServerCertsComponent::new(),
-            // tls_component: ServerTlsComponent::new(),
             tls_component: KvComponent::new("Server TLS"),
         }
     }

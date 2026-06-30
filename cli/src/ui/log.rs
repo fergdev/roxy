@@ -1,11 +1,12 @@
 use color_eyre::Result;
+use crossterm::event::MouseEvent;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
 };
 
-use crate::action::Action;
+use crate::{action::Action, ui::framework::scroll::TwoAxisScrollState};
 
 use tracing::{
     Event, Level, Subscriber,
@@ -77,9 +78,8 @@ where
 pub struct LogViewer {
     focus: FocusFlag,
     logs: Arc<Mutex<VecDeque<LogLine>>>,
-    v_scroll_offset: usize,
-    h_scroll_offset: usize,
     area: Rect,
+    scroll: TwoAxisScrollState,
 }
 
 impl HasFocus for LogViewer {
@@ -101,52 +101,23 @@ impl LogViewer {
         Self {
             focus: FocusFlag::new().with_name("LogViewer"),
             logs,
-            v_scroll_offset: 0,
-            h_scroll_offset: 0,
             area: Rect::default(),
+            scroll: TwoAxisScrollState::default(),
         }
     }
 }
 
 impl Component for LogViewer {
-    fn dispatch_action(&mut self, action: Action) -> ActionResult {
-        match action {
-            Action::Top => {
-                self.v_scroll_offset = 0;
-                ActionResult::Consumed
-            }
-            Action::Bottom => {
-                if let Ok(guard) = self.logs.lock() {
-                    self.v_scroll_offset = guard.len();
-                }
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        self.scroll.handle_mouse_event(mouse);
+        Ok(Some(Action::FocusReq(self.focus.id())))
+    }
 
-                ActionResult::Consumed
-            }
-            Action::Up => {
-                if self.v_scroll_offset > 0 {
-                    self.v_scroll_offset -= 1;
-                }
-                ActionResult::Consumed
-            }
-            Action::Down => {
-                if let Ok(guard) = self.logs.lock()
-                    && self.v_scroll_offset < guard.len().saturating_sub(1)
-                {
-                    self.v_scroll_offset += 1;
-                }
-                ActionResult::Consumed
-            }
-            Action::Right => {
-                self.h_scroll_offset += 1;
-                ActionResult::Consumed
-            }
-            Action::Left => {
-                if self.h_scroll_offset > 0 {
-                    self.h_scroll_offset -= 1;
-                }
-                ActionResult::Consumed
-            }
-            _ => ActionResult::Ignored,
+    fn handle_action(&mut self, action: Action) -> ActionResult {
+        if self.scroll.handle_action(action.clone()) {
+            ActionResult::Consumed
+        } else {
+            ActionResult::Ignored
         }
     }
 
@@ -157,6 +128,7 @@ impl Component for LogViewer {
 
         let colors = with_theme(|theme| theme.colors.clone());
         if let Ok(logs) = self.logs.lock() {
+            let mut width = 0;
             let paragraph = Paragraph::new(Text::from(
                 logs.iter()
                     .map(|log_line| {
@@ -167,6 +139,9 @@ impl Component for LogViewer {
                             Level::DEBUG => colors.debug,
                             Level::TRACE => colors.trace,
                         };
+
+                        width = width
+                            .max(log_line.message.as_ref().map(|m| m.len()).unwrap_or(0) as u16);
 
                         Line::from(
                             log_line
@@ -179,10 +154,15 @@ impl Component for LogViewer {
                     .collect::<Vec<_>>(),
             ))
             .wrap(Wrap { trim: false })
-            .scroll((self.v_scroll_offset as u16, self.h_scroll_offset as u16))
+            .scroll(self.scroll.offset())
             .alignment(Alignment::Left)
             .block(themed_block(Some("Logs"), true));
+
+            self.scroll.set_content_height(logs.len() as u16);
+            self.scroll.set_content_width(width);
+
             frame.render_widget(paragraph, popup_area);
+            self.scroll.render(frame, popup_area);
         } else {
             frame.render_widget(Paragraph::new("No logs"), popup_area);
         }

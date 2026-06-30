@@ -4,6 +4,7 @@ pub mod component;
 pub mod kv_component;
 pub mod notify;
 pub mod paragraph;
+pub mod scroll;
 pub mod scrollbar;
 pub mod tab;
 pub mod theme;
