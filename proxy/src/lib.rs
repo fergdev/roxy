@@ -4,6 +4,7 @@ pub mod flow_store;
 mod h3;
 mod http;
 pub mod interceptor;
+mod utils;
 
 mod peek_stream;
 pub mod proxy;

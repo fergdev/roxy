@@ -112,7 +112,7 @@ impl HasFocus for HomeComponent {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 
     fn focus(&self) -> rat_focus::FocusFlag {

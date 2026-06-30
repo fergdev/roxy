@@ -88,7 +88,7 @@ impl HasFocus for LogViewer {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 
     fn focus(&self) -> FocusFlag {

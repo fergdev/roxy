@@ -1,9 +1,5 @@
 use bytes::Bytes;
-use http::HeaderMap;
 use http::StatusCode;
-use http::Uri;
-use http::Version;
-use http::header::HOST;
 use http_body_util::Empty;
 use http_body_util::combinators::BoxBody;
 use hyper::body::Incoming;
@@ -44,6 +40,8 @@ use crate::http::handle_h2;
 use crate::http::{handle_http, handle_https};
 use crate::interceptor::ScriptEngine;
 use crate::peek_stream::PeekStream;
+use crate::utils::bad_connect_response;
+use crate::utils::validate_connect_uri;
 use crate::ws::{handle_ws, handle_wss};
 
 const GET_BYTES: &[u8] = b"GET ";
@@ -259,63 +257,6 @@ async fn proxy(
         )
         .await
     }
-}
-
-/// https://httpwg.org/specs/rfc9110.html#CONNECT
-/// Validate only host and maybe port is provided, anything else is not valid CONNECT
-fn validate_connect_uri(version: Version, uri: &Uri, headers: &HeaderMap) -> bool {
-    trace!("Validate connect {version:?}, {uri}, {headers:?}");
-    let header_host = match headers
-        .get(HOST)
-        .and_then(|host_header| host_header.to_str().ok())
-        .and_then(|host_uri_str| host_uri_str.parse::<Uri>().ok())
-    {
-        Some(host) => host,
-        None => {
-            error!(
-                "Unable to find host header in CONNECT request uri='{uri}' version='{version:?}'"
-            );
-            return false;
-        }
-    };
-
-    let Some(uri_authority) = uri.authority() else {
-        return false;
-    };
-    let Some(uri_port) = uri_authority.port_u16() else {
-        return false;
-    };
-    let Some(header_authority) = header_host.authority() else {
-        return false;
-    };
-
-    if uri_authority.host() != header_authority.host() {
-        return false;
-    }
-    if let Some(port) = header_authority.port_u16()
-        && uri_port != port
-    {
-        return false;
-    }
-
-    if !uri
-        .authority()
-        .map(|a| a.port_u16().is_some() && Some(a.host()) == header_host.host())
-        .unwrap_or(false)
-    {
-        error!("host uri: {uri} header: {header_host}");
-        return false;
-    }
-    uri.scheme().is_none()
-        && uri.path().is_empty()
-        && uri.query().is_none()
-        && version != Version::HTTP_3
-}
-
-fn bad_connect_response() -> Result<Response<BoxBody<Bytes, Infallible>>, http::Error> {
-    Response::builder()
-        .status(StatusCode::BAD_REQUEST)
-        .body(BoxBody::new(Empty::<Bytes>::new()))
 }
 
 async fn tunnel(
