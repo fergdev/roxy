@@ -77,7 +77,7 @@ impl Component for QuitPopup {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
-        self.area = centered_rect_abs(30, 4, area);
+        self.area = centered_rect_abs(30, 3, area);
         frame.render_widget(Clear, self.area);
 
         let padded_area = self.area.inner(Margin {
