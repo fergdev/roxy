@@ -6,7 +6,7 @@ use rat_focus::{FocusBuilder, FocusFlag, HasFocus, ratatui::layout::Rect};
 use ratatui::{
     layout::{Constraint, Margin, Position},
     prelude::Frame,
-    style::Stylize,
+    style::{Color, Stylize},
     text::Span,
     widgets::{Cell, Paragraph, Row, TableState},
 };
@@ -18,6 +18,7 @@ use crate::{
     ui::{
         config::{ConfigValue, EditableConfigField, tab::ConfigTab},
         framework::{
+            color::color_is_light,
             component::{ActionResult, Component, KeyEventResult},
             theme::{themed_block, themed_table},
         },
@@ -158,7 +159,12 @@ impl Component for TableComponent {
                         value_span = value_span.underlined()
                     }
                     if let ConfigValue::Color(color) = field.value {
-                        value_span = value_span.fg(color)
+                        value_span = value_span.bg(color);
+                        value_span = if color_is_light(&color) {
+                            value_span.fg(Color::Black)
+                        } else {
+                            value_span.fg(Color::White)
+                        }
                     }
                     Row::new(vec![
                         Cell::from(Span::raw(&field.key)),
