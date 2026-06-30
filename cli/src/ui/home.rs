@@ -4,18 +4,17 @@ use std::{
 };
 
 use crate::{
-    action::Action, config::manager::ConfigManager, tui::TuiEvent,
-    ui::connection::ConnectionsComponent,
+    action::Action,
+    config::manager::ConfigManager,
+    tui::TuiEvent,
+    ui::{connection::ConnectionsComponent, framework::notify::NotifierComponent},
 };
 
 use super::{
     config::ConfigEditor,
     flow::{details::FlowDetails, list::FlowList},
     fps_counter::FpsCounter,
-    framework::{
-        component::{ActionResult, Component},
-        notify::Notifier,
-    },
+    framework::component::{ActionResult, Component},
     log::{LogLine, LogViewer},
     quit_popup::QuitPopup,
     splash::Splash,
@@ -25,6 +24,7 @@ use color_eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
 use roxy_proxy::flow_store::FlowStore;
+use tokio::sync::mpsc::UnboundedSender;
 
 pub struct HomeComponent {
     focus: FocusFlag,
@@ -39,7 +39,7 @@ pub struct HomeComponent {
     quit_popup: QuitPopup,
     log_viewer: LogViewer,
     fps_counter: FpsCounter,
-    notifier: Notifier,
+    notifier: NotifierComponent,
     config_manager: ConfigManager,
     area: Rect,
 }
@@ -49,7 +49,8 @@ impl HomeComponent {
         config_manager: ConfigManager,
         flow_store: FlowStore,
         log_buffer: Arc<Mutex<VecDeque<LogLine>>>,
-        notifier: Notifier,
+        notifier: NotifierComponent,
+        action_tx: UnboundedSender<Action>,
     ) -> Self {
         let port = config_manager.rx.borrow().app.proxy.port;
         let splash = Splash::new(port);
@@ -64,7 +65,7 @@ impl HomeComponent {
             flow_list,
             connections_component,
             config_editor: ConfigEditor::new(config_manager.clone()),
-            quit_popup: QuitPopup::new(),
+            quit_popup: QuitPopup::new(action_tx),
             flow_details: FlowDetails::new(flow_store.clone()),
             log_viewer: LogViewer::new(log_buffer),
             fps_counter: FpsCounter::new(),

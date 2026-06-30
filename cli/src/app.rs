@@ -14,7 +14,7 @@ use crate::config::manager::ConfigManager;
 use crate::key_handler::KeyHandler;
 use crate::tui::{Tui, TuiEvent};
 use crate::ui::framework::component::{ActionResult, Component};
-use crate::ui::framework::notify::Notifier;
+use crate::ui::framework::notify::NotifierComponent;
 use crate::ui::framework::theme::set_theme;
 use crate::ui::home::HomeComponent;
 use crate::ui::log::LogLine;
@@ -38,7 +38,7 @@ impl App {
         config_manager: ConfigManager,
         flow_store: FlowStore,
         log_buffer: Arc<Mutex<VecDeque<LogLine>>>,
-        notifier: Notifier,
+        notifier: NotifierComponent,
     ) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
         let home = HomeComponent::new(
@@ -46,6 +46,7 @@ impl App {
             flow_store.clone(),
             log_buffer.clone(),
             notifier,
+            action_tx.clone(),
         );
         let key_handler = KeyHandler::new(config_manager.clone(), action_tx.clone());
         Self {

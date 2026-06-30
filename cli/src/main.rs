@@ -10,7 +10,7 @@ use roxy_cli::{
     app,
     config::manager::ConfigManager,
     logging, notify_debug, notify_error, notify_info, notify_trace, notify_warn,
-    ui::{framework::notify::Notifier, log::UiLogLayer},
+    ui::{framework::notify::NotifierComponent, log::UiLogLayer},
 };
 
 use roxy_proxy::{
@@ -27,7 +27,7 @@ async fn main() -> color_eyre::Result<()> {
     let log_buffer = Arc::new(Mutex::new(VecDeque::new()));
     let log_layer = UiLogLayer::new(log_buffer.clone());
 
-    let notifier = Notifier::new();
+    let notifier = NotifierComponent::new();
 
     if let Err(e) = logging::initialize_logging_with_layer(Some(log_layer)) {
         eprintln!("Err {e}");

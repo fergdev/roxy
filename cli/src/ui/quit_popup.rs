@@ -5,8 +5,12 @@ use ratatui::{
     layout::{Margin, Rect},
     widgets::Clear,
 };
+use tokio::sync::{mpsc::UnboundedSender, watch};
 
-use crate::{action::Action, ui::framework::button_group::ButtonGroup};
+use crate::{
+    action::Action,
+    ui::framework::button_group::{ButtonGroup, ButtonGroupEvent},
+};
 
 use super::framework::{
     component::{ActionResult, Component},
@@ -38,18 +42,31 @@ impl HasFocus for QuitPopup {
     }
 }
 
-impl Default for QuitPopup {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl QuitPopup {
-    pub fn new() -> Self {
+    pub fn new(action_tx: UnboundedSender<Action>) -> Self {
+        let (tx, rx) = watch::channel(ButtonGroupEvent::Hovered(0));
+
+        tokio::spawn(async move {
+            let mut rx = rx;
+            while rx.changed().await.is_ok() {
+                if let ButtonGroupEvent::Selected(index) = *rx.borrow() {
+                    if index == 0 {
+                        let _ = action_tx.send(Action::Quit);
+                    } else {
+                        let _ = action_tx.send(Action::Back);
+                    }
+                }
+            }
+        });
+
         Self {
             focus: FocusFlag::new().with_name("QuitPopup"),
             area: Rect::default(),
-            button_group: ButtonGroup::new("QuitPopup", vec!["Yes".to_string(), "No".to_string()]),
+            button_group: ButtonGroup::new(
+                "QuitPopup",
+                vec!["Yes".to_string(), "No".to_string()],
+                tx,
+            ),
         }
     }
 

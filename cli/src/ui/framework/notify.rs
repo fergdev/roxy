@@ -107,14 +107,14 @@ struct ActiveNotification {
     created_at: Instant,
 }
 
-pub struct Notifier {
+pub struct NotifierComponent {
     receiver: Receiver<Notification>,
     toasts: VecDeque<ActiveNotification>,
     max_visible: usize,
     level: Level,
 }
 
-impl Notifier {
+impl NotifierComponent {
     pub fn new() -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<Notification>(100);
         let _ = TOAST_SENDER.set(tx); // TODO: yeah this bad, maybe no globals???
@@ -186,7 +186,7 @@ impl Notifier {
     }
 }
 
-impl Default for Notifier {
+impl Default for NotifierComponent {
     fn default() -> Self {
         Self::new()
     }
