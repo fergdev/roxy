@@ -81,25 +81,11 @@ impl TableComponent {
             }
         };
         let field = &mut fields[selected_field_index];
-        field.is_editing = !field.is_editing;
 
         if field.is_editing {
-            field.is_editing = true;
-            self.input_buffer = match &field.value {
-                ConfigValue::String(s) => s.clone(),
-                ConfigValue::U16(n) => n.to_string(),
-                ConfigValue::Bool(b) => {
-                    field.value = ConfigValue::Bool(!*b);
-                    field.is_editing = false;
-                    self.update_config();
-                    return;
-                }
-                ConfigValue::Color(c) => c.to_string(),
-                ConfigValue::Path(p) => p.display().to_string(),
-            };
-            self.is_editing = true;
-        } else {
             field.is_editing = false;
+            self.is_editing = false;
+
             field.value = match &field.value {
                 ConfigValue::String(_) => ConfigValue::String(new_val),
                 ConfigValue::U16(_) => new_val
@@ -113,8 +99,23 @@ impl TableComponent {
                     .unwrap_or(field.value.clone()),
             };
 
-            self.is_editing = false;
             self.update_config();
+        } else {
+            field.is_editing = true;
+            self.is_editing = true;
+            self.input_buffer = match &field.value {
+                ConfigValue::String(s) => s.clone(),
+                ConfigValue::U16(n) => n.to_string(),
+                ConfigValue::Bool(b) => {
+                    field.value = ConfigValue::Bool(!*b);
+                    field.is_editing = false;
+                    self.is_editing = false;
+                    self.update_config();
+                    return;
+                }
+                ConfigValue::Color(c) => c.to_string(),
+                ConfigValue::Path(p) => p.display().to_string(),
+            };
         }
     }
 
@@ -155,9 +156,6 @@ impl Component for TableComponent {
                     };
 
                     let mut value_span = Span::raw(value_string.to_string());
-                    if field.is_editing {
-                        value_span = value_span.underlined()
-                    }
                     if let ConfigValue::Color(color) = field.value {
                         value_span = value_span.bg(color);
                         value_span = if color_is_light(&color) {
@@ -165,6 +163,9 @@ impl Component for TableComponent {
                         } else {
                             value_span.fg(Color::White)
                         }
+                    }
+                    if field.is_editing {
+                        value_span = value_span.underlined()
                     }
                     Row::new(vec![
                         Cell::from(Span::raw(&field.key)),
@@ -248,7 +249,7 @@ impl Component for TableComponent {
     fn handle_key_event(&mut self, key: &KeyEvent) -> KeyEventResult {
         if self.focus().get() && self.is_editing() {
             match key.code {
-                KeyCode::Esc | KeyCode::Enter => {
+                KeyCode::Esc => {
                     self.on_select();
                 }
                 KeyCode::Char(c) => {
