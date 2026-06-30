@@ -56,8 +56,10 @@ impl HomeComponent {
         let splash = Splash::new(port);
         let flow_list = FlowList::new(flow_store.clone());
         let connections_component = ConnectionsComponent::new(flow_store.clone());
+        let focus = FocusFlag::new().with_name("Home");
+        focus.set(true);
         Self {
-            focus: FocusFlag::new().with_name("Home"),
+            focus,
             flow_store: flow_store.clone(),
             active_view: ActiveView::Splash,
             active_popup: None,
