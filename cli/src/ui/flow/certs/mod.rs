@@ -96,18 +96,16 @@ pub struct FlowDetailsCerts {
     state: watch::Receiver<UiState>,
     focus: FocusFlag,
     area: Rect,
-    handle: Option<JoinHandle<()>>,
 
     root_tab_cmp: TabComponent,
     client_cmp: ClientCertificateComponent,
     server_cmp: ServerCertificateComponent,
+    state_handle: JoinHandle<()>,
 }
 
 impl Drop for FlowDetailsCerts {
     fn drop(&mut self) {
-        if let Some(handle) = &mut self.handle {
-            handle.abort();
-        }
+        self.state_handle.abort();
     }
 }
 
@@ -139,23 +137,8 @@ impl RootTab {
 impl FlowDetailsCerts {
     pub fn new(mut cert_rx: Receiver<FlowCerts>) -> Self {
         let (ui_tx, ui_rx) = watch::channel(UiState::default());
-        let mut s = Self {
-            state: ui_rx,
-            focus: FocusFlag::new().with_name("FlowCerts"),
-            area: Rect::default(),
-            handle: None,
-            root_tab_cmp: TabComponent::new(
-                "Certs".to_string(),
-                RootTab::all()
-                    .iter()
-                    .map(|v| v.title().to_string())
-                    .collect(),
-            ),
-            client_cmp: ClientCertificateComponent::new(),
-            server_cmp: ServerCertificateComponent::new(),
-        };
 
-        let handle = tokio::spawn({
+        let state_handle = tokio::spawn({
             async move {
                 info!("waiting on cert updates...");
                 while let Some(certs) = cert_rx.recv().await {
@@ -175,8 +158,21 @@ impl FlowDetailsCerts {
                 }
             }
         });
-        s.handle = Some(handle);
-        s
+        Self {
+            state: ui_rx,
+            focus: FocusFlag::new().with_name("FlowCerts"),
+            area: Rect::default(),
+            root_tab_cmp: TabComponent::new(
+                "Certs".to_string(),
+                RootTab::all()
+                    .iter()
+                    .map(|v| v.title().to_string())
+                    .collect(),
+            ),
+            client_cmp: ClientCertificateComponent::new(),
+            server_cmp: ServerCertificateComponent::new(),
+            state_handle,
+        }
     }
 }
 

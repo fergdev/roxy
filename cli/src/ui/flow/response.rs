@@ -29,6 +29,7 @@ pub struct FlowDetailsResponse {
     headers: FlowDetailsHeaders,
     body: FlowDetailsBody,
     area: Rect,
+    state_handle: tokio::task::JoinHandle<()>,
 }
 
 impl FlowDetailsResponse {
@@ -40,16 +41,7 @@ impl FlowDetailsResponse {
         let flow_headers = FlowDetailsHeaders::new(headers_rx);
         let body = FlowDetailsBody::new(body_rx);
 
-        let this = Self {
-            focus: FocusFlag::new().with_name("FlowResponse"),
-            ui_state: ui_rx,
-            line_component: LineComponent::new("ResponseLine"),
-            headers: flow_headers,
-            area: Rect::default(),
-            body,
-        };
-
-        tokio::spawn({
+        let state_handle = tokio::spawn({
             async move {
                 while let Some(req) = req_rx.recv().await {
                     if let Some(resp) = req {
@@ -75,7 +67,22 @@ impl FlowDetailsResponse {
                 }
             }
         });
-        this
+
+        Self {
+            focus: FocusFlag::new().with_name("FlowResponse"),
+            ui_state: ui_rx,
+            line_component: LineComponent::new("ResponseLine"),
+            headers: flow_headers,
+            area: Rect::default(),
+            body,
+            state_handle,
+        }
+    }
+}
+
+impl Drop for FlowDetailsResponse {
+    fn drop(&mut self) {
+        self.state_handle.abort();
     }
 }
 

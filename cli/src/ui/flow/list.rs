@@ -81,8 +81,8 @@ impl FlowList {
             shutdown_tx,
             area: Rect::default(),
         };
-
         let handle = instance.start_listener(ui_tx, shutdown_rx);
+
         instance.listener_handle = Some(handle);
 
         instance

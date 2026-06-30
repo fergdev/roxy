@@ -30,6 +30,7 @@ pub struct FlowDetailsRequest {
     headers: FlowDetailsHeaders,
     body: FlowDetailsBody,
     area: Rect,
+    state_handle: tokio::task::JoinHandle<()>,
 }
 
 impl FlowDetailsRequest {
@@ -41,16 +42,7 @@ impl FlowDetailsRequest {
         let flow_headers = FlowDetailsHeaders::new(headers_rx);
         let body = FlowDetailsBody::new(body_rx);
 
-        let this = Self {
-            focus: FocusFlag::new().with_name("FlowRequest"),
-            line_component: LineComponent::new("ResponseLine"),
-            ui_state: ui_rx,
-            headers: flow_headers,
-            body,
-            area: Rect::default(),
-        };
-
-        tokio::spawn(async move {
+        let state_handle = tokio::spawn(async move {
             while let Some(req) = req_rx.recv().await {
                 if let Some(req) = req {
                     if let Err(error) = ui_tx.send(UiState {
@@ -75,7 +67,20 @@ impl FlowDetailsRequest {
             }
         });
 
-        this
+        Self {
+            focus: FocusFlag::new().with_name("FlowRequest"),
+            line_component: LineComponent::new("ResponseLine"),
+            ui_state: ui_rx,
+            headers: flow_headers,
+            body,
+            area: Rect::default(),
+            state_handle,
+        }
+    }
+}
+impl Drop for FlowDetailsRequest {
+    fn drop(&mut self) {
+        self.state_handle.abort();
     }
 }
 

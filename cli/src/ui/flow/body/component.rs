@@ -67,6 +67,13 @@ pub struct FlowDetailsBody {
     area: Rect,
 
     scroll: TwoAxisScrollState,
+    state_handle: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for FlowDetailsBody {
+    fn drop(&mut self) {
+        self.state_handle.abort();
+    }
 }
 
 impl FlowDetailsBody {
@@ -76,7 +83,7 @@ impl FlowDetailsBody {
         let ic = ImageCache::new();
         let mut image_cache = ic.clone();
 
-        tokio::spawn(async move {
+        let state_handle = tokio::spawn(async move {
             while let Some((content_type, mut body)) = body_rx.recv().await {
                 let lines = match content_type {
                     Some(ct) => match ct {
@@ -130,6 +137,7 @@ impl FlowDetailsBody {
             focus: FocusFlag::new().with_name("FlowBody"),
             area: Rect::default(),
             scroll: TwoAxisScrollState::default(),
+            state_handle,
         }
     }
 }

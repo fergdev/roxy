@@ -9,9 +9,12 @@ use ratatui::{
     text::Span,
     widgets::{Cell, Clear, Row, TableState},
 };
-use tokio::sync::{
-    mpsc::{self},
-    watch,
+use tokio::{
+    sync::{
+        mpsc::{self},
+        watch,
+    },
+    task::JoinHandle,
 };
 use tracing::error;
 
@@ -28,13 +31,14 @@ pub struct FlowDetailsHeaders {
     focus: FocusFlag,
     area: Rect,
     table_state: TableState,
+    state_handle: JoinHandle<()>,
 }
 
 impl FlowDetailsHeaders {
     pub fn new(mut req_rx: mpsc::Receiver<HeaderMap>) -> Self {
         let (headers_tx, headers_rx) = watch::channel(None);
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             while let Some(req) = req_rx.recv().await {
                 headers_tx.send(Some(req)).unwrap_or_else(|e| {
                     error!("Failed to send headers: {}", e);
@@ -47,7 +51,13 @@ impl FlowDetailsHeaders {
             focus: FocusFlag::new().with_name("FlowHeaders"),
             area: Rect::default(),
             table_state: TableState::default(),
+            state_handle: handle,
         }
+    }
+}
+impl Drop for FlowDetailsHeaders {
+    fn drop(&mut self) {
+        self.state_handle.abort();
     }
 }
 

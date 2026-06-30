@@ -15,7 +15,10 @@ use crate::{
     },
 };
 
+#[derive(Default)]
 struct State {
+    width: usize,
+    height: usize,
     lines: Vec<(String, String)>,
 }
 
@@ -24,18 +27,28 @@ pub struct FlowTiming {
     focus: FocusFlag,
     area: Rect,
     scroll: TwoAxisScrollState,
+    state_handle: tokio::task::JoinHandle<()>,
 }
 
 impl FlowTiming {
     pub fn new(mut rx: mpsc::Receiver<Timing>) -> Self {
-        let (ui_tx, ui_rx) = watch::channel(State { lines: vec![] });
+        let (ui_tx, ui_rx) = watch::channel(State::default());
 
-        tokio::spawn({
+        let state_handle = tokio::spawn({
             async move {
                 while let Some(timing) = rx.recv().await {
+                    let lines = render_timing(&timing);
+                    let height = lines.len();
+                    let width = lines
+                        .iter()
+                        .map(|(k, v)| k.len() + v.len())
+                        .max()
+                        .unwrap_or(0);
                     ui_tx
                         .send(State {
                             lines: render_timing(&timing),
+                            width,
+                            height,
                         })
                         .unwrap_or_else(|e| {
                             tracing::debug!("Failed to send UI state update: {}", e);
@@ -49,7 +62,13 @@ impl FlowTiming {
             focus: FocusFlag::new().with_name("FlowTiming"),
             area: Rect::default(),
             scroll: TwoAxisScrollState::default(),
+            state_handle,
         }
+    }
+}
+impl Drop for FlowTiming {
+    fn drop(&mut self) {
+        self.state_handle.abort();
     }
 }
 fn render_timing(timing: &Timing) -> Vec<(String, String)> {
@@ -107,14 +126,8 @@ impl Component for FlowTiming {
     fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         self.area = area;
         let state = self.state.borrow();
-        let height = state.lines.len();
-        let width = state
-            .lines
-            .iter()
-            .map(|(k, v)| k.len() + v.len())
-            .max()
-            .unwrap_or(0);
-        self.scroll.set_content_size((width as u16, height as u16));
+        self.scroll
+            .set_content_size((state.width as u16, state.height as u16));
         kv_paragraph(
             &state.lines,
             frame,

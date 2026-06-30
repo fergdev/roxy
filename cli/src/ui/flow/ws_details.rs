@@ -23,6 +23,7 @@ pub struct FlowDetailsWs {
     focus: FocusFlag,
     table_state: TableState,
     area: Rect,
+    state_handle: tokio::task::JoinHandle<()>,
 }
 
 #[derive(Default, Clone)]
@@ -34,7 +35,7 @@ impl FlowDetailsWs {
     pub fn new(mut cert_rx: mpsc::Receiver<Vec<WsMessage>>) -> Self {
         let (ui_tx, ui_rx) = watch::channel(UiState::default());
 
-        tokio::spawn({
+        let state_handle = tokio::spawn({
             async move {
                 while let Some(messages) = cert_rx.recv().await {
                     let messages: Vec<String> = messages
@@ -54,7 +55,13 @@ impl FlowDetailsWs {
             focus: FocusFlag::new().with_name("FlowWsDetails"),
             table_state: TableState::default(),
             area: Rect::default(),
+            state_handle,
         }
+    }
+}
+impl Drop for FlowDetailsWs {
+    fn drop(&mut self) {
+        self.state_handle.abort();
     }
 }
 
