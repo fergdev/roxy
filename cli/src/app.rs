@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use color_eyre::Result;
 use rat_focus::{Focus, FocusBuilder};
 use ratatui::layout::Rect;
-use roxy_proxy::flow::FlowStore;
+use roxy_proxy::flow_store::FlowStore;
 use roxy_proxy::proxy::ProxyManager;
 use tokio::sync::mpsc;
 use tracing::debug;
@@ -67,7 +67,7 @@ impl App {
             let mut focus = FocusBuilder::build_for(&self.home);
 
             // Enable for logging of focus related changes
-            focus.enable_log();
+            // focus.enable_log();
 
             self.handle_events(&mut tui).await?;
             self.handle_actions(&mut tui, &mut focus)?;

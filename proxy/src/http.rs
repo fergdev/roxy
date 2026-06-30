@@ -23,10 +23,10 @@ use tracing::trace;
 type H1ServerBuilder = hyper::server::conn::http1::Builder;
 type H2ServerBuilder<TokioIo> = hyper::server::conn::http2::Builder<TokioIo>;
 
-use crate::flow::FlowEvent;
-use crate::flow::FlowEventEmitter;
 use crate::flow::InterceptedRequest;
 use crate::flow::InterceptedResponse;
+use crate::flow_store::FlowEventEmitter;
+use crate::flow_store::FlowEventKind;
 use crate::proxy::FlowContext;
 
 pub(crate) async fn handle_http(
@@ -113,7 +113,7 @@ async fn proxy(
         flow_cxt
             .proxy_cxt
             .flow_store
-            .post_event(flow_id, FlowEvent::Response(response));
+            .post_event(flow_id, FlowEventKind::Response(response));
         return Ok(resp);
     }
 
@@ -145,7 +145,7 @@ async fn proxy(
     flow_cxt
         .proxy_cxt
         .flow_store
-        .post_event(flow_id, FlowEvent::Response(intercepted_resp));
+        .post_event(flow_id, FlowEventKind::Response(intercepted_resp));
     Ok(resp)
 }
 

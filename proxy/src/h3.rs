@@ -23,7 +23,8 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, trace, warn};
 
 use crate::{
-    flow::{FlowEvent, InterceptedRequest, InterceptedResponse},
+    flow::{InterceptedRequest, InterceptedResponse},
+    flow_store::FlowEventKind,
     proxy::{FlowContext, ProxyContext},
 };
 
@@ -147,7 +148,7 @@ async fn do_conn(new_conn: quinn::Incoming, cxt: ProxyContext) -> Result<(), Box
                             flow_cxt
                                 .proxy_cxt
                                 .flow_store
-                                .post_event(flow_id, FlowEvent::Response(response.clone()));
+                                .post_event(flow_id, FlowEventKind::Response(response.clone()));
 
                             let resp = response.response_builder();
                             stream.send_response(resp.body(())?).await?;
@@ -180,10 +181,10 @@ async fn do_conn(new_conn: quinn::Incoming, cxt: ProxyContext) -> Result<(), Box
                         )?;
                         let trailers = intercepted_response.trailers.clone();
 
-                        flow_cxt
-                            .proxy_cxt
-                            .flow_store
-                            .post_event(flow_id, FlowEvent::Response(intercepted_response.clone()));
+                        flow_cxt.proxy_cxt.flow_store.post_event(
+                            flow_id,
+                            FlowEventKind::Response(intercepted_response.clone()),
+                        );
 
                         stream.send_response(resp.body(())?).await?;
                         stream.send_data(body).await?;

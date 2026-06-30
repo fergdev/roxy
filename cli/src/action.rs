@@ -25,6 +25,7 @@ pub enum Action {
     EditConfig,
     LogView,
     FpsView,
+    Connections,
 
     // Focus
     FocusNext,

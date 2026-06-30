@@ -1,5 +1,6 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 pub mod flow;
+pub mod flow_store;
 mod h3;
 mod http;
 pub mod interceptor;

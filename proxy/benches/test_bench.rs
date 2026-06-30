@@ -8,7 +8,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use http::{Method, Version};
 use http_body_util::{Empty, combinators::BoxBody};
 use once_cell::sync::OnceCell;
-use roxy_proxy::{flow::FlowStore, interceptor, proxy::ProxyManager};
+use roxy_proxy::{flow_store::FlowStore, interceptor, proxy::ProxyManager};
 use roxy_servers::{H11_BODY, h1::h1_server};
 use roxy_shared::{
     RoxyCA, client::ClientContext, crypto::init_crypto, generate_roxy_root_ca_with_path,

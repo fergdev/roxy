@@ -9,7 +9,7 @@ use http_body_util::Empty;
 use http_body_util::Full;
 use http_body_util::combinators::BoxBody;
 use itertools::Itertools;
-use roxy_proxy::flow::FlowStore;
+use roxy_proxy::flow_store::FlowStore;
 use roxy_proxy::interceptor::{ScriptEngine, ScriptType};
 use roxy_proxy::proxy::ProxyManager;
 use roxy_servers::web_transport::h3_wt;

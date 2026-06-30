@@ -1,3 +1,4 @@
+use color_eyre::eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
 use roxy_proxy::flow::Timing;
@@ -23,35 +24,13 @@ impl FlowTiming {
         tokio::spawn({
             async move {
                 while let Some(timing) = rx.recv().await {
-                    let lines = vec![
-                        timing_line("client_conn_established", &timing.client_conn_established),
-                        timing_line("server_conn_initiated", &timing.server_conn_initiated),
-                        timing_line(
-                            "server_conn_http_handshake",
-                            &timing.server_conn_http_handshake,
-                        ),
-                        timing_line(
-                            "server_conn_TCP_handshake",
-                            &timing.server_conn_tcp_handshake,
-                        ),
-                        timing_line(
-                            "server_conn_TLS_handshake",
-                            &timing.server_conn_tls_handshake,
-                        ),
-                        timing_line(
-                            "client_conn_TLS_handshake",
-                            &timing.client_conn_tls_handshake,
-                        ),
-                        timing_line("first_reques_byte", &timing.first_request_bytes),
-                        timing_line("request_complete", &timing.request_complete),
-                        timing_line("first_respons_byte", &timing.first_response_bytes),
-                        timing_line("response_complete", &timing.response_complete),
-                        timing_line("client_conn_closed", &timing.client_conn_closed),
-                        timing_line("server_conn_closed", &timing.server_conn_closed),
-                    ];
-                    ui_tx.send(State { lines }).unwrap_or_else(|e| {
-                        tracing::debug!("Failed to send UI state update: {}", e);
-                    });
+                    ui_tx
+                        .send(State {
+                            lines: render_timing(&timing),
+                        })
+                        .unwrap_or_else(|e| {
+                            tracing::debug!("Failed to send UI state update: {}", e);
+                        });
                 }
             }
         });
@@ -62,6 +41,34 @@ impl FlowTiming {
             area: Rect::default(),
         }
     }
+}
+fn render_timing(timing: &Timing) -> Vec<(String, String)> {
+    vec![
+        timing_line("client_conn_established", &timing.client_conn_established),
+        timing_line("server_conn_initiated", &timing.server_conn_initiated),
+        timing_line(
+            "server_conn_http_handshake",
+            &timing.server_conn_http_handshake,
+        ),
+        timing_line(
+            "server_conn_TCP_handshake",
+            &timing.server_conn_tcp_handshake,
+        ),
+        timing_line(
+            "server_conn_TLS_handshake",
+            &timing.server_conn_tls_handshake,
+        ),
+        timing_line(
+            "client_conn_TLS_handshake",
+            &timing.client_conn_tls_handshake,
+        ),
+        timing_line("first_request_byte", &timing.first_request_bytes),
+        timing_line("request_complete", &timing.request_complete),
+        timing_line("first_response_byte", &timing.first_response_bytes),
+        timing_line("response_complete", &timing.response_complete),
+        timing_line("client_conn_closed", &timing.client_conn_closed),
+        timing_line("server_conn_closed", &timing.server_conn_closed),
+    ]
 }
 
 fn timing_line(key: &str, time: &Option<OffsetDateTime>) -> (String, String) {
@@ -87,7 +94,7 @@ impl HasFocus for FlowTiming {
 }
 
 impl Component for FlowTiming {
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         self.area = area;
         let state = self.state.borrow();
         kv_paragraph(

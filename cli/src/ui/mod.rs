@@ -1,4 +1,5 @@
 pub mod config;
+pub mod connection;
 pub mod flow;
 pub mod fps_counter;
 pub mod framework;

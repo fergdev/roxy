@@ -38,7 +38,7 @@ use std::sync::Arc;
 use tokio_rustls::TlsAcceptor;
 
 use crate::flow::FlowCerts;
-use crate::flow::FlowStore;
+use crate::flow_store::FlowStore;
 use crate::h3::start_h3;
 use crate::http::handle_h2;
 use crate::http::{handle_http, handle_https};
@@ -135,11 +135,11 @@ impl ProxyManager {
 
 impl Drop for ProxyManager {
     fn drop(&mut self) {
-        if let Some(h) = &self.http_handle {
-            h.abort();
+        if let Some(http_handle) = &self.http_handle {
+            http_handle.abort();
         }
-        if let Some(h) = &self.h3_handle {
-            h.abort();
+        if let Some(h3_handle) = &self.h3_handle {
+            h3_handle.abort();
         }
     }
 }
@@ -181,14 +181,14 @@ impl ProxyContext {
 }
 
 async fn start_tcp(
-    cxt: ProxyContext,
+    proxy_context: ProxyContext,
     tcp_listeneter: TcpListener,
 ) -> Result<JoinHandle<()>, HttpError> {
     let addr = tcp_listeneter.local_addr()?;
     let handle = tokio::spawn(async move {
         trace!("TCP listening on {addr}");
         while let Ok((stream, addr)) = tcp_listeneter.accept().await {
-            let cxt = cxt.clone();
+            let cxt = proxy_context.clone();
             tokio::task::spawn(async move {
                 if let Err(err) = ServerBuilder::new()
                     .title_case_headers(true)
@@ -209,24 +209,38 @@ async fn start_tcp(
 }
 
 async fn proxy(
-    cxt: ProxyContext,
+    proxy_context: ProxyContext,
     socket_addr: SocketAddr,
-    req: Request<Incoming>,
+    incoming_request: Request<Incoming>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, HttpError> {
-    if Method::CONNECT == req.method() {
-        trace!("CONNECT request: {:?}", req.uri());
-        if !validate_connect_uri(req.version(), req.uri(), req.headers()) {
+    let connection_id = proxy_context.flow_store.new_connection(socket_addr).await;
+    if Method::CONNECT == incoming_request.method() {
+        trace!("CONNECT request: {:?}", incoming_request.uri());
+        if !validate_connect_uri(
+            incoming_request.version(),
+            incoming_request.uri(),
+            incoming_request.headers(),
+        ) {
+            proxy_context
+                .flow_store
+                .post_proxy_event(crate::flow_store::ConnectionEvent::failure(
+                    connection_id,
+                    "Validate correct failed",
+                ));
             debug!("Invalid connect request");
             return bad_connect_response().map_err(|_| HttpError::ProxyConnect);
         }
 
-        let uri: RUri = RUri::new(req.uri().clone());
-        let flow_context = FlowContext::new(socket_addr, uri, cxt.clone());
+        let flow_context = FlowContext::new(
+            socket_addr,
+            RUri::new(incoming_request.uri().clone()),
+            proxy_context.clone(),
+        );
         tokio::spawn(async {
-            match hyper::upgrade::on(req).await {
+            match hyper::upgrade::on(incoming_request).await {
                 Ok(upgraded) => {
-                    if let Err(e) = tunnel(flow_context, upgraded).await {
-                        trace!("server io error: {}", e);
+                    if let Err(error) = tunnel(flow_context, upgraded).await {
+                        error!("server io error: {}", error);
                     };
                 }
                 Err(e) => {
@@ -239,7 +253,11 @@ async fn proxy(
             .status(StatusCode::OK)
             .body(BoxBody::new(Empty::<Bytes>::new()))?)
     } else {
-        handle_http(FlowContext::new(socket_addr, req.uri().into(), cxt), req).await
+        handle_http(
+            FlowContext::new(socket_addr, incoming_request.uri().into(), proxy_context),
+            incoming_request,
+        )
+        .await
     }
 }
 
@@ -249,12 +267,14 @@ fn validate_connect_uri(version: Version, uri: &Uri, headers: &HeaderMap) -> boo
     trace!("Validate connect {version:?}, {uri}, {headers:?}");
     let header_host = match headers
         .get(HOST)
-        .and_then(|h| h.to_str().ok())
-        .and_then(|f| f.parse::<Uri>().ok())
+        .and_then(|host_header| host_header.to_str().ok())
+        .and_then(|host_uri_str| host_uri_str.parse::<Uri>().ok())
     {
         Some(host) => host,
         None => {
-            error!("No host");
+            error!(
+                "Unable to find host header in CONNECT request uri='{uri}' version='{version:?}'"
+            );
             return false;
         }
     };

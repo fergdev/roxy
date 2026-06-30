@@ -6,8 +6,9 @@ use ratatui::{
     widgets::Clear,
 };
 
-use roxy_proxy::flow::{
-    FlowCerts, FlowStore, InterceptedRequest, InterceptedResponse, Timing, WsMessage,
+use roxy_proxy::{
+    flow::{FlowCerts, InterceptedRequest, InterceptedResponse, Timing, WsMessage},
+    flow_store::FlowStore,
 };
 use strum::EnumIter;
 use tokio::{

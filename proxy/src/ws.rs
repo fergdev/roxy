@@ -13,16 +13,17 @@ use tokio_tungstenite::{
 use tracing::trace;
 
 use crate::{
-    flow::{FlowConnection, FlowEvent, WsMessage},
+    flow::{FlowConnection, WsMessage},
+    flow_store::FlowEventKind,
     proxy::FlowContext,
 };
 
-pub async fn handle_ws<S>(
+pub async fn handle_ws<Stream>(
     flow_cxt: FlowContext,
-    stream: S,
+    stream: Stream,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    Stream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     trace!("Handing WS {:?}", flow_cxt.target_uri);
 
@@ -48,12 +49,12 @@ where
     Ok(())
 }
 
-pub async fn handle_wss<S>(
+pub async fn handle_wss<Stream>(
     flow_cxt: FlowContext,
-    stream: S,
+    stream: Stream,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    Stream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let flow_id = flow_cxt
         .proxy_cxt
@@ -108,7 +109,7 @@ where
             let msg = msg.map_err(Error::other)?;
             flow_cxt.proxy_cxt.flow_store.post_event(
                 flow_id,
-                FlowEvent::WsMessage(WsMessage::client(msg.clone())),
+                FlowEventKind::WsMessage(WsMessage::client(msg.clone())),
             );
             server_write.send(msg).await.map_err(Error::other)?;
         }
@@ -120,7 +121,7 @@ where
             let msg = msg.map_err(Error::other)?;
             flow_cxt.proxy_cxt.flow_store.post_event(
                 flow_id,
-                FlowEvent::WsMessage(WsMessage::server(msg.clone())),
+                FlowEventKind::WsMessage(WsMessage::server(msg.clone())),
             );
             client_write.send(msg).await.map_err(Error::other)?;
         }

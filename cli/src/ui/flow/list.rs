@@ -8,7 +8,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Cell, Row, ScrollbarState, TableState},
 };
-use roxy_proxy::flow::FlowStore;
+use roxy_proxy::flow_store::FlowStore;
 use tokio::{sync::watch, task::JoinHandle};
 use tracing::error;
 

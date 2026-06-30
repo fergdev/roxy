@@ -3,7 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{action::Action, config::manager::ConfigManager, tui::TuiEvent};
+use crate::{
+    action::Action, config::manager::ConfigManager, tui::TuiEvent,
+    ui::connection::ConnectionsComponent,
+};
 
 use super::{
     config::ConfigEditor,
@@ -21,7 +24,7 @@ use super::{
 use color_eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
-use roxy_proxy::flow::FlowStore;
+use roxy_proxy::flow_store::FlowStore;
 
 pub struct HomeComponent {
     focus: FocusFlag,
@@ -31,6 +34,7 @@ pub struct HomeComponent {
     splash: Splash,
     flow_list: FlowList,
     flow_details: FlowDetails,
+    connections_component: ConnectionsComponent,
     config_editor: ConfigEditor,
     quit_popup: QuitPopup,
     log_viewer: LogViewer,
@@ -50,6 +54,7 @@ impl HomeComponent {
         let port = config_manager.rx.borrow().app.proxy.port;
         let splash = Splash::new(port);
         let flow_list = FlowList::new(flow_store.clone());
+        let connections_component = ConnectionsComponent::new(flow_store.clone());
         Self {
             focus: FocusFlag::new().with_name("Home"),
             flow_store: flow_store.clone(),
@@ -57,6 +62,7 @@ impl HomeComponent {
             active_popup: None,
             splash,
             flow_list,
+            connections_component,
             config_editor: ConfigEditor::new(config_manager.clone()),
             quit_popup: QuitPopup::new(),
             flow_details: FlowDetails::new(flow_store.clone()),
@@ -86,6 +92,9 @@ impl HasFocus for HomeComponent {
                 }
                 ActivePopup::LogViewer => {
                     builder.widget(&self.log_viewer);
+                }
+                ActivePopup::Connections => {
+                    builder.widget(&self.connections_component);
                 }
             };
         } else {
@@ -122,6 +131,7 @@ pub enum ActivePopup {
     ConfigEditor,
     QuitPopup,
     FlowDetails,
+    Connections,
     LogViewer,
 }
 
@@ -146,6 +156,10 @@ impl Component for HomeComponent {
             Action::EditConfig => {
                 self.active_popup = Some(ActivePopup::ConfigEditor);
                 self.config_editor.shown();
+                ActionResult::Consumed
+            }
+            Action::Connections => {
+                self.active_popup = Some(ActivePopup::Connections);
                 ActionResult::Consumed
             }
             Action::Back => match self.active_popup {
@@ -191,6 +205,7 @@ impl Component for HomeComponent {
             Some(ActivePopup::QuitPopup) => self.quit_popup.render(frame, area)?,
             Some(ActivePopup::FlowDetails) => self.flow_details.render(frame, area)?,
             Some(ActivePopup::LogViewer) => self.log_viewer.render(frame, area)?,
+            Some(ActivePopup::Connections) => self.connections_component.render(frame, area)?,
             None => {}
         };
 
@@ -205,6 +220,7 @@ impl Component for HomeComponent {
             Some(ActivePopup::QuitPopup) => children.push(&mut self.quit_popup),
             Some(ActivePopup::FlowDetails) => children.push(&mut self.flow_details),
             Some(ActivePopup::LogViewer) => children.push(&mut self.log_viewer),
+            Some(ActivePopup::Connections) => children.push(&mut self.connections_component),
             None => {}
         }
 

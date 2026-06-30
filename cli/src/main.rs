@@ -14,7 +14,7 @@ use roxy_cli::{
 };
 
 use roxy_proxy::{
-    flow::FlowStore,
+    flow_store::FlowStore,
     interceptor::{self, FlowNotifyLevel, ScriptEngine},
     proxy::ProxyManager,
 };
