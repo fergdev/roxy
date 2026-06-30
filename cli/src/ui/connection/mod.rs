@@ -1,4 +1,5 @@
 use color_eyre::eyre::Result;
+use crossterm::event::{MouseEvent, MouseEventKind};
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     layout::Rect,
@@ -80,6 +81,25 @@ impl Component for ConnectionsComponent {
 
     fn focus(&mut self) -> &mut FocusFlag {
         &mut self.focus
+    }
+
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        match mouse.kind {
+            MouseEventKind::ScrollLeft => {
+                self.scroll_index_horizontal.prev();
+            }
+            MouseEventKind::ScrollRight => {
+                self.scroll_index_horizontal.next();
+            }
+            MouseEventKind::ScrollUp => {
+                self.scroll_index_vertical.prev();
+            }
+            MouseEventKind::ScrollDown => {
+                self.scroll_index_vertical.next();
+            }
+            _ => {}
+        }
+        Ok(Some(Action::FocusReq(self.focus.widget_id())))
     }
 
     fn handle_action(&mut self, action: Action) -> ActionResult {
