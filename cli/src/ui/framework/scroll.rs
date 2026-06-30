@@ -6,6 +6,8 @@ use crate::{
     ui::framework::scrollbar::{render_horizontal_scrollbar, render_vertical_scrollbar},
 };
 
+const PAGE_SCROLL_AMOUNT: usize = 10;
+
 #[derive(Debug, Default)]
 pub struct TwoAxisScrollState {
     vertical: ScrollbarState,
@@ -48,12 +50,27 @@ impl TwoAxisScrollState {
             }
             Action::PageUp => {
                 let curr_pos = self.vertical.get_position();
-                self.vertical = self.vertical.position(curr_pos.saturating_sub(5));
-                // self.horizontal.first();
+                self.vertical = self
+                    .vertical
+                    .position(curr_pos.saturating_sub(PAGE_SCROLL_AMOUNT));
             }
             Action::PageDown => {
                 let curr_pos = self.vertical.get_position();
-                self.vertical = self.vertical.position(curr_pos.saturating_add(5));
+                self.vertical = self
+                    .vertical
+                    .position(curr_pos.saturating_add(PAGE_SCROLL_AMOUNT));
+            }
+            Action::PageLeft => {
+                let curr_pos = self.horizontal.get_position();
+                self.horizontal = self
+                    .horizontal
+                    .position(curr_pos.saturating_sub(PAGE_SCROLL_AMOUNT));
+            }
+            Action::PageRight => {
+                let curr_pos = self.horizontal.get_position();
+                self.horizontal = self
+                    .horizontal
+                    .position(curr_pos.saturating_add(PAGE_SCROLL_AMOUNT));
             }
             Action::Up => {
                 self.vertical.prev();

@@ -20,6 +20,8 @@
       "$": "End",
       "<C-u>": "PageUp",
       "<C-d>": "PageDown",
+      "b": "PageLeft",
+      "w": "PageRight",
       "f": "FpsView",
       "<Tab>": "FocusNext",
       "<S-Tab>": "FocusPrev",

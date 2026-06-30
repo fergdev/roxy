@@ -15,6 +15,8 @@ pub enum Action {
 
     PageUp,
     PageDown,
+    PageLeft,
+    PageRight,
 
     Top,
     Bottom,
