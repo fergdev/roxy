@@ -1,7 +1,7 @@
 pub mod button_group;
-pub mod cache;
 pub mod color;
 pub mod component;
+pub mod image_cache;
 pub mod kv_component;
 pub mod notify;
 pub mod paragraph;

@@ -88,3 +88,76 @@ fn indexed_to_rgb(i: u8) -> (u8, u8, u8) {
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::style::Color;
+
+    fn assert_close(actual: f32, expected: f32) {
+        let diff = (actual - expected).abs();
+        assert!(
+            diff < 0.0001,
+            "actual={actual}, expected={expected}, diff={diff}"
+        );
+    }
+
+    #[test]
+    fn luminance_black_is_zero() {
+        assert_close(luminance(0.0, 0.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn luminance_white_is_one() {
+        assert_close(luminance(1.0, 1.0, 1.0), 1.0);
+    }
+
+    #[test]
+    fn luminance_primary_colors_match_wcag_weights() {
+        assert_close(luminance(1.0, 0.0, 0.0), 0.2126);
+        assert_close(luminance(0.0, 1.0, 0.0), 0.7152);
+        assert_close(luminance(0.0, 0.0, 1.0), 0.0722);
+    }
+
+    #[test]
+    fn luminance_color_handles_rgb() {
+        assert_close(luminance_color(&Color::Rgb(255, 255, 255)), 1.0);
+        assert_close(luminance_color(&Color::Rgb(0, 0, 0)), 0.0);
+    }
+
+    #[test]
+    fn color_is_light_detects_light_and_dark_colors() {
+        assert!(color_is_light(&Color::White));
+        assert!(color_is_light(&Color::LightYellow));
+
+        assert!(!color_is_light(&Color::Black));
+        assert!(!color_is_light(&Color::Blue));
+    }
+
+    #[test]
+    fn indexed_basic_colors_match_named_colors() {
+        assert_eq!(rgb(&Color::Indexed(0)), rgb(&Color::Black));
+        assert_eq!(rgb(&Color::Indexed(1)), rgb(&Color::Red));
+        assert_eq!(rgb(&Color::Indexed(15)), rgb(&Color::White));
+    }
+
+    #[test]
+    fn indexed_color_cube_values_are_correct() {
+        assert_eq!(indexed_to_rgb(16), (0, 0, 0));
+        assert_eq!(indexed_to_rgb(17), (0, 0, 95));
+        assert_eq!(indexed_to_rgb(21), (0, 0, 255));
+        assert_eq!(indexed_to_rgb(231), (255, 255, 255));
+    }
+
+    #[test]
+    fn indexed_grayscale_values_are_correct() {
+        assert_eq!(indexed_to_rgb(232), (8, 8, 8));
+        assert_eq!(indexed_to_rgb(233), (18, 18, 18));
+        assert_eq!(indexed_to_rgb(255), (238, 238, 238));
+    }
+
+    #[test]
+    fn reset_is_treated_as_light_background() {
+        assert!(color_is_light(&Color::Reset));
+        assert_close(luminance_color(&Color::Reset), 1.0);
+    }
+}
