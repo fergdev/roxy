@@ -12,7 +12,7 @@ use roxy_shared::cert::CapturedResolveClientCert;
 use crate::{
     action::Action,
     ui::framework::{
-        component::{Component, DispatchError, DispatchResult},
+        component::{Component, DispatchCancellation, DispatchResult},
         scroll::TwoAxisScrollState,
         theme::themed_block,
     },
@@ -103,7 +103,7 @@ impl Component for ServerResolveClientCertComponent {
     }
     fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         if !self.focus.get() {
-            return DispatchError::action(Action::FocusReq(self.focus.id()));
+            return DispatchCancellation::action(Action::FocusReq(self.focus.id()));
         }
 
         self.scroll.handle_mouse_event(mouse);
@@ -111,7 +111,7 @@ impl Component for ServerResolveClientCertComponent {
     }
     fn handle_action(&mut self, action: &Action) -> DispatchResult {
         if self.scroll.handle_action(action) {
-            DispatchError::stop()
+            DispatchCancellation::stop()
         } else {
             Ok(())
         }

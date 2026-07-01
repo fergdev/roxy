@@ -11,7 +11,7 @@ use tracing::error;
 use crate::{
     action::Action,
     ui::framework::{
-        component::{Component, DispatchError, DispatchResult},
+        component::{Component, DispatchCancellation, DispatchResult},
         scroll::TwoAxisScrollState,
         theme::themed_block,
         util::centered_rect,
@@ -79,12 +79,12 @@ impl Component for ConnectionsComponent {
 
     fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         self.scroll.handle_mouse_event(mouse);
-        DispatchError::action(Action::FocusReq(self.focus.widget_id()))
+        DispatchCancellation::action(Action::FocusReq(self.focus.widget_id()))
     }
 
     fn handle_action(&mut self, action: &Action) -> DispatchResult {
         if self.scroll.handle_action(action) {
-            DispatchError::stop()
+            DispatchCancellation::stop()
         } else {
             Ok(())
         }

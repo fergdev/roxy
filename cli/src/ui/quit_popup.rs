@@ -10,7 +10,7 @@ use crate::{
     action::Action,
     ui::framework::{
         button_group::{ButtonGroup, ButtonGroupEvent},
-        component::{DispatchError, DispatchResult},
+        component::{DispatchCancellation, DispatchResult},
     },
 };
 
@@ -83,9 +83,9 @@ impl Component for QuitPopup {
         match action {
             Action::Select => {
                 if self.button_group.selected_index == 0 {
-                    Err(DispatchError::Bubble(Action::Quit))
+                    Err(DispatchCancellation::Bubble(Action::Quit))
                 } else {
-                    Err(DispatchError::Bubble(Action::Back))
+                    Err(DispatchCancellation::Bubble(Action::Back))
                 }
             }
             _ => Ok(()),

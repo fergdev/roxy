@@ -8,7 +8,7 @@ use tokio::sync::watch::Sender;
 
 use crate::{
     action::Action,
-    ui::framework::component::{DispatchError, DispatchResult},
+    ui::framework::component::{DispatchCancellation, DispatchResult},
 };
 
 use super::{component::Component, theme::themed_button};
@@ -78,11 +78,11 @@ impl Component for ButtonGroup {
         match action {
             Action::Left => {
                 self.prev();
-                DispatchError::stop()
+                DispatchCancellation::stop()
             }
             Action::Right => {
                 self.next();
-                DispatchError::stop()
+                DispatchCancellation::stop()
             }
             _ => Ok(()),
         }

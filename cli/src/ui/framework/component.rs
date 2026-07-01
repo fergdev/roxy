@@ -7,23 +7,23 @@ use ratatui::{
 
 use crate::{action::Action, tui::TuiEvent};
 
-pub enum DispatchError {
+pub enum DispatchCancellation {
     Stop,
     Bubble(Action),
 }
 
-impl DispatchError {
+impl DispatchCancellation {
     #[inline]
     pub fn stop() -> DispatchResult {
-        Err(DispatchError::Stop)
+        Err(DispatchCancellation::Stop)
     }
     #[inline]
     pub fn action(action: Action) -> DispatchResult {
-        Err(DispatchError::Bubble(action))
+        Err(DispatchCancellation::Bubble(action))
     }
 }
 
-pub type DispatchResult = Result<(), DispatchError>;
+pub type DispatchResult = Result<(), DispatchCancellation>;
 
 pub trait Component {
     fn children(&mut self) -> Vec<&mut dyn Component> {

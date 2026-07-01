@@ -18,7 +18,7 @@ use crate::{
         config::{ConfigValue, EditableConfigField, tab::ConfigTab},
         framework::{
             color::color_is_light,
-            component::{Component, DispatchError, DispatchResult},
+            component::{Component, DispatchCancellation, DispatchResult},
             theme::{themed_block, themed_table},
         },
     },
@@ -205,14 +205,14 @@ impl Component for TableComponent {
         // to get in and out of edit mode.
         if Action::Select == *action {
             self.on_select();
-            return DispatchError::stop();
+            return DispatchCancellation::stop();
         }
 
         if self.is_editing() {
             return Ok(());
         }
 
-        let mut result = DispatchError::stop();
+        let mut result = DispatchCancellation::stop();
         match action {
             Action::Left => {
                 self.table_state.select_previous_column();
@@ -258,7 +258,7 @@ impl Component for TableComponent {
                 }
                 _ => {}
             }
-            DispatchError::stop()
+            DispatchCancellation::stop()
         } else {
             Ok(())
         }
@@ -273,7 +273,7 @@ impl Component for TableComponent {
             return Ok(());
         }
         if !self.focus.get() {
-            return DispatchError::action(Action::FocusReq(self.focus.widget_id()));
+            return DispatchCancellation::action(Action::FocusReq(self.focus.widget_id()));
         }
 
         if mouse.kind == MouseEventKind::ScrollDown {

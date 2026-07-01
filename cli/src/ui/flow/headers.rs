@@ -20,7 +20,7 @@ use tracing::error;
 use crate::{
     action::Action,
     ui::framework::{
-        component::{Component, DispatchError, DispatchResult},
+        component::{Component, DispatchCancellation, DispatchResult},
         theme::{themed_block, themed_table},
     },
 };
@@ -89,7 +89,7 @@ impl Component for FlowDetailsHeaders {
                 _ => {}
             }
         } else {
-            return DispatchError::action(Action::FocusReq(self.focus.id()));
+            return DispatchCancellation::action(Action::FocusReq(self.focus.id()));
         }
         Ok(())
     }
@@ -117,7 +117,7 @@ impl Component for FlowDetailsHeaders {
                     let headers_size = headers.as_ref().map(|h| h.len()).unwrap_or(0);
                     self.table_state.scroll_down_by(headers_size as u16);
                 }
-                _ => res = DispatchError::stop(),
+                _ => res = DispatchCancellation::stop(),
             }
         }
         res

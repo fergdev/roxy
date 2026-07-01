@@ -10,7 +10,7 @@ use crate::{
     ui::{
         connection::ConnectionsComponent,
         framework::{
-            component::{DispatchError, DispatchResult},
+            component::{DispatchCancellation, DispatchResult},
             notify::NotifierComponent,
         },
     },
@@ -159,29 +159,29 @@ impl Component for HomeComponent {
         match action {
             Action::LogView => {
                 self.active_popup = Some(ActivePopup::LogViewer);
-                DispatchError::stop()
+                DispatchCancellation::stop()
             }
             Action::EditConfig => {
                 self.active_popup = Some(ActivePopup::ConfigEditor);
                 self.config_editor.shown();
-                DispatchError::stop()
+                DispatchCancellation::stop()
             }
             Action::Connections => {
                 self.active_popup = Some(ActivePopup::Connections);
-                DispatchError::stop()
+                DispatchCancellation::stop()
             }
             Action::Back => match self.active_popup {
                 Some(_) => {
                     self.active_popup = None;
-                    DispatchError::stop()
+                    DispatchCancellation::stop()
                 }
                 _ => {
                     if !self.config_manager.rx.borrow().app.confirm_quit {
-                        DispatchError::action(Action::Quit)
+                        DispatchCancellation::action(Action::Quit)
                     } else {
                         self.active_popup = Some(ActivePopup::QuitPopup);
                         self.quit_popup.reset();
-                        DispatchError::action(Action::FocusReq(
+                        DispatchCancellation::action(Action::FocusReq(
                             self.quit_popup.button_group.focus().widget_id(),
                         ))
                     }
@@ -191,7 +191,7 @@ impl Component for HomeComponent {
                 if let Some(id) = self.flow_list.selected_id() {
                     self.flow_details.set_flow(id);
                     self.active_popup = Some(ActivePopup::FlowDetails);
-                    DispatchError::stop()
+                    DispatchCancellation::stop()
                 } else {
                     Ok(())
                 }

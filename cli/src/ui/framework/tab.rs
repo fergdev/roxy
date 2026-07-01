@@ -5,7 +5,7 @@ use ratatui::{Frame, layout::Rect, text::Line};
 use crate::{
     action::Action,
     ui::framework::{
-        component::{Component, DispatchError, DispatchResult},
+        component::{Component, DispatchCancellation, DispatchResult},
         theme::themed_tabs,
     },
 };
@@ -67,7 +67,7 @@ impl Component for TabComponent {
     }
 
     fn handle_action(&mut self, action: &Action) -> DispatchResult {
-        let mut res = DispatchError::stop();
+        let mut res = DispatchCancellation::stop();
         match action {
             Action::Left => {
                 self.prev();
@@ -102,7 +102,7 @@ impl Component for TabComponent {
             }
             MouseEventKind::Moved => {
                 if !self.focus.get() {
-                    return DispatchError::action(Action::FocusReq(self.focus.widget_id()));
+                    return DispatchCancellation::action(Action::FocusReq(self.focus.widget_id()));
                 }
             }
             _ => {}

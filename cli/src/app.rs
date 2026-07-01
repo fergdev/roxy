@@ -11,7 +11,7 @@ use crate::action::Action;
 use crate::config::manager::ConfigManager;
 use crate::key_handler::KeyHandler;
 use crate::tui::{Tui, TuiEvent};
-use crate::ui::framework::component::{Component, DispatchError};
+use crate::ui::framework::component::{Component, DispatchCancellation};
 use crate::ui::framework::notify::NotifierComponent;
 use crate::ui::framework::theme::set_theme;
 use crate::ui::home::HomeComponent;
@@ -98,7 +98,7 @@ impl App {
             TuiEvent::Key(key) => self.key_handler.handle_key_event(key)?,
             _ => {}
         }
-        if let Err(DispatchError::Bubble(action)) = self.home.dispatch_tui_events(&event) {
+        if let Err(DispatchCancellation::Bubble(action)) = self.home.dispatch_tui_events(&event) {
             action_tx.send(action)?;
         }
         Ok(())
@@ -124,7 +124,7 @@ impl App {
                 }
                 _ => {}
             }
-            if let Err(DispatchError::Bubble(action)) = self.home.dispatch_action(&action) {
+            if let Err(DispatchCancellation::Bubble(action)) = self.home.dispatch_action(&action) {
                 self.action_tx.send(action)?
             };
         }

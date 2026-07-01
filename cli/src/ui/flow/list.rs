@@ -15,7 +15,7 @@ use crate::{
     action::Action,
     app::ITEM_HEIGHT,
     ui::framework::{
-        component::{Component, DispatchError, DispatchResult},
+        component::{Component, DispatchCancellation, DispatchResult},
         scrollbar::render_vertical_scrollbar,
         theme::themed_table,
     },
@@ -184,11 +184,11 @@ impl Component for FlowList {
         match action {
             Action::Down => {
                 self.next_row();
-                DispatchError::stop()
+                DispatchCancellation::stop()
             }
             Action::Up => {
                 self.previous_row();
-                DispatchError::stop()
+                DispatchCancellation::stop()
             }
             _ => Ok(()),
         }

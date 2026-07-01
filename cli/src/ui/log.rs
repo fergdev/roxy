@@ -8,7 +8,7 @@ use std::{
 use crate::{
     action::Action,
     ui::framework::{
-        component::{DispatchError, DispatchResult},
+        component::{DispatchCancellation, DispatchResult},
         scroll::TwoAxisScrollState,
     },
 };
@@ -115,12 +115,12 @@ impl LogViewer {
 impl Component for LogViewer {
     fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         self.scroll.handle_mouse_event(mouse);
-        DispatchError::action(Action::FocusReq(self.focus.id()))
+        DispatchCancellation::action(Action::FocusReq(self.focus.id()))
     }
 
     fn handle_action(&mut self, action: &Action) -> DispatchResult {
         if self.scroll.handle_action(action) {
-            DispatchError::stop()
+            DispatchCancellation::stop()
         } else {
             Ok(())
         }
