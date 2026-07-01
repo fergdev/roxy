@@ -1,4 +1,3 @@
-use color_eyre::eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
@@ -105,7 +104,7 @@ impl Component for FlowDetailsRequest {
         vec![&mut self.line_component, &mut self.headers, &mut self.body]
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         let data = self.ui_state.borrow_and_update();
 
@@ -125,10 +124,8 @@ impl Component for FlowDetailsRequest {
         frame.render_widget(Clear, chunks[0]);
         frame.render_widget(para, chunks[0]);
 
-        self.headers.render(frame, chunks[1])?;
-        self.body.render(frame, chunks[2])?;
-
-        Ok(())
+        self.headers.render(frame, chunks[1]);
+        self.body.render(frame, chunks[2]);
     }
 
     fn area(&self) -> Rect {

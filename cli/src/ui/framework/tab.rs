@@ -1,4 +1,4 @@
-use color_eyre::{Result, eyre};
+use color_eyre::Result;
 use crossterm::event::{MouseEvent, MouseEventKind};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect, text::Line};
@@ -58,14 +58,13 @@ impl Component for TabComponent {
     fn area(&self) -> Rect {
         self.area
     }
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
 
         let tab_titles: Vec<Line> = self.tabs.iter().map(Line::raw).collect();
         let tab_index = self.current_tab;
         let tabs = themed_tabs(Some(&self.title), tab_titles, tab_index, self.focus.get());
         frame.render_widget(tabs, area);
-        Ok(())
     }
 
     fn handle_action(&mut self, action: Action) -> ActionResult {

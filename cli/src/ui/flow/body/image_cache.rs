@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use ratatui::{
     Frame,
     layout::Rect,
@@ -54,7 +53,7 @@ impl ImageCache {
         }
     }
 
-    pub(crate) fn render(&mut self, frame: &mut Frame, area: Rect, id: &i64) -> Result<()> {
+    pub(crate) fn render(&mut self, frame: &mut Frame, area: Rect, id: &i64) {
         if let Ok(guard) = self.inner.lock()
             && let Some(proto_arc) = guard.cache.get(id)
         {
@@ -62,7 +61,7 @@ impl ImageCache {
                 Ok(mut proto) => {
                     let image = StatefulImage::default().resize(Resize::default());
                     frame.render_stateful_widget(image, area, &mut *proto);
-                    return Ok(());
+                    return;
                 }
                 Err(_) => {
                     error!("Failed to lock image protocol for rendering");
@@ -73,6 +72,5 @@ impl ImageCache {
             .block(Block::default().title("Body").borders(Borders::ALL))
             .scroll((0, 0));
         frame.render_widget(para, area);
-        Ok(())
     }
 }

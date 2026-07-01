@@ -1,12 +1,11 @@
 use color_eyre::eyre::Result;
 use crossterm::event::MouseEvent;
-use rat_focus::{FocusFlag, HasFocus};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus, ratatui::layout::Rect};
 use ratatui::{
-    layout::Rect,
     text::Line,
     widgets::{Clear, Paragraph},
 };
-use roxy_proxy::flow_store::ProxyConnection;
+use roxy_proxy::flow_store::{FlowStore, ProxyConnection};
 use tokio::{sync::watch, task::JoinHandle};
 use tracing::error;
 
@@ -30,7 +29,7 @@ pub struct ConnectionsComponent {
 }
 
 impl ConnectionsComponent {
-    pub fn new(flow_store: roxy_proxy::flow_store::FlowStore) -> Self {
+    pub fn new(flow_store: FlowStore) -> Self {
         let data: Vec<String> = vec![];
         let (ui_tx, ui_rx) = watch::channel(data);
         let task_flow_store = flow_store.clone();
@@ -91,7 +90,7 @@ impl Component for ConnectionsComponent {
         }
     }
 
-    fn render(&mut self, frame: &mut ratatui::Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut ratatui::Frame, area: Rect) {
         let popup_area = centered_rect(80, 60, area);
         self.area = popup_area;
         frame.render_widget(Clear, popup_area);
@@ -114,7 +113,6 @@ impl Component for ConnectionsComponent {
             popup_area,
         );
         self.scroll.render(frame, popup_area);
-        Ok(())
     }
 }
 
@@ -126,7 +124,7 @@ fn render_connection(connection: &ProxyConnection) -> String {
 }
 
 impl HasFocus for ConnectionsComponent {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
 
@@ -134,7 +132,7 @@ impl HasFocus for ConnectionsComponent {
         self.focus.clone()
     }
 
-    fn area(&self) -> rat_focus::ratatui::layout::Rect {
+    fn area(&self) -> Rect {
         self.area
     }
 }

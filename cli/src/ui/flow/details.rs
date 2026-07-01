@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
@@ -222,7 +221,7 @@ impl Component for FlowDetails {
         vec![&mut self.tab_component, selected_child]
     }
 
-    fn render(&mut self, frame: &mut Frame<'_>, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
         self.area = area;
 
         let popup_area = centered_rect(100, 100, area);
@@ -232,7 +231,7 @@ impl Component for FlowDetails {
         let layout =
             Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(popup_area);
 
-        self.tab_component.render(frame, layout[0])?;
+        self.tab_component.render(frame, layout[0]);
 
         let tab = Tab::all()[self.tab_component.current_tab];
         let component: &mut dyn Component = match tab {
@@ -242,9 +241,7 @@ impl Component for FlowDetails {
             Tab::Timing => &mut self.timing,
             Tab::Ws => &mut self.ws,
         };
-        component.render(frame, layout[1])?;
-
-        Ok(())
+        component.render(frame, layout[1]);
     }
 
     fn area(&self) -> Rect {

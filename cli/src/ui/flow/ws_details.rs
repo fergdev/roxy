@@ -80,7 +80,7 @@ impl HasFocus for FlowDetailsWs {
 }
 
 impl Component for FlowDetailsWs {
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         let data = self.state.borrow_and_update().data.clone();
 
@@ -105,8 +105,6 @@ impl Component for FlowDetailsWs {
                 &mut self.table_state,
             );
         }
-
-        Ok(())
     }
 
     fn area(&self) -> Rect {

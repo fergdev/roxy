@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     prelude::{Constraint, Direction, Frame, Layout, Rect, Style},
@@ -39,7 +38,7 @@ impl HasFocus for Splash {
 }
 
 impl Component for Splash {
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         let colors = with_theme(|t| t.colors.clone());
         let bg = Block::default().style(Style::default().bg(colors.surface));
         frame.render_widget(bg, area);
@@ -79,7 +78,6 @@ impl Component for Splash {
         frame.render_widget(name, chunks[0]);
         frame.render_widget(desc, chunks[1]);
         frame.render_widget(addr, chunks[2]);
-        Ok(())
     }
 
     fn area(&self) -> Rect {

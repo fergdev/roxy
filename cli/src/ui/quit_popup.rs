@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
@@ -94,7 +93,7 @@ impl Component for QuitPopup {
         }
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = centered_rect_abs(30, 3, area);
         frame.render_widget(Clear, self.area);
 
@@ -104,9 +103,7 @@ impl Component for QuitPopup {
         });
 
         frame.render_widget(themed_block(Some("Quit Roxy"), true), self.area);
-        self.button_group.render(frame, padded_area)?;
-
-        Ok(())
+        self.button_group.render(frame, padded_area);
     }
 
     fn area(&self) -> Rect {

@@ -111,5 +111,5 @@ pub trait Component {
     }
 
     /// Draw to the frame within the given area.
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()>;
+    fn render(&mut self, frame: &mut Frame, area: Rect);
 }

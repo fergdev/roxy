@@ -104,7 +104,7 @@ impl Component for ButtonGroup {
         Ok(None)
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         let width = self.area.width / self.titles.len() as u16;
         let button_layout =
@@ -118,7 +118,6 @@ impl Component for ButtonGroup {
             let is_selected = title_index == self.selected_index;
             frame.render_widget(themed_button(&self.titles[title_index], is_selected), lb);
         }
-        Ok(())
     }
 
     fn area(&self) -> Rect {

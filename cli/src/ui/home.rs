@@ -196,24 +196,23 @@ impl Component for HomeComponent {
         }
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         match self.active_view {
-            ActiveView::Splash => self.splash.render(frame, area)?,
-            ActiveView::FlowList => self.flow_list.render(frame, area)?,
+            ActiveView::Splash => self.splash.render(frame, area),
+            ActiveView::FlowList => self.flow_list.render(frame, area),
         };
 
-        self.fps_counter.render(frame, area)?;
+        self.fps_counter.render(frame, area);
         match self.active_popup {
-            Some(ActivePopup::ConfigEditor) => self.config_editor.render(frame, area)?,
-            Some(ActivePopup::QuitPopup) => self.quit_popup.render(frame, area)?,
-            Some(ActivePopup::FlowDetails) => self.flow_details.render(frame, area)?,
-            Some(ActivePopup::LogViewer) => self.log_viewer.render(frame, area)?,
-            Some(ActivePopup::Connections) => self.connections_component.render(frame, area)?,
+            Some(ActivePopup::ConfigEditor) => self.config_editor.render(frame, area),
+            Some(ActivePopup::QuitPopup) => self.quit_popup.render(frame, area),
+            Some(ActivePopup::FlowDetails) => self.flow_details.render(frame, area),
+            Some(ActivePopup::LogViewer) => self.log_viewer.render(frame, area),
+            Some(ActivePopup::Connections) => self.connections_component.render(frame, area),
             None => {}
         };
 
         self.notifier.render(frame, area);
-        Ok(())
     }
 
     fn children(&mut self) -> Vec<&mut dyn Component> {

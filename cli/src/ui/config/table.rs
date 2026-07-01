@@ -137,7 +137,7 @@ impl TableComponent {
 }
 
 impl Component for TableComponent {
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         if let Some(fields) = self.fields.get(&self.selected_tab) {
             let rows: Vec<Row> = fields
@@ -195,7 +195,6 @@ impl Component for TableComponent {
                 area,
             );
         }
-        Ok(())
     }
 
     fn handle_action(&mut self, action: Action) -> ActionResult {
@@ -287,13 +286,12 @@ impl Component for TableComponent {
             return Ok(None);
         }
 
-        // The actual area for the table consider margins
-        let table_area = self.area.inner(Margin {
-            vertical: 1,
-            horizontal: 1,
-        });
-
         if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+            // The actual area for the table consider margins
+            let table_area = self.area.inner(Margin {
+                vertical: 1,
+                horizontal: 1,
+            });
             // Calculate the field to select based on the mouse click position and the current
             // scroll offset.
             let click_column = mouse.row - table_area.top();

@@ -82,7 +82,7 @@ impl Component for ConfigEditor {
         Ok(None)
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         let popup_area = centered_rect(80, 60, area);
         self.area = popup_area;
         frame.render_widget(Clear, popup_area);
@@ -90,10 +90,8 @@ impl Component for ConfigEditor {
         let chunks =
             Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(popup_area);
 
-        self.tab_component.render(frame, chunks[0])?;
-        self.table_component.render(frame, chunks[1])?;
-
-        Ok(())
+        self.tab_component.render(frame, chunks[0]);
+        self.table_component.render(frame, chunks[1]);
     }
 
     fn area(&self) -> Rect {

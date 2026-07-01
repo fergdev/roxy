@@ -95,10 +95,10 @@ impl Component for FpsCounter {
         ActionResult::Ignored
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         if !self.visible {
-            return Ok(());
+            return;
         }
         let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(area);
 
@@ -112,7 +112,6 @@ impl Component for FpsCounter {
         let widget = themed_info_block(&message);
 
         frame.render_widget(widget, horizontal[1]);
-        Ok(())
     }
 
     fn area(&self) -> Rect {

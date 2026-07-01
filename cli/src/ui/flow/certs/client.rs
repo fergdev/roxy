@@ -90,19 +90,18 @@ impl Component for ClientCertificateComponent {
             vec![&mut self.tab, &mut self.tls_component]
         }
     }
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
 
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
-        self.tab.render(frame, layout[0])?;
+        self.tab.render(frame, layout[0]);
 
         let tab = ClientTab::all()[self.tab.current_tab];
         match tab {
-            ClientTab::Hello => self.hello_component.render(frame, layout[1])?,
-            ClientTab::Certs => self.cert_component.render(frame, layout[1])?,
-            ClientTab::Tls => self.tls_component.render(frame, layout[1])?,
+            ClientTab::Hello => self.hello_component.render(frame, layout[1]),
+            ClientTab::Certs => self.cert_component.render(frame, layout[1]),
+            ClientTab::Tls => self.tls_component.render(frame, layout[1]),
         }
-        Ok(())
     }
 
     fn focus(&mut self) -> &mut FocusFlag {

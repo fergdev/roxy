@@ -1,4 +1,3 @@
-use color_eyre::eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
@@ -102,10 +101,9 @@ impl Component for ClientCertComponent {
         &mut self.focus
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         self.render_client_cert(frame, area);
-        Ok(())
     }
 }
 

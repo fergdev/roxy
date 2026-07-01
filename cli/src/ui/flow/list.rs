@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use hyper::Method;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
@@ -195,7 +194,7 @@ impl Component for FlowList {
         }
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         let guard = self.ui_rx.borrow_and_update();
 
         let mut rows = vec![];
@@ -222,7 +221,6 @@ impl Component for FlowList {
             &mut self.state,
         );
         render_vertical_scrollbar(frame, area, &mut self.scroll_state);
-        Ok(())
     }
 
     fn area(&self) -> Rect {

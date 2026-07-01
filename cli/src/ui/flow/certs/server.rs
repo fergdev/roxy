@@ -1,5 +1,8 @@
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::{
+    Frame,
+    layout::{Constraint, Layout, Rect},
+};
 use roxy_shared::cert::{
     CapturedResolveClientCert, ClientTlsConnectionData, ServerVerificationCapture,
 };
@@ -98,11 +101,11 @@ impl Component for ServerCertificateComponent {
         &mut self.focus
     }
 
-    fn render(&mut self, frame: &mut ratatui::Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
 
-        self.tab.render(frame, layout[0])?;
+        self.tab.render(frame, layout[0]);
         let tab = ServerTab::all()[self.tab.current_tab];
         match tab {
             ServerTab::ResolveClientCert => self.resolve_client_component.render(frame, layout[1]),

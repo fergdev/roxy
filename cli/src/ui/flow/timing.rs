@@ -123,7 +123,7 @@ impl HasFocus for FlowTiming {
 }
 
 impl Component for FlowTiming {
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         let state = self.state.borrow();
         self.scroll
@@ -138,7 +138,6 @@ impl Component for FlowTiming {
         );
 
         self.scroll.render(frame, area);
-        Ok(())
     }
 
     fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {

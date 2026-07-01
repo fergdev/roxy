@@ -1,4 +1,3 @@
-use color_eyre::eyre;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
 
@@ -19,9 +18,8 @@ impl LineComponent {
 }
 
 impl Component for LineComponent {
-    fn render(&mut self, _frame: &mut Frame, area: Rect) -> eyre::Result<()> {
+    fn render(&mut self, _frame: &mut Frame, area: Rect) {
         self.area = area;
-        Ok(())
     }
 
     fn area(&self) -> Rect {

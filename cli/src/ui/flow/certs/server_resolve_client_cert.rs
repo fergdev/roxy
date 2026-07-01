@@ -98,10 +98,9 @@ impl Component for ServerResolveClientCertComponent {
         &mut self.focus
     }
 
-    fn render(&mut self, frame: &mut ratatui::Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut ratatui::Frame, area: Rect) {
         self.area = area;
         self.render_resolve_client_cert(frame, area);
-        Ok(())
     }
     fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
         if !self.focus.get() {

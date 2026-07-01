@@ -145,11 +145,7 @@ impl App {
         let theme = self.config_manager.rx.borrow_and_update().theme.clone();
         set_theme(theme);
         tui.draw(|frame| {
-            if let Err(error) = self.home.render(frame, frame.area()) {
-                let _ = self
-                    .action_tx
-                    .send(Action::Error(format!("Failed to draw: {error:?}")));
-            }
+            self.home.render(frame, frame.area());
         })?;
         Ok(())
     }

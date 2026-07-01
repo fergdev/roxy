@@ -197,10 +197,10 @@ impl Component for FlowDetailsCerts {
         Ok(None)
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).split(area);
-        self.root_tab_cmp.render(frame, layout[0])?;
+        self.root_tab_cmp.render(frame, layout[0]);
         let root_tab = RootTab::all()[self.root_tab_cmp.current_tab];
         match root_tab {
             RootTab::Client => self.client_cmp.render(frame, layout[1]),

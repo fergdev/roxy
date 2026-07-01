@@ -173,7 +173,7 @@ impl Component for FlowDetailsBody {
         }
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         match self.state.borrow_and_update().data {
             Body::None => {
@@ -199,7 +199,7 @@ impl Component for FlowDetailsBody {
             }
             Body::Image(ref id) => {
                 if let Some(id) = id {
-                    return self.image_cache.render(frame, area, id);
+                    self.image_cache.render(frame, area, id);
                 } else {
                     let para = Paragraph::new(Line::raw("Failed to render image"))
                         .block(Block::default().title("Body").borders(Borders::ALL))
@@ -208,8 +208,6 @@ impl Component for FlowDetailsBody {
                 }
             }
         }
-
-        Ok(())
     }
 
     fn area(&self) -> Rect {

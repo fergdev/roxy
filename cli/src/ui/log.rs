@@ -121,7 +121,7 @@ impl Component for LogViewer {
         }
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         let popup_area = centered_rect(80, 60, area);
 
         frame.render_widget(Clear, popup_area);
@@ -166,8 +166,6 @@ impl Component for LogViewer {
         } else {
             frame.render_widget(Paragraph::new("No logs"), popup_area);
         }
-
-        Ok(())
     }
 
     fn area(&self) -> Rect {

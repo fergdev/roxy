@@ -126,7 +126,7 @@ impl Component for FlowDetailsHeaders {
         }
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         frame.render_widget(Clear, area);
         let headers = self.headers.borrow_and_update();
@@ -156,8 +156,6 @@ impl Component for FlowDetailsHeaders {
                 frame.render_widget(paragraph, area);
             }
         }
-
-        Ok(())
     }
 
     fn area(&self) -> Rect {

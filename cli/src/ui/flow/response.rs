@@ -107,7 +107,7 @@ impl Component for FlowDetailsResponse {
         vec![&mut self.line_component, &mut self.headers, &mut self.body]
     }
 
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         let state = self.ui_state.borrow_and_update();
 
@@ -126,9 +126,8 @@ impl Component for FlowDetailsResponse {
 
         frame.render_widget(paragraph, chunks[0]);
 
-        self.headers.render(frame, chunks[1])?;
-        self.body.render(frame, chunks[2])?;
-        Ok(())
+        self.headers.render(frame, chunks[1]);
+        self.body.render(frame, chunks[2]);
     }
 
     fn area(&self) -> Rect {

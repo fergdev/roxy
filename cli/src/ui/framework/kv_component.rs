@@ -43,7 +43,7 @@ impl KvComponent {
 }
 
 impl Component for KvComponent {
-    fn render(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::eyre::Result<()> {
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         if let Some(data) = &self.state {
             kv_paragraph(
@@ -61,7 +61,6 @@ impl Component for KvComponent {
                 area,
             );
         }
-        Ok(())
     }
 
     fn area(&self) -> Rect {
