@@ -8,20 +8,17 @@ use ratatui::{
     text::Span,
     widgets::{Cell, Clear, Row, TableState},
 };
-use tokio::{
-    sync::{
-        mpsc::{self},
-        watch,
-    },
-    task::JoinHandle,
-};
+use tokio::{sync::watch, task::JoinHandle};
 use tracing::error;
 
 use crate::{
     action::Action,
-    ui::framework::{
-        component::{Component, DispatchCancellation, DispatchResult},
-        theme::{themed_block, themed_table},
+    ui::{
+        flow::details::FlowWatch,
+        framework::{
+            component::{Component, DispatchCancellation, DispatchResult},
+            theme::{themed_block, themed_table},
+        },
     },
 };
 
@@ -34,12 +31,23 @@ pub struct FlowDetailsHeaders {
 }
 
 impl FlowDetailsHeaders {
-    pub fn new(mut req_rx: mpsc::Receiver<HeaderMap>) -> Self {
+    pub fn new(mut fw: FlowWatch, is_request: bool) -> Self {
         let (headers_tx, headers_rx) = watch::channel(None);
 
-        let handle = tokio::spawn(async move {
-            while let Some(req) = req_rx.recv().await {
-                headers_tx.send(Some(req)).unwrap_or_else(|e| {
+        let handle = fw.watch(move |flow| {
+            if let Some(flow) = flow {
+                let headers = if is_request {
+                    flow.request.as_ref().map(|req| req.headers.clone())
+                } else {
+                    flow.response
+                        .as_ref()
+                        .map(|response| response.headers.clone())
+                };
+                headers_tx.send(headers).unwrap_or_else(|e| {
+                    error!("Failed to send headers: {}", e);
+                });
+            } else {
+                headers_tx.send(None).unwrap_or_else(|e| {
                     error!("Failed to send headers: {}", e);
                 });
             }

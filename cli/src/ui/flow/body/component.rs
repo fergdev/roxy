@@ -7,8 +7,8 @@ use ratatui::{
     text::Line,
     widgets::{Block, Borders, Paragraph},
 };
-use roxy_shared::content::ContentType;
-use tokio::sync::{mpsc, watch};
+use roxy_shared::content::{ContentType, content_type};
+use tokio::sync::watch;
 use tracing::debug;
 use x509_parser::nom::HexDisplay;
 
@@ -27,7 +27,7 @@ use super::{
 use crate::{
     action::Action,
     ui::{
-        flow::body::image_cache::ImageCache,
+        flow::{body::image_cache::ImageCache, details::FlowWatch},
         framework::{
             component::{Component, DispatchCancellation, DispatchResult},
             scroll::TwoAxisScrollState,
@@ -76,60 +76,89 @@ impl Drop for FlowDetailsBody {
 }
 
 impl FlowDetailsBody {
-    pub fn new(mut body_rx: mpsc::Receiver<(Option<ContentType>, Bytes)>) -> Self {
+    pub fn new(mut flow_watch: FlowWatch, is_request: bool) -> Self {
         let (ui_tx, ui_rx) = watch::channel(UiState::default());
 
         let ic = ImageCache::new();
         let mut image_cache = ic.clone();
 
-        let state_handle = tokio::spawn(async move {
-            while let Some((content_type, mut body)) = body_rx.recv().await {
-                let lines = match content_type {
-                    Some(ct) => match ct {
-                        ContentType::Json => Body::Text(highlight_json(&body)),
-                        ContentType::Svg | ContentType::Xml => Body::Text(pretty_print_xml(&body)),
-                        ContentType::Html => {
-                            let mut cursor = Cursor::new(&mut body);
-                            match highlight_html_dom(&mut cursor) {
-                                Ok(lines) => Body::Text(lines),
-                                Err(_) => Body::None,
-                            }
-                        }
-                        ContentType::Toml => Body::Text(highlight_toml(&body)),
-                        ContentType::Yaml => Body::Text(pretty_print_yaml(&body)),
-                        ContentType::Csv => {
-                            Body::Text(render_csv(&body).unwrap_or(render_plain_text(&body)))
-                        }
-                        ContentType::Tsv => {
-                            Body::Text(render_tsv(&body).unwrap_or(render_plain_text(&body)))
-                        }
-                        ContentType::Md => Body::Text(render_markdown(&body)),
-                        ContentType::Png => Body::Image(image_cache.render_image(&body)),
-                        ContentType::Gif => Body::Image(image_cache.render_image(&body)),
-                        ContentType::Jpeg => Body::Image(image_cache.render_image(&body)),
-                        ContentType::Webp => Body::Image(image_cache.render_image(&body)),
-                        ContentType::XIcon => Body::Image(image_cache.render_image(&body)),
-                        ContentType::Bmp => Body::Image(image_cache.render_image(&body)),
-                        ContentType::OctetStream => {
-                            let hex = body.to_hex(8);
-                            Body::Text(vec![hex.into()])
-                        }
-                        ContentType::Text => Body::Text(render_plain_text(&body)),
-                    },
+        let state_handle = flow_watch.watch(move |flow| {
+            let flow = match flow {
+                Some(flow) => flow,
+                None => {
+                    ui_tx.send(UiState::default()).unwrap_or_else(|e| {
+                        debug!("Failed to send UI state update: {}", e);
+                    });
+                    return;
+                }
+            };
+            let (body, content_type) = if is_request {
+                match flow.request.as_ref() {
+                    Some(request) => (&request.body, content_type(&request.headers)),
                     None => {
-                        if body.is_empty() {
-                            Body::None
-                        } else {
-                            Body::Text(render_plain_text(&body))
+                        ui_tx.send(UiState::default()).unwrap_or_else(|e| {
+                            debug!("Failed to send UI state update: {}", e);
+                        });
+                        return;
+                    }
+                }
+            } else {
+                match flow.response.as_ref() {
+                    Some(response) => (&response.body, content_type(&response.headers)),
+                    None => {
+                        ui_tx.send(UiState::default()).unwrap_or_else(|e| {
+                            debug!("Failed to send UI state update: {}", e);
+                        });
+                        return;
+                    }
+                }
+            };
+            let lines = match content_type {
+                Some(ct) => match ct {
+                    ContentType::Json => Body::Text(highlight_json(body)),
+                    ContentType::Svg | ContentType::Xml => Body::Text(pretty_print_xml(body)),
+                    ContentType::Html => {
+                        let mut cursor = Cursor::new(body.clone());
+                        match highlight_html_dom(&mut cursor) {
+                            Ok(lines) => Body::Text(lines),
+                            Err(_) => Body::None,
                         }
                     }
-                };
+                    ContentType::Toml => Body::Text(highlight_toml(body)),
+                    ContentType::Yaml => Body::Text(pretty_print_yaml(body)),
+                    ContentType::Csv => {
+                        Body::Text(render_csv(body).unwrap_or(render_plain_text(body)))
+                    }
+                    ContentType::Tsv => {
+                        Body::Text(render_tsv(body).unwrap_or(render_plain_text(body)))
+                    }
+                    ContentType::Md => Body::Text(render_markdown(body)),
+                    ContentType::Png => Body::Image(image_cache.render_image(body)),
+                    ContentType::Gif => Body::Image(image_cache.render_image(body)),
+                    ContentType::Jpeg => Body::Image(image_cache.render_image(body)),
+                    ContentType::Webp => Body::Image(image_cache.render_image(body)),
+                    ContentType::XIcon => Body::Image(image_cache.render_image(body)),
+                    ContentType::Bmp => Body::Image(image_cache.render_image(body)),
+                    ContentType::OctetStream => {
+                        let hex = body.to_hex(8);
+                        Body::Text(vec![hex.into()])
+                    }
+                    ContentType::Text => Body::Text(render_plain_text(body)),
+                },
+                None => {
+                    if body.is_empty() {
+                        Body::None
+                    } else {
+                        Body::Text(render_plain_text(body))
+                    }
+                }
+            };
 
-                ui_tx.send(UiState { data: lines }).unwrap_or_else(|e| {
-                    debug!("Failed to send UI state update: {}", e);
-                });
-            }
+            ui_tx.send(UiState { data: lines }).unwrap_or_else(|e| {
+                debug!("Failed to send UI state update: {}", e);
+            });
         });
+
         Self {
             state: ui_rx,
             image_cache: ic,

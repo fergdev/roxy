@@ -48,9 +48,7 @@ pub(crate) struct ServerState {
 pub(crate) struct ServerCertificateComponent {
     area: Rect,
     focus: FocusFlag,
-
     tab: TabComponent,
-
     resolve_client_component: ServerResolveClientCertComponent,
     cert_component: ServerCertsComponent,
     tls_component: KvComponent,

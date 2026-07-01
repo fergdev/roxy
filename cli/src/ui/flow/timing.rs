@@ -3,14 +3,17 @@ use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
 use roxy_proxy::flow::Timing;
 use time::OffsetDateTime;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::watch;
 
 use crate::{
     action::Action,
-    ui::framework::{
-        component::{Component, DispatchCancellation, DispatchResult},
-        paragraph::kv_paragraph,
-        scroll::TwoAxisScrollState,
+    ui::{
+        flow::details::FlowWatch,
+        framework::{
+            component::{Component, DispatchCancellation, DispatchResult},
+            paragraph::kv_paragraph,
+            scroll::TwoAxisScrollState,
+        },
     },
 };
 
@@ -30,29 +33,25 @@ pub struct FlowTiming {
 }
 
 impl FlowTiming {
-    pub fn new(mut rx: mpsc::Receiver<Timing>) -> Self {
+    pub fn new(mut fw: FlowWatch) -> Self {
         let (ui_tx, ui_rx) = watch::channel(State::default());
 
-        let state_handle = tokio::spawn({
-            async move {
-                while let Some(timing) = rx.recv().await {
-                    let lines = render_timing(&timing);
-                    let height = lines.len();
-                    let width = lines
-                        .iter()
-                        .map(|(k, v)| k.len() + v.len())
-                        .max()
-                        .unwrap_or(0);
-                    ui_tx
-                        .send(State {
-                            lines: render_timing(&timing),
-                            width,
-                            height,
-                        })
-                        .unwrap_or_else(|e| {
-                            tracing::debug!("Failed to send UI state update: {}", e);
-                        });
-                }
+        let state_handle = fw.watch(move |flow| match flow {
+            Some(flow) => {
+                ui_tx
+                    .send(State {
+                        lines: render_timing(&flow.timing),
+                        width: 0,
+                        height: 0,
+                    })
+                    .unwrap_or_else(|e| {
+                        tracing::debug!("Failed to send UI state update: {}", e);
+                    });
+            }
+            None => {
+                ui_tx.send(State::default()).unwrap_or_else(|e| {
+                    tracing::debug!("Failed to send UI state update: {}", e);
+                });
             }
         });
 

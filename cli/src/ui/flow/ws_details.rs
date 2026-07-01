@@ -6,16 +6,15 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Cell, Paragraph, Row, TableState, Wrap},
 };
-use roxy_proxy::flow::WsMessage;
-use tokio::sync::{
-    mpsc,
-    watch::{self},
-};
+use tokio::sync::watch::{self};
 use tracing::debug;
 
-use crate::ui::framework::{
-    component::Component,
-    theme::{themed_block, themed_table},
+use crate::ui::{
+    flow::details::FlowWatch,
+    framework::{
+        component::Component,
+        theme::{themed_block, themed_table},
+    },
 };
 
 pub struct FlowDetailsWs {
@@ -32,21 +31,27 @@ struct UiState {
 }
 
 impl FlowDetailsWs {
-    pub fn new(mut cert_rx: mpsc::Receiver<Vec<WsMessage>>) -> Self {
+    pub fn new(mut flow_watch: FlowWatch) -> Self {
         let (ui_tx, ui_rx) = watch::channel(UiState::default());
 
-        let state_handle = tokio::spawn({
-            async move {
-                while let Some(messages) = cert_rx.recv().await {
-                    let messages: Vec<String> = messages
-                        .into_iter()
-                        .map(|msg| format!("{:?}: {}", msg.direction, msg.message))
-                        .collect();
-
-                    ui_tx.send(UiState { data: messages }).unwrap_or_else(|e| {
+        let state_handle = flow_watch.watch(move |flow| match flow {
+            Some(flow) => {
+                ui_tx
+                    .send(UiState {
+                        data: flow
+                            .messages
+                            .iter()
+                            .map(|msg| format!("{:?}: {}", msg.direction, msg.message))
+                            .collect(),
+                    })
+                    .unwrap_or_else(|e| {
                         debug!("Failed to send UI state update: {}", e);
                     });
-                }
+            }
+            None => {
+                ui_tx.send(UiState::default()).unwrap_or_else(|e| {
+                    debug!("Failed to send UI state update: {}", e);
+                });
             }
         });
 

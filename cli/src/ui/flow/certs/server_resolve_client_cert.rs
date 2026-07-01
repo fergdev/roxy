@@ -21,9 +21,7 @@ use crate::{
 pub(crate) struct ServerResolveClientCertComponent {
     area: Rect,
     focus: FocusFlag,
-
     data: Option<CapturedResolveClientCert>,
-
     scroll: TwoAxisScrollState,
 }
 

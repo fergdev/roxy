@@ -14,21 +14,20 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     text::{Line, Span},
 };
-use roxy_proxy::flow::FlowCerts;
 use strum::EnumIter;
-use tokio::{
-    sync::{mpsc::Receiver, watch},
-    task::JoinHandle,
-};
-use tracing::{info, warn};
+use tokio::{sync::watch, task::JoinHandle};
+use tracing::warn;
 use x509_parser::parse_x509_certificate;
 
 use crate::{
     tui::TuiEvent,
     ui::{
-        flow::certs::{
-            client::{ClientCertificateComponent, ClientState},
-            server::{ServerCertificateComponent, ServerState},
+        flow::{
+            certs::{
+                client::{ClientCertificateComponent, ClientState},
+                server::{ServerCertificateComponent, ServerState},
+            },
+            details::FlowWatch,
         },
         framework::{
             component::{Component, DispatchResult},
@@ -138,29 +137,33 @@ impl RootTab {
 }
 
 impl FlowDetailsCerts {
-    pub fn new(mut cert_rx: Receiver<FlowCerts>) -> Self {
+    pub fn new(mut flow_watch: FlowWatch) -> Self {
         let (ui_tx, ui_rx) = watch::channel(UiState::default());
 
-        let state_handle = tokio::spawn({
-            async move {
-                info!("waiting on cert updates...");
-                while let Some(certs) = cert_rx.recv().await {
-                    let client = ClientState {
-                        hello: certs.client_hello.clone(),
-                        certs: certs.client_verification,
-                        tls: certs.client_tls,
-                    };
-                    let server = ServerState {
-                        resolve_client_cert: certs.server_resolve_client_cert.clone(),
-                        certs: certs.server_verification,
-                        tls: certs.server_tls,
-                    };
-                    ui_tx.send(UiState { client, server }).unwrap_or_else(|e| {
-                        warn!("Failed to send UI state update: {}", e);
-                    });
-                }
+        let state_handle = flow_watch.watch(move |flow| match flow {
+            Some(flow) => {
+                let certs = &flow.certs;
+                let client = ClientState {
+                    hello: certs.client_hello.clone(),
+                    certs: certs.client_verification.clone(),
+                    tls: certs.client_tls.clone(),
+                };
+                let server = ServerState {
+                    resolve_client_cert: certs.server_resolve_client_cert.clone(),
+                    certs: certs.server_verification.clone(),
+                    tls: certs.server_tls.clone(),
+                };
+                ui_tx.send(UiState { client, server }).unwrap_or_else(|e| {
+                    warn!("Failed to send UI state update: {}", e);
+                });
+            }
+            None => {
+                ui_tx.send(UiState::default()).unwrap_or_else(|e| {
+                    warn!("Failed to send UI state update: {}", e);
+                });
             }
         });
+
         Self {
             state: ui_rx,
             focus: FocusFlag::new().with_name("FlowCerts"),

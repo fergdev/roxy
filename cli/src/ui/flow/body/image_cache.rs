@@ -63,8 +63,8 @@ impl ImageCache {
                     frame.render_stateful_widget(image, area, &mut *proto);
                     return;
                 }
-                Err(_) => {
-                    error!("Failed to lock image protocol for rendering");
+                Err(e) => {
+                    error!("Failed to lock image protocol for rendering {e}");
                 }
             }
         }

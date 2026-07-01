@@ -5,13 +5,11 @@ use ratatui::{
     text::Span,
     widgets::{Clear, Paragraph, Wrap},
 };
-use roxy_proxy::flow::InterceptedRequest;
-use roxy_shared::content::content_type;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::watch;
 use tracing::error;
 
 use crate::ui::{
-    flow::line::LineComponent,
+    flow::{details::FlowWatch, line::LineComponent},
     framework::{component::Component, theme::themed_block},
 };
 
@@ -33,37 +31,28 @@ pub struct FlowDetailsRequest {
 }
 
 impl FlowDetailsRequest {
-    pub fn new(mut req_rx: tokio::sync::mpsc::Receiver<Option<InterceptedRequest>>) -> Self {
+    pub fn new(mut flow_watch: FlowWatch) -> Self {
         let (ui_tx, ui_rx) = watch::channel(UiState::default());
-        let (headers_tx, headers_rx) = mpsc::channel(64);
-        let (body_tx, body_rx) = mpsc::channel(64);
 
-        let flow_headers = FlowDetailsHeaders::new(headers_rx);
-        let body = FlowDetailsBody::new(body_rx);
+        let flow_headers = FlowDetailsHeaders::new(flow_watch.clone(), true);
+        let body = FlowDetailsBody::new(flow_watch.clone(), true);
 
-        let state_handle = tokio::spawn(async move {
-            while let Some(req) = req_rx.recv().await {
-                if let Some(req) = req {
-                    if let Err(error) = ui_tx.send(UiState {
-                        line_data: req.line_pretty(),
-                    }) {
-                        error!("Failed to send UI state update: {}", error);
-                    };
-
-                    if let Err(error) = headers_tx.send(req.headers.clone()).await {
-                        error!("Failed to send headers: {}", error);
-                    };
-
-                    if let Err(error) = body_tx
-                        .send((content_type(&req.headers), req.body.clone()))
-                        .await
-                    {
-                        error!("Failed to send body: {}", error);
-                    };
-                } else {
-                    error!("Received None request");
-                }
+        let state_handle = flow_watch.watch(move |flow| {
+            if let Some(flow) = flow
+                && let Some(req) = flow.request.as_ref()
+            {
+                if let Err(error) = ui_tx.send(UiState {
+                    line_data: req.line_pretty(),
+                }) {
+                    error!("Failed to send UI state update: {}", error);
+                };
+                return;
             }
+            if let Err(error) = ui_tx.send(UiState {
+                line_data: "No data".to_string(),
+            }) {
+                error!("Failed to send UI state update: {}", error);
+            };
         });
 
         Self {
