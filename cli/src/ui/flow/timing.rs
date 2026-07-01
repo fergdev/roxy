@@ -125,8 +125,10 @@ impl Component for FlowTiming {
     fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
         let state = self.state.borrow();
-        self.scroll
-            .set_content_size((state.width as u16, state.height as u16));
+        self.scroll.set(
+            (state.width as u16, state.height as u16),
+            (area.width, area.height),
+        );
         kv_paragraph(
             &state.lines,
             frame,

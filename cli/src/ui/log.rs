@@ -163,8 +163,8 @@ impl Component for LogViewer {
             .alignment(Alignment::Left)
             .block(themed_block(Some("Logs"), true));
 
-            self.scroll.set_content_height(logs.len() as u16);
-            self.scroll.set_content_width(width);
+            self.scroll
+                .set((width, logs.len() as u16), (area.width, area.height));
 
             frame.render_widget(paragraph, popup_area);
             self.scroll.render(frame, popup_area);

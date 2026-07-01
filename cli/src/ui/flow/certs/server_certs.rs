@@ -86,7 +86,8 @@ impl ServerCertsComponent {
         let height = lines.len();
         let width: usize = lines.iter().fold(0, |acc, line| acc.max(line.width()));
 
-        self.scroll.set_content_size((width as u16, height as u16));
+        self.scroll
+            .set((width as u16, height as u16), (area.width, area.height));
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(Some("Certs"), self.focus.get()))

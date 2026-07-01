@@ -33,12 +33,6 @@ impl KvComponent {
         }
     }
     pub fn set_state(&mut self, data: Vec<(String, String)>) {
-        self.scroll.set_content_height(data.len() as u16);
-        let width = data.iter().fold(0, |acc, (k, v)| {
-            let width = k.len() + v.len() + 5; // 5 for padding and separator
-            width.max(acc)
-        });
-        self.scroll.set_content_width(width as u16);
         self.state = Some(data);
     }
 }
@@ -46,7 +40,15 @@ impl KvComponent {
 impl Component for KvComponent {
     fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
+
         if let Some(data) = &self.state {
+            let width = data.iter().fold(0, |acc, (k, v)| {
+                let width = k.len() + v.len() + 5; // 5 for padding and separator
+                width.max(acc)
+            });
+
+            self.scroll
+                .set((width as u16, data.len() as u16), (area.width, area.height));
             kv_paragraph(
                 data,
                 frame,

@@ -182,14 +182,13 @@ impl Component for FlowDetailsBody {
                 frame.render_widget(para, area);
             }
             Body::Text(ref lines) => {
-                self.scroll.set_content_height(lines.len() as u16);
                 let width = lines
                     .iter()
                     .map(|line| line.width() as u16)
                     .max()
                     .unwrap_or(0);
-                self.scroll.set_content_width(width);
-                self.scroll.set_viewport_size((area.width, area.height));
+                self.scroll
+                    .set((width, lines.len() as u16), (area.width, area.height));
                 let para = Paragraph::new(lines.to_owned())
                     .block(themed_block(Some("Body"), self.focus.get()))
                     .scroll(self.scroll.offset());

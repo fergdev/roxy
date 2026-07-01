@@ -77,9 +77,11 @@ impl ServerResolveClientCertComponent {
             }
         }
 
-        self.scroll.set_content_height(lines.len() as u16);
         let width = lines.iter().map(|line| line.width()).max().unwrap_or(0);
-        self.scroll.set_content_width(width as u16);
+        self.scroll.set(
+            (width as u16, lines.len() as u16),
+            (area.width, area.height),
+        );
 
         let paragraph = Paragraph::new(lines)
             .block(themed_block(Some("Resolve client cert"), self.focus.get()))

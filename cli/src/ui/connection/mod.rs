@@ -103,8 +103,8 @@ impl Component for ConnectionsComponent {
         let height = lines.len();
         let width = lines.iter().map(|line| line.width()).max().unwrap_or(0);
 
-        self.scroll.set_content_height(height as u16);
-        self.scroll.set_content_width(width as u16);
+        self.scroll
+            .set((width as u16, height as u16), (area.width, area.height));
 
         frame.render_widget(
             Paragraph::new(lines)

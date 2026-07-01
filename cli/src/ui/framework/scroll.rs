@@ -89,27 +89,29 @@ impl TwoAxisScrollState {
         consumed
     }
 
+    /// Offest to be passed to ratatui widgets
     pub(crate) fn offset(&self) -> (u16, u16) {
         (
             self.vertical.get_position() as u16,
             self.horizontal.get_position() as u16,
         )
     }
-
-    pub(crate) fn set_content_size(&mut self, size: (u16, u16)) {
-        self.set_content_width(size.0);
-        self.set_content_height(size.1);
+    pub(crate) fn set(&mut self, content_size: (u16, u16), viewport_size: (u16, u16)) {
+        self.set_content_width(content_size.0);
+        self.set_content_height(content_size.1);
+        self.horizontal = self
+            .horizontal
+            .viewport_content_length(viewport_size.0 as usize);
+        self.vertical = self
+            .vertical
+            .viewport_content_length(viewport_size.1 as usize);
     }
-    pub(crate) fn set_content_height(&mut self, len: u16) {
+
+    fn set_content_height(&mut self, len: u16) {
         self.vertical = self.vertical.content_length(len as usize)
     }
-    pub(crate) fn set_content_width(&mut self, len: u16) {
+    fn set_content_width(&mut self, len: u16) {
         self.horizontal = self.horizontal.content_length(len as usize)
-    }
-
-    pub(crate) fn set_viewport_size(&mut self, len: (u16, u16)) {
-        self.vertical = self.vertical.viewport_content_length(len.0 as usize);
-        self.horizontal = self.horizontal.viewport_content_length(len.1 as usize);
     }
 
     pub(crate) fn render(&mut self, frame: &mut Frame, area: Rect) {
