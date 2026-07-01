@@ -1,4 +1,3 @@
-use color_eyre::eyre::Result;
 use crossterm::event::{MouseEvent, MouseEventKind};
 use hyper::HeaderMap;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
@@ -21,7 +20,7 @@ use tracing::error;
 use crate::{
     action::Action,
     ui::framework::{
-        component::{ActionResult, Component},
+        component::{Component, DispatchError, DispatchResult},
         theme::{themed_block, themed_table},
     },
 };
@@ -71,32 +70,32 @@ impl HasFocus for FlowDetailsHeaders {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 }
 
 impl Component for FlowDetailsHeaders {
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         if self.focus.get() {
             match mouse.kind {
                 MouseEventKind::ScrollUp => {
                     self.table_state.scroll_up_by(1);
-                    return Ok(None);
+                    return Ok(());
                 }
                 MouseEventKind::ScrollDown => {
                     self.table_state.scroll_down_by(1);
-                    return Ok(None);
+                    return Ok(());
                 }
                 _ => {}
             }
         } else {
-            return Ok(Some(Action::FocusReq(self.focus.id())));
+            return DispatchError::action(Action::FocusReq(self.focus.id()));
         }
-        Ok(None)
+        Ok(())
     }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
+        let mut res = Ok(());
         if self.focus.get() {
-            let mut res = ActionResult::Consumed;
             match action {
                 Action::Up => {
                     self.table_state.select_previous();
@@ -118,12 +117,10 @@ impl Component for FlowDetailsHeaders {
                     let headers_size = headers.as_ref().map(|h| h.len()).unwrap_or(0);
                     self.table_state.scroll_down_by(headers_size as u16);
                 }
-                _ => res = ActionResult::Ignored,
+                _ => res = DispatchError::stop(),
             }
-            res
-        } else {
-            ActionResult::Ignored
         }
+        res
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {

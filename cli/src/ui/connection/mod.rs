@@ -1,4 +1,3 @@
-use color_eyre::eyre::Result;
 use crossterm::event::MouseEvent;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus, ratatui::layout::Rect};
 use ratatui::{
@@ -12,11 +11,12 @@ use tracing::error;
 use crate::{
     action::Action,
     ui::framework::{
-        component::Component, scroll::TwoAxisScrollState, theme::themed_block, util::centered_rect,
+        component::{Component, DispatchError, DispatchResult},
+        scroll::TwoAxisScrollState,
+        theme::themed_block,
+        util::centered_rect,
     },
 };
-
-use super::framework::component::ActionResult;
 
 pub struct ConnectionsComponent {
     area: Rect,
@@ -77,16 +77,16 @@ impl Component for ConnectionsComponent {
         &mut self.focus
     }
 
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         self.scroll.handle_mouse_event(mouse);
-        Ok(Some(Action::FocusReq(self.focus.widget_id())))
+        DispatchError::action(Action::FocusReq(self.focus.widget_id()))
     }
 
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
         if self.scroll.handle_action(action) {
-            ActionResult::Consumed
+            DispatchError::stop()
         } else {
-            ActionResult::Ignored
+            Ok(())
         }
     }
 

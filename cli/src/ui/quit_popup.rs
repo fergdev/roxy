@@ -8,14 +8,13 @@ use tokio::sync::{mpsc::UnboundedSender, watch};
 
 use crate::{
     action::Action,
-    ui::framework::button_group::{ButtonGroup, ButtonGroupEvent},
+    ui::framework::{
+        button_group::{ButtonGroup, ButtonGroupEvent},
+        component::{DispatchError, DispatchResult},
+    },
 };
 
-use super::framework::{
-    component::{ActionResult, Component},
-    theme::themed_block,
-    util::centered_rect_abs,
-};
+use super::framework::{component::Component, theme::themed_block, util::centered_rect_abs};
 
 #[derive(Debug)]
 pub struct QuitPopup {
@@ -80,16 +79,16 @@ impl Component for QuitPopup {
     fn children(&mut self) -> Vec<&mut dyn Component> {
         vec![&mut self.button_group]
     }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
         match action {
             Action::Select => {
                 if self.button_group.selected_index == 0 {
-                    ActionResult::Action(Action::Quit)
+                    Err(DispatchError::Bubble(Action::Quit))
                 } else {
-                    ActionResult::Action(Action::Back)
+                    Err(DispatchError::Bubble(Action::Back))
                 }
             }
-            _ => ActionResult::Ignored,
+            _ => Ok(()),
         }
     }
 

@@ -1,5 +1,4 @@
 use bytes::Bytes;
-use color_eyre::Result;
 use crossterm::event::MouseEvent;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
@@ -30,7 +29,7 @@ use crate::{
     ui::{
         flow::body::image_cache::ImageCache,
         framework::{
-            component::{ActionResult, Component},
+            component::{Component, DispatchError, DispatchResult},
             scroll::TwoAxisScrollState,
             theme::themed_block,
         },
@@ -157,19 +156,19 @@ impl HasFocus for FlowDetailsBody {
 }
 
 impl Component for FlowDetailsBody {
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         if !self.focus.get() {
-            return Ok(Some(Action::FocusReq(self.focus.id())));
+            return DispatchError::action(Action::FocusReq(self.focus.id()));
         }
 
         self.scroll.handle_mouse_event(mouse);
-        Ok(None)
+        Ok(())
     }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.scroll.handle_action(action.clone()) {
-            ActionResult::Consumed
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
+        if self.scroll.handle_action(action) {
+            DispatchError::stop()
         } else {
-            ActionResult::Ignored
+            Ok(())
         }
     }
 

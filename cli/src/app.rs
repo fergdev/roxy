@@ -7,13 +7,12 @@ use ratatui::layout::Rect;
 use roxy_proxy::flow_store::FlowStore;
 use roxy_proxy::proxy::ProxyManager;
 use tokio::sync::mpsc;
-use tracing::debug;
 
 use crate::action::Action;
 use crate::config::manager::ConfigManager;
 use crate::key_handler::KeyHandler;
 use crate::tui::{Tui, TuiEvent};
-use crate::ui::framework::component::{ActionResult, Component};
+use crate::ui::framework::component::{Component, DispatchError};
 use crate::ui::framework::notify::NotifierComponent;
 use crate::ui::framework::theme::set_theme;
 use crate::ui::home::HomeComponent;
@@ -100,7 +99,7 @@ impl App {
             TuiEvent::Key(key) => self.key_handler.handle_key_event(key)?,
             _ => {}
         }
-        if let Some(action) = self.home.dispatch_tui_events(event.clone())? {
+        if let Err(DispatchError::Bubble(action)) = self.home.dispatch_tui_events(&event) {
             action_tx.send(action)?;
         }
         Ok(())
@@ -118,17 +117,11 @@ impl App {
                     focus.prev();
                 }
                 Action::FocusReq(widget_id) => {
-                    debug!(
-                        "DEBUGPRINT[97]: {}:{}: widget_id={:#?}",
-                        file!(),
-                        line!(),
-                        widget_id
-                    );
                     focus.by_widget_id(widget_id);
                 }
                 _ => {}
             }
-            if let ActionResult::Action(action) = self.home.dispatch_action(action.clone()) {
+            if let Err(DispatchError::Bubble(action)) = self.home.dispatch_action(&action) {
                 self.action_tx.send(action)?
             };
         }

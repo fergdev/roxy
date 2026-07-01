@@ -1,4 +1,3 @@
-use color_eyre::eyre::Result;
 use crossterm::event::MouseEvent;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
@@ -9,10 +8,12 @@ use ratatui::{
 
 use crate::{
     action::Action,
-    ui::framework::{component::Component, paragraph::kv_paragraph, scroll::TwoAxisScrollState},
+    ui::framework::{
+        component::{Component, DispatchError, DispatchResult},
+        paragraph::kv_paragraph,
+        scroll::TwoAxisScrollState,
+    },
 };
-
-use super::component::ActionResult;
 
 pub(crate) struct KvComponent {
     pub focus: FocusFlag,
@@ -71,19 +72,19 @@ impl Component for KvComponent {
         &mut self.focus
     }
 
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         if !self.focus.get() {
-            return Ok(Some(Action::FocusReq(self.focus.id())));
+            return DispatchError::action(Action::FocusReq(self.focus.id()));
         }
 
         self.scroll.handle_mouse_event(mouse);
-        Ok(None)
+        Ok(())
     }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.scroll.handle_action(action.clone()) {
-            ActionResult::Consumed
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
+        if self.scroll.handle_action(action) {
+            DispatchError::stop()
         } else {
-            ActionResult::Ignored
+            Ok(())
         }
     }
 }

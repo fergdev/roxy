@@ -1,4 +1,3 @@
-use color_eyre::eyre::Result;
 use crossterm::event::MouseEvent;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
@@ -9,7 +8,7 @@ use tokio::sync::{mpsc, watch};
 use crate::{
     action::Action,
     ui::framework::{
-        component::{ActionResult, Component},
+        component::{Component, DispatchError, DispatchResult},
         paragraph::kv_paragraph,
         scroll::TwoAxisScrollState,
     },
@@ -140,16 +139,16 @@ impl Component for FlowTiming {
         self.scroll.render(frame, area);
     }
 
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         self.scroll.handle_mouse_event(mouse);
-        Ok(Some(Action::FocusReq(self.focus.id())))
+        DispatchError::action(Action::FocusReq(self.focus.id()))
     }
 
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.scroll.handle_action(action.clone()) {
-            ActionResult::Consumed
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
+        if self.scroll.handle_action(action) {
+            DispatchError::stop()
         } else {
-            ActionResult::Ignored
+            Ok(())
         }
     }
 

@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use crossterm::event::{MouseEvent, MouseEventKind};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
@@ -7,12 +6,12 @@ use ratatui::{
 };
 use tokio::sync::watch::Sender;
 
-use crate::action::Action;
-
-use super::{
-    component::{ActionResult, Component},
-    theme::themed_button,
+use crate::{
+    action::Action,
+    ui::framework::component::{DispatchError, DispatchResult},
 };
+
+use super::{component::Component, theme::themed_button};
 #[derive(Debug)]
 pub struct ButtonGroup {
     pub focus: FocusFlag,
@@ -75,33 +74,35 @@ impl ButtonGroup {
 }
 
 impl Component for ButtonGroup {
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
         match action {
             Action::Left => {
                 self.prev();
-                ActionResult::Consumed
+                DispatchError::stop()
             }
             Action::Right => {
                 self.next();
-                ActionResult::Consumed
+                DispatchError::stop()
             }
-            _ => ActionResult::Ignored,
+            _ => Ok(()),
         }
     }
 
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         if let MouseEventKind::Moved = mouse.kind {
             self.selected_index = self.column_to_index(mouse.column);
-            self.sender
-                .send(ButtonGroupEvent::Hovered(self.selected_index))?;
-            return Ok(None);
+            let _ = self
+                .sender
+                .send(ButtonGroupEvent::Hovered(self.selected_index));
+            return Ok(());
         }
         if let MouseEventKind::Up(_) = mouse.kind {
             self.selected_index = self.column_to_index(mouse.column);
-            self.sender
-                .send(ButtonGroupEvent::Selected(self.selected_index))?;
+            let _ = self
+                .sender
+                .send(ButtonGroupEvent::Selected(self.selected_index));
         }
-        Ok(None)
+        Ok(())
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {

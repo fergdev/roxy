@@ -1,18 +1,14 @@
 use std::time::Instant;
 
-use color_eyre::Result;
 use rat_focus::FocusFlag;
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
 };
 
-use crate::{action::Action, tui::TuiEvent};
+use crate::{action::Action, tui::TuiEvent, ui::framework::component::DispatchResult};
 
-use super::framework::{
-    component::{ActionResult, Component},
-    theme::themed_info_block,
-};
+use super::framework::{component::Component, theme::themed_info_block};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FpsCounter {
@@ -75,24 +71,23 @@ impl FpsCounter {
 }
 
 impl Component for FpsCounter {
-    fn dispatch_tui_events(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
+    fn dispatch_tui_events(&mut self, tui_event: &TuiEvent) -> DispatchResult {
         match tui_event {
             TuiEvent::Tick => {
                 self.app_tick();
-                Ok(None)
             }
             TuiEvent::Render => {
                 self.render_tick();
-                Ok(None)
             }
-            _ => Ok(None),
+            _ => {}
         }
+        Ok(())
     }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
         if let Action::FpsView = action {
             self.visible = !self.visible
         };
-        ActionResult::Ignored
+        Ok(())
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {

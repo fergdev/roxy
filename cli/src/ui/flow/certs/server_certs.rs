@@ -1,6 +1,5 @@
-use color_eyre::eyre::Result;
 use crossterm::event::MouseEvent;
-use rat_focus::{FocusFlag, HasFocus};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -15,7 +14,7 @@ use crate::{
     ui::{
         flow::certs::{CertInfo, render_cert},
         framework::{
-            component::{ActionResult, Component},
+            component::{Component, DispatchError, DispatchResult},
             scroll::TwoAxisScrollState,
             theme::themed_block,
         },
@@ -112,25 +111,25 @@ impl Component for ServerCertsComponent {
         self.render_server_cert(frame, area);
     }
 
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         if !self.focus.get() {
-            return Ok(Some(Action::FocusReq(self.focus.id())));
+            return DispatchError::action(Action::FocusReq(self.focus.id()));
         }
 
         self.scroll.handle_mouse_event(mouse);
-        Ok(None)
+        Ok(())
     }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.scroll.handle_action(action.clone()) {
-            ActionResult::Consumed
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
+        if self.scroll.handle_action(action) {
+            DispatchError::stop()
         } else {
-            ActionResult::Ignored
+            Ok(())
         }
     }
 }
 
 impl HasFocus for ServerCertsComponent {
-    fn build(&self, builder: &mut rat_focus::FocusBuilder) {
+    fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
 

@@ -15,7 +15,7 @@ pub struct TwoAxisScrollState {
 }
 
 impl TwoAxisScrollState {
-    pub fn handle_mouse_event(&mut self, mouse: MouseEvent) {
+    pub fn handle_mouse_event(&mut self, mouse: &MouseEvent) {
         match mouse.kind {
             MouseEventKind::ScrollLeft => {
                 self.horizontal.prev();
@@ -33,7 +33,7 @@ impl TwoAxisScrollState {
         }
     }
 
-    pub fn handle_action(&mut self, action: Action) -> bool {
+    pub fn handle_action(&mut self, action: &Action) -> bool {
         let mut consumed = true;
         match action {
             Action::Top => {

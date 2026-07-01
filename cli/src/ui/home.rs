@@ -7,20 +7,25 @@ use crate::{
     action::Action,
     config::manager::ConfigManager,
     tui::TuiEvent,
-    ui::{connection::ConnectionsComponent, framework::notify::NotifierComponent},
+    ui::{
+        connection::ConnectionsComponent,
+        framework::{
+            component::{DispatchError, DispatchResult},
+            notify::NotifierComponent,
+        },
+    },
 };
 
 use super::{
     config::ConfigEditor,
     flow::{details::FlowDetails, list::FlowList},
     fps_counter::FpsCounter,
-    framework::component::{ActionResult, Component},
+    framework::component::Component,
     log::{LogLine, LogViewer},
     quit_popup::QuitPopup,
     splash::Splash,
 };
 
-use color_eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect};
 use roxy_proxy::flow_store::FlowStore;
@@ -139,7 +144,7 @@ pub enum ActivePopup {
 }
 
 impl Component for HomeComponent {
-    fn handle_tui_event(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
+    fn handle_tui_event(&mut self, tui_event: &TuiEvent) -> DispatchResult {
         if let TuiEvent::Tick = tui_event {
             self.active_view = if self.flow_store.flows.is_empty() {
                 ActiveView::Splash
@@ -147,36 +152,36 @@ impl Component for HomeComponent {
                 ActiveView::FlowList
             }
         }
-        Ok(None)
+        Ok(())
     }
 
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
         match action {
             Action::LogView => {
                 self.active_popup = Some(ActivePopup::LogViewer);
-                ActionResult::Consumed
+                DispatchError::stop()
             }
             Action::EditConfig => {
                 self.active_popup = Some(ActivePopup::ConfigEditor);
                 self.config_editor.shown();
-                ActionResult::Consumed
+                DispatchError::stop()
             }
             Action::Connections => {
                 self.active_popup = Some(ActivePopup::Connections);
-                ActionResult::Consumed
+                DispatchError::stop()
             }
             Action::Back => match self.active_popup {
                 Some(_) => {
                     self.active_popup = None;
-                    ActionResult::Consumed
+                    DispatchError::stop()
                 }
                 _ => {
                     if !self.config_manager.rx.borrow().app.confirm_quit {
-                        ActionResult::Action(Action::Quit)
+                        DispatchError::action(Action::Quit)
                     } else {
                         self.active_popup = Some(ActivePopup::QuitPopup);
                         self.quit_popup.reset();
-                        ActionResult::Action(Action::FocusReq(
+                        DispatchError::action(Action::FocusReq(
                             self.quit_popup.button_group.focus().widget_id(),
                         ))
                     }
@@ -186,13 +191,13 @@ impl Component for HomeComponent {
                 if let Some(id) = self.flow_list.selected_id() {
                     self.flow_details.set_flow(id);
                     self.active_popup = Some(ActivePopup::FlowDetails);
-                    ActionResult::Consumed
+                    DispatchError::stop()
                 } else {
-                    ActionResult::Ignored
+                    Ok(())
                 }
             }
 
-            _ => ActionResult::Ignored,
+            _ => Ok(()),
         }
     }
 

@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use crossterm::event::MouseEvent;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use std::{
@@ -6,7 +5,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{action::Action, ui::framework::scroll::TwoAxisScrollState};
+use crate::{
+    action::Action,
+    ui::framework::{
+        component::{DispatchError, DispatchResult},
+        scroll::TwoAxisScrollState,
+    },
+};
 
 use tracing::{
     Event, Level, Subscriber,
@@ -23,7 +28,7 @@ use ratatui::{
 };
 
 use super::framework::{
-    component::{ActionResult, Component},
+    component::Component,
     theme::{themed_block, with_theme},
     util::centered_rect,
 };
@@ -108,16 +113,16 @@ impl LogViewer {
 }
 
 impl Component for LogViewer {
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         self.scroll.handle_mouse_event(mouse);
-        Ok(Some(Action::FocusReq(self.focus.id())))
+        DispatchError::action(Action::FocusReq(self.focus.id()))
     }
 
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.scroll.handle_action(action.clone()) {
-            ActionResult::Consumed
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
+        if self.scroll.handle_action(action) {
+            DispatchError::stop()
         } else {
-            ActionResult::Ignored
+            Ok(())
         }
     }
 

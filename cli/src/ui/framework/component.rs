@@ -8,19 +8,23 @@ use ratatui::{
 
 use crate::{action::Action, tui::TuiEvent};
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum KeyEventResult {
-    Consumed,
-    Action(Action),
-    Ignored,
+pub enum DispatchError {
+    Stop,
+    Bubble(Action),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ActionResult {
-    Consumed,
-    Action(Action),
-    Ignored,
+impl DispatchError {
+    #[inline]
+    pub fn stop() -> DispatchResult {
+        Err(DispatchError::Stop)
+    }
+    #[inline]
+    pub fn action(action: Action) -> DispatchResult {
+        Err(DispatchError::Bubble(action))
+    }
 }
+
+pub type DispatchResult = Result<(), DispatchError>;
 
 pub trait Component {
     fn children(&mut self) -> Vec<&mut dyn Component> {
@@ -32,18 +36,12 @@ pub trait Component {
     }
     fn focus(&mut self) -> &mut FocusFlag;
     /// Handle tui events.
-    fn dispatch_tui_events(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
+    fn dispatch_tui_events(&mut self, tui_event: &TuiEvent) -> DispatchResult {
         for child in self.children() {
-            if let Ok(Some(action)) = child.dispatch_tui_events(tui_event.clone()) {
-                return Ok(Some(action));
-            }
+            child.dispatch_tui_events(tui_event)?;
         }
         match tui_event {
-            TuiEvent::Key(key) => match self.handle_key_event(&key) {
-                KeyEventResult::Consumed => Ok(None),
-                KeyEventResult::Action(action) => Ok(Some(action)),
-                KeyEventResult::Ignored => Ok(None),
-            },
+            TuiEvent::Key(key) => self.handle_key_event(key),
             TuiEvent::Mouse(mouse) => {
                 if self.area().contains(Position {
                     x: mouse.column,
@@ -51,24 +49,15 @@ pub trait Component {
                 }) {
                     self.handle_mouse_event(mouse)
                 } else {
-                    Ok(None)
+                    Ok(())
                 }
             }
             _ => self.handle_tui_event(tui_event),
         }
     }
-    fn dispatch_action(&mut self, action: Action) -> ActionResult {
+    fn dispatch_action(&mut self, action: &Action) -> DispatchResult {
         for child in self.children() {
-            let result = child.dispatch_action(action.clone());
-            match result {
-                ActionResult::Consumed => {
-                    return result;
-                }
-                ActionResult::Action(action) => {
-                    return ActionResult::Action(action);
-                }
-                ActionResult::Ignored => {}
-            }
+            child.dispatch_action(action)?;
         }
         if self.focus().get() {
             // debug!(
@@ -86,28 +75,28 @@ pub trait Component {
             //     self.focus().name()
             // );
 
-            ActionResult::Ignored
+            Ok(())
         }
     }
 
-    fn handle_tui_event(&mut self, _tui_event: TuiEvent) -> Result<Option<Action>> {
-        Ok(None)
+    fn handle_tui_event(&mut self, _tui_event: &TuiEvent) -> DispatchResult {
+        Ok(())
     }
 
     /// Handle actions, only invoked when the component has focus.
-    fn handle_action(&mut self, _action: Action) -> ActionResult {
-        ActionResult::Ignored
+    fn handle_action(&mut self, _action: &Action) -> DispatchResult {
+        Ok(())
     }
 
     /// Handle crossterm key events.
-    fn handle_key_event(&mut self, _key: &KeyEvent) -> KeyEventResult {
-        KeyEventResult::Ignored
+    fn handle_key_event(&mut self, _key: &KeyEvent) -> DispatchResult {
+        Ok(())
     }
 
     /// Handle crossterm mouse events, only invoked when the mouse event is within the component's
     /// area.
-    fn handle_mouse_event(&mut self, _mouse: MouseEvent) -> Result<Option<Action>> {
-        Ok(None)
+    fn handle_mouse_event(&mut self, _mouse: &MouseEvent) -> DispatchResult {
+        Ok(())
     }
 
     /// Draw to the frame within the given area.

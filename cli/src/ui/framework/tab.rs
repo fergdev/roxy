@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use crossterm::event::{MouseEvent, MouseEventKind};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{Frame, layout::Rect, text::Line};
@@ -6,7 +5,7 @@ use ratatui::{Frame, layout::Rect, text::Line};
 use crate::{
     action::Action,
     ui::framework::{
-        component::{ActionResult, Component},
+        component::{Component, DispatchError, DispatchResult},
         theme::themed_tabs,
     },
 };
@@ -67,8 +66,8 @@ impl Component for TabComponent {
         frame.render_widget(tabs, area);
     }
 
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        let mut res = ActionResult::Consumed;
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
+        let mut res = DispatchError::stop();
         match action {
             Action::Left => {
                 self.prev();
@@ -82,14 +81,12 @@ impl Component for TabComponent {
             Action::End => {
                 self.end();
             }
-            _ => {
-                res = ActionResult::Ignored;
-            }
+            _ => res = Ok(()),
         }
         res
     }
 
-    fn handle_mouse_event(&mut self, mouse_event: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse_event: &MouseEvent) -> DispatchResult {
         match mouse_event.kind {
             MouseEventKind::Up(_) => {
                 let component_up_x = mouse_event.column - self.area.x;
@@ -98,20 +95,20 @@ impl Component for TabComponent {
                     tab_width += title.len() as u16 + 3;
                     if tab_width > component_up_x {
                         self.current_tab = index;
-                        return Ok(None);
+                        return Ok(());
                     }
                 }
                 self.end();
             }
             MouseEventKind::Moved => {
                 if !self.focus.get() {
-                    return Ok(Some(Action::FocusReq(self.focus.widget_id())));
+                    return DispatchError::action(Action::FocusReq(self.focus.widget_id()));
                 }
             }
             _ => {}
         }
 
-        Ok(None)
+        Ok(())
     }
 
     fn focus(&mut self) -> &mut FocusFlag {

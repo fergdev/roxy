@@ -15,7 +15,7 @@ use crate::{
     action::Action,
     app::ITEM_HEIGHT,
     ui::framework::{
-        component::{ActionResult, Component},
+        component::{Component, DispatchError, DispatchResult},
         scrollbar::render_vertical_scrollbar,
         theme::themed_table,
     },
@@ -180,17 +180,17 @@ impl Drop for FlowList {
 }
 
 impl Component for FlowList {
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
         match action {
             Action::Down => {
                 self.next_row();
-                ActionResult::Consumed
+                DispatchError::stop()
             }
             Action::Up => {
                 self.previous_row();
-                ActionResult::Consumed
+                DispatchError::stop()
             }
-            _ => ActionResult::Ignored,
+            _ => Ok(()),
         }
     }
 

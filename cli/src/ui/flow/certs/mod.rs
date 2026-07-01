@@ -8,7 +8,6 @@ mod server_resolve_client_cert;
 mod server_tls;
 
 use bytes::Bytes;
-use color_eyre::eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{
     Frame,
@@ -25,13 +24,17 @@ use tracing::{info, warn};
 use x509_parser::parse_x509_certificate;
 
 use crate::{
-    action::Action,
+    tui::TuiEvent,
     ui::{
         flow::certs::{
             client::{ClientCertificateComponent, ClientState},
             server::{ServerCertificateComponent, ServerState},
         },
-        framework::{component::Component, tab::TabComponent, theme::tertiary_text},
+        framework::{
+            component::{Component, DispatchResult},
+            tab::TabComponent,
+            theme::tertiary_text,
+        },
     },
 };
 
@@ -186,15 +189,15 @@ impl Component for FlowDetailsCerts {
         }
     }
 
-    fn handle_tui_event(&mut self, tui_event: crate::tui::TuiEvent) -> Result<Option<Action>> {
-        if tui_event == crate::tui::TuiEvent::Render {
+    fn handle_tui_event(&mut self, tui_event: &TuiEvent) -> DispatchResult {
+        if let TuiEvent::Render = tui_event {
             let state = self.state.borrow_and_update();
             if state.has_changed() {
                 self.client_cmp.set_state(&state.client);
                 self.server_cmp.set_state(&state.server);
             }
         }
-        Ok(None)
+        Ok(())
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {

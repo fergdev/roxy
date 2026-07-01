@@ -1,6 +1,5 @@
 use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
-use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus, ratatui::layout::Rect};
 use ratatui::{
@@ -19,7 +18,7 @@ use crate::{
         config::{ConfigValue, EditableConfigField, tab::ConfigTab},
         framework::{
             color::color_is_light,
-            component::{ActionResult, Component, KeyEventResult},
+            component::{Component, DispatchError, DispatchResult},
             theme::{themed_block, themed_table},
         },
     },
@@ -197,23 +196,23 @@ impl Component for TableComponent {
         }
     }
 
-    fn handle_action(&mut self, action: Action) -> ActionResult {
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
         if !self.focus.get() {
-            return ActionResult::Ignored;
+            return Ok(());
         }
 
         // On select takes priority over other actions, we always handle it
         // to get in and out of edit mode.
-        if Action::Select == action {
+        if Action::Select == *action {
             self.on_select();
-            return ActionResult::Consumed;
+            return DispatchError::stop();
         }
 
         if self.is_editing() {
-            return ActionResult::Ignored;
+            return Ok(());
         }
 
-        let mut result = ActionResult::Consumed;
+        let mut result = DispatchError::stop();
         match action {
             Action::Left => {
                 self.table_state.select_previous_column();
@@ -240,12 +239,12 @@ impl Component for TableComponent {
             Action::Bottom => {
                 self.table_state.scroll_down_by(u16::MAX);
             }
-            _ => result = ActionResult::Ignored,
+            _ => result = Ok(()),
         }
         result
     }
 
-    fn handle_key_event(&mut self, key: &KeyEvent) -> KeyEventResult {
+    fn handle_key_event(&mut self, key: &KeyEvent) -> DispatchResult {
         if self.focus().get() && self.is_editing() {
             match key.code {
                 KeyCode::Esc => {
@@ -259,31 +258,31 @@ impl Component for TableComponent {
                 }
                 _ => {}
             }
-            KeyEventResult::Consumed
+            DispatchError::stop()
         } else {
-            KeyEventResult::Ignored
+            Ok(())
         }
     }
 
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         let position = Position {
             x: mouse.column,
             y: mouse.row,
         };
         if !self.area.contains(position) {
-            return Ok(None);
+            return Ok(());
         }
         if !self.focus.get() {
-            return Ok(Some(Action::FocusReq(self.focus.widget_id())));
+            return DispatchError::action(Action::FocusReq(self.focus.widget_id()));
         }
 
         if mouse.kind == MouseEventKind::ScrollDown {
             self.table_state.scroll_down_by(1);
-            return Ok(None);
+            return Ok(());
         }
         if mouse.kind == MouseEventKind::ScrollUp {
             self.table_state.scroll_up_by(1);
-            return Ok(None);
+            return Ok(());
         }
 
         if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
@@ -298,9 +297,9 @@ impl Component for TableComponent {
             let scroll_offset = self.table_state.offset();
             let scroll_target = scroll_offset.saturating_add(click_column as usize);
             self.table_state.select(Some(scroll_target));
-            return Ok(None);
+            return Ok(());
         }
-        Ok(None)
+        Ok(())
     }
 
     fn area(&self) -> Rect {

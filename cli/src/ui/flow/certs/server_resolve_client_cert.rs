@@ -1,4 +1,3 @@
-use color_eyre::eyre::Result;
 use crossterm::event::MouseEvent;
 use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
@@ -13,7 +12,7 @@ use roxy_shared::cert::CapturedResolveClientCert;
 use crate::{
     action::Action,
     ui::framework::{
-        component::{ActionResult, Component},
+        component::{Component, DispatchError, DispatchResult},
         scroll::TwoAxisScrollState,
         theme::themed_block,
     },
@@ -102,19 +101,19 @@ impl Component for ServerResolveClientCertComponent {
         self.area = area;
         self.render_resolve_client_cert(frame, area);
     }
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: &MouseEvent) -> DispatchResult {
         if !self.focus.get() {
-            return Ok(Some(Action::FocusReq(self.focus.id())));
+            return DispatchError::action(Action::FocusReq(self.focus.id()));
         }
 
         self.scroll.handle_mouse_event(mouse);
-        Ok(None)
+        Ok(())
     }
-    fn handle_action(&mut self, action: Action) -> ActionResult {
-        if self.scroll.handle_action(action.clone()) {
-            ActionResult::Consumed
+    fn handle_action(&mut self, action: &Action) -> DispatchResult {
+        if self.scroll.handle_action(action) {
+            DispatchError::stop()
         } else {
-            ActionResult::Ignored
+            Ok(())
         }
     }
 }

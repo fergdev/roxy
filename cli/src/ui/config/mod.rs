@@ -2,7 +2,6 @@ mod fields;
 mod tab;
 mod table;
 
-use color_eyre::Result;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use std::path::PathBuf;
 
@@ -14,12 +13,11 @@ use ratatui::{
 };
 
 use crate::{
-    action::Action,
     config::manager::ConfigManager,
     tui::TuiEvent,
     ui::{
         config::{tab::ConfigTab, table::TableComponent},
-        framework::tab::TabComponent,
+        framework::{component::DispatchResult, tab::TabComponent},
     },
 };
 
@@ -74,12 +72,12 @@ impl Component for ConfigEditor {
         vec![&mut self.tab_component, &mut self.table_component]
     }
 
-    fn handle_tui_event(&mut self, tui_event: TuiEvent) -> Result<Option<Action>> {
-        if tui_event == TuiEvent::Render {
+    fn handle_tui_event(&mut self, tui_event: &TuiEvent) -> DispatchResult {
+        if let TuiEvent::Render = tui_event {
             self.table_component
                 .set_selected_tab(ConfigTab::all()[self.tab_component.current_tab]);
         }
-        Ok(None)
+        Ok(())
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
