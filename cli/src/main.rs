@@ -22,8 +22,7 @@ use roxy_shared::tls::TlsConfig;
 use tokio::sync::mpsc;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
-    color_eyre::install()?;
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log_buffer = Arc::new(Mutex::new(VecDeque::new()));
     let log_layer = UiLogLayer::new(log_buffer.clone());
 

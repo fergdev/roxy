@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
 use rat_focus::FocusFlag;
 use ratatui::{

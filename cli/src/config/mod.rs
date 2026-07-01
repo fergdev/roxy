@@ -10,7 +10,6 @@ use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use tracing::{debug, error};
 
-use color_eyre::Result;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 

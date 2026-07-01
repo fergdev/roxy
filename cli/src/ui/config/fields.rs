@@ -1,4 +1,3 @@
-use color_eyre::Result;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::error;
 

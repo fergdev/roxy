@@ -3,7 +3,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use color_eyre::Result;
 use crossterm::event::KeyEvent;
 use tokio::{
     sync::{Mutex, mpsc::UnboundedSender},
@@ -84,7 +83,10 @@ impl KeyHandler {
         Self { inner }
     }
 
-    pub fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
+    pub fn handle_key_event(
+        &mut self,
+        key_event: KeyEvent,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut inner = self.inner.try_lock()?;
 
         if let Some(handle) = &inner.more_action_timeout_handle.take() {

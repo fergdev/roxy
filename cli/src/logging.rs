@@ -5,7 +5,6 @@ use std::{
     sync::Once,
 };
 
-use color_eyre::eyre::Result;
 use directories::ProjectDirs;
 use once_cell::sync::OnceCell;
 use tracing_error::ErrorLayer;
@@ -42,12 +41,14 @@ fn get_data_dir() -> PathBuf {
 }
 
 static INIT_TRACING: Once = Once::new();
-pub fn initialize_logging() -> Result<()> {
+pub fn initialize_logging() -> Result<(), Box<dyn std::error::Error>> {
     initialize_logging_with_layer(None)
 }
 
 #[allow(clippy::expect_used)]
-pub fn initialize_logging_with_layer(layer: Option<UiLogLayer>) -> Result<()> {
+pub fn initialize_logging_with_layer(
+    layer: Option<UiLogLayer>,
+) -> Result<(), Box<dyn std::error::Error>> {
     INIT_TRACING.call_once(|| {
         println!("Initializing logging for {}", env!("CARGO_PKG_NAME"));
         let directory = get_data_dir();

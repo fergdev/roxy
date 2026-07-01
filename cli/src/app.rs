@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use color_eyre::Result;
 use rat_focus::{Focus, FocusBuilder};
 use ratatui::layout::Rect;
 use roxy_proxy::flow_store::FlowStore;
@@ -60,7 +59,7 @@ impl App {
         }
     }
 
-    pub async fn run(&mut self) -> Result<()> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut tui = Tui::new()?.mouse(true).tick_rate(4.0).frame_rate(60.0);
         tui.enter()?;
         loop {
@@ -85,7 +84,7 @@ impl App {
         Ok(())
     }
 
-    async fn handle_events(&mut self, tui: &mut Tui) -> Result<()> {
+    async fn handle_events(&mut self, tui: &mut Tui) -> Result<(), Box<dyn std::error::Error>> {
         let Some(event) = tui.next_event().await else {
             return Ok(());
         };
@@ -105,7 +104,11 @@ impl App {
         Ok(())
     }
 
-    fn handle_actions(&mut self, tui: &mut Tui, focus: &mut Focus) -> Result<()> {
+    fn handle_actions(
+        &mut self,
+        tui: &mut Tui,
+        focus: &mut Focus,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         while let Ok(action) = self.action_rx.try_recv() {
             match action {
                 Action::Quit => self.should_quit = true,
@@ -128,13 +131,18 @@ impl App {
         Ok(())
     }
 
-    fn handle_resize(&mut self, tui: &mut Tui, w: u16, h: u16) -> Result<()> {
+    fn handle_resize(
+        &mut self,
+        tui: &mut Tui,
+        w: u16,
+        h: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         tui.resize(Rect::new(0, 0, w, h))?;
         self.render(tui)?;
         Ok(())
     }
 
-    fn render(&mut self, tui: &mut Tui) -> Result<()> {
+    fn render(&mut self, tui: &mut Tui) -> Result<(), Box<dyn std::error::Error>> {
         let theme = self.config_manager.rx.borrow_and_update().theme.clone();
         set_theme(theme);
         tui.draw(|frame| {

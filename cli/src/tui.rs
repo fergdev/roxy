@@ -5,7 +5,6 @@ use std::{
     time::Duration,
 };
 
-use color_eyre::Result;
 use crossterm::{
     cursor,
     event::{
@@ -55,7 +54,7 @@ pub struct Tui {
 }
 
 impl Tui {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         Ok(Self {
             terminal: Terminal::new(Backend::new(stdout()))?,
@@ -146,7 +145,7 @@ impl Tui {
         cancellation_token.cancel();
     }
 
-    pub fn stop(&self) -> Result<()> {
+    pub fn stop(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.cancel();
         let mut counter = 0;
         while !self.task.is_finished() {
@@ -163,7 +162,7 @@ impl Tui {
         Ok(())
     }
 
-    pub fn enter(&mut self) -> Result<()> {
+    pub fn enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         terminal::enable_raw_mode()?;
         execute!(stdout(), EnterAlternateScreen, cursor::Hide)?;
         if self.mouse {
@@ -176,7 +175,7 @@ impl Tui {
         Ok(())
     }
 
-    pub fn exit(&mut self) -> Result<()> {
+    pub fn exit(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.stop()?;
         if terminal::is_raw_mode_enabled()? {
             self.flush()?;
@@ -196,14 +195,14 @@ impl Tui {
         self.cancellation_token.cancel();
     }
 
-    pub fn suspend(&mut self) -> Result<()> {
+    pub fn suspend(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.exit()?;
         #[cfg(not(windows))]
         raise(signal_hook::consts::signal::SIGTSTP)?;
         Ok(())
     }
 
-    pub fn resume(&mut self) -> Result<()> {
+    pub fn resume(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.enter()?;
         Ok(())
     }

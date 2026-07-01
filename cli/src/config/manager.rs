@@ -3,8 +3,6 @@ use std::path::PathBuf;
 use tokio::sync::watch;
 use tracing::{debug, error, trace};
 
-use color_eyre::Result;
-
 use crate::config::args::RoxyArgs;
 use crate::config::{RoxyConfig, RoxyConfigError, get_config_dir};
 use crate::notify_error;
