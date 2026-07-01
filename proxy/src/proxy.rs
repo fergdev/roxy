@@ -26,6 +26,7 @@ use hyper::service::service_fn;
 use hyper::upgrade::Upgraded;
 use hyper::{Method, Request, Response};
 use std::convert::Infallible;
+use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::net::UdpSocket;
@@ -34,6 +35,7 @@ use std::sync::Arc;
 use tokio_rustls::TlsAcceptor;
 
 use crate::flow::FlowCerts;
+use crate::flow_store::ConnectionEvent;
 use crate::flow_store::FlowStore;
 use crate::h3::start_h3;
 use crate::http::handle_h2;
@@ -182,9 +184,7 @@ async fn start_tcp(
     proxy_context: ProxyContext,
     tcp_listeneter: TcpListener,
 ) -> Result<JoinHandle<()>, HttpError> {
-    let addr = tcp_listeneter.local_addr()?;
     let handle = tokio::spawn(async move {
-        trace!("TCP listening on {addr}");
         while let Ok((stream, addr)) = tcp_listeneter.accept().await {
             let cxt = proxy_context.clone();
             tokio::task::spawn(async move {
@@ -221,11 +221,10 @@ async fn proxy(
         ) {
             proxy_context
                 .flow_store
-                .post_proxy_event(crate::flow_store::ConnectionEvent::failure(
+                .post_proxy_event(ConnectionEvent::failure(
                     connection_id,
                     "Validate correct failed",
                 ));
-            debug!("Invalid connect request");
             return bad_connect_response().map_err(|_| HttpError::ProxyConnect);
         }
 
@@ -234,15 +233,25 @@ async fn proxy(
             RUri::new(incoming_request.uri().clone()),
             proxy_context.clone(),
         );
-        tokio::spawn(async {
+        tokio::spawn(async move {
             match hyper::upgrade::on(incoming_request).await {
                 Ok(upgraded) => {
                     if let Err(error) = tunnel(flow_context, upgraded).await {
-                        error!("server io error: {}", error);
-                    };
+                        proxy_context
+                            .flow_store
+                            .post_proxy_event(ConnectionEvent::failure(
+                                connection_id,
+                                &format!("Tunnel error: {}", error),
+                            ));
+                    }
                 }
-                Err(e) => {
-                    error!("upgrade error: {}", e);
+                Err(error) => {
+                    proxy_context
+                        .flow_store
+                        .post_proxy_event(ConnectionEvent::failure(
+                            connection_id,
+                            &format!("Upgrade error: {}", error),
+                        ));
                 }
             }
         });
@@ -259,11 +268,7 @@ async fn proxy(
     }
 }
 
-async fn tunnel(
-    mut flow_cxt: FlowContext,
-    upgraded: Upgraded,
-) -> Result<(), Box<dyn std::error::Error>> {
-    trace!("Providing tunnel");
+async fn tunnel(mut flow_cxt: FlowContext, upgraded: Upgraded) -> Result<(), Box<dyn Error>> {
     let client_stream = TokioIo::new(upgraded);
 
     let (client_stream, peeked_bytes) = PeekStream::new(client_stream, 1024).await?;
@@ -272,7 +277,6 @@ async fn tunnel(
     if peeked_bytes.starts_with(GET_BYTES) {
         return handle_ws(flow_cxt, client_stream).await;
     }
-    trace!("Peek looks like TLS");
 
     let (leaf, key_pair) = flow_cxt
         .proxy_cxt
@@ -294,7 +298,6 @@ async fn tunnel(
 
     server_config.alpn_protocols = alp_h1_h2();
 
-    trace!("Creating TLS acceptor for client stream");
     let client_tls = TlsAcceptor::from(Arc::new(server_config))
         .accept(client_stream)
         .await
@@ -325,7 +328,7 @@ async fn tunnel(
             }
         }
         AlpnProtocol::Unknown(alpn_bytes) => {
-            trace!(
+            error!(
                 "No ALPN protocol negotiated {alpn_bytes:?}, defaulting to http/2 which can downgrade"
             );
 

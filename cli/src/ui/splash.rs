@@ -33,7 +33,7 @@ impl HasFocus for Splash {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 }
 

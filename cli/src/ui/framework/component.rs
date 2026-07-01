@@ -34,7 +34,8 @@ pub trait Component {
         self.area().width > 0 && self.area().height > 0
     }
     fn focus(&mut self) -> &mut FocusFlag;
-    /// Handle tui events.
+
+    /// Dispatch tui events.
     fn dispatch_tui_events(&mut self, tui_event: &TuiEvent) -> DispatchResult {
         for child in self.children() {
             child.dispatch_tui_events(tui_event)?;
