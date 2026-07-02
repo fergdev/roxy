@@ -17,6 +17,7 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::time::error::Elapsed;
 use tokio::time::timeout;
+use tracing::info;
 use tracing::warn;
 
 use tokio::net::TcpStream;
@@ -262,6 +263,14 @@ pub async fn upstream_h2<S>(
 where
     S: Read + Write + Unpin + Send + 'static,
 {
+    // Clean H2 request: remove host header and set version to HTTP/2
+    let (mut parts, body) = request.into_parts();
+    parts.version = http::Version::HTTP_2;
+    parts.headers.remove(http::header::HOST);
+
+    let request = Request::from_parts(parts, body);
+
+    info!("Request ={:?}", request);
     emitter.emit(HttpEvent::ClientHttpHandshakeStart);
     let (mut upstream_sender, upstream_conn) =
         hyper::client::conn::http2::handshake(TokioExecutor::new(), tls).await?;
@@ -269,7 +278,7 @@ where
     emitter.emit(HttpEvent::ClientHttpHandshakeComplete);
     tokio::spawn(async move {
         if let Err(e) = upstream_conn.await {
-            error!("{e}");
+            error!("H2 conn error={e}");
         }
     });
 

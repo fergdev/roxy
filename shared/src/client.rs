@@ -135,7 +135,7 @@ impl ClientContext {
             .to_string()
             .try_into()?;
 
-        let (stream, alpn) = if self.use_rustls {
+        let (stream, negotiated_alpn) = if self.use_rustls {
             client_tls(
                 server_name,
                 stream,
@@ -162,11 +162,11 @@ impl ClientContext {
             .await?
         };
 
-        match alpn {
+        match negotiated_alpn {
             AlpnProtocol::Http2 => upstream_h2(stream, request, self.emitter.as_ref()).await,
             AlpnProtocol::Http1 => upstream_https(stream, request, self.emitter.as_ref()).await,
             _ => {
-                warn!("Unknow alpn negotiated {:?}", alpn);
+                warn!("Unknow alpn negotiated {:?}", negotiated_alpn);
                 upstream_https(stream, request, self.emitter.as_ref()).await
             }
         }
