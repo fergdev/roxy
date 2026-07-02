@@ -270,7 +270,6 @@ where
 
     let request = Request::from_parts(parts, body);
 
-    info!("Request ={:?}", request);
     emitter.emit(HttpEvent::ClientHttpHandshakeStart);
     let (mut upstream_sender, upstream_conn) =
         hyper::client::conn::http2::handshake(TokioExecutor::new(), tls).await?;

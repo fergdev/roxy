@@ -178,7 +178,11 @@ pub fn content_type(headers: &HeaderMap) -> Option<ContentType> {
         .get(CONTENT_TYPE)
         .map(|s| s.to_str().unwrap_or(""))
         .unwrap_or("");
-    parse_content_type(content_type)
+    let mime_type = content_type
+        .split(";")
+        .find(|s| !s.starts_with("boundary=") || s.starts_with("charset="))
+        .unwrap_or("");
+    parse_content_type(mime_type)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
