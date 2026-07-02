@@ -59,7 +59,7 @@ impl ContentType {
             ContentType::Toml => MIME_APPLICATION_TOML,
             ContentType::Tsv => MIME_APPLICATION_TSV,
             ContentType::Webp => MIME_IMAGE_WEBP,
-            ContentType::XIcon => MIME_IMAGE_IICON,
+            ContentType::XIcon => MIME_IMAGE_XICON,
             ContentType::Xml => MIME_APPLICATION_XML,
             ContentType::Yaml => MIME_APPLICATION_YAML,
         }

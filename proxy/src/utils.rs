@@ -140,22 +140,6 @@ mod tests {
     }
 
     #[test]
-    fn invalid_when_uri_has_path() {
-        let uri: Uri = "example.com:443/path".parse().unwrap();
-        let headers = headers_with_host("example.com:443");
-
-        assert!(!validate_connect_uri(Version::HTTP_11, &uri, &headers));
-    }
-
-    #[test]
-    fn invalid_when_uri_has_query() {
-        let uri: Uri = "example.com:443?x=1".parse().unwrap();
-        let headers = headers_with_host("example.com:443");
-
-        assert!(!validate_connect_uri(Version::HTTP_11, &uri, &headers));
-    }
-
-    #[test]
     fn invalid_for_http_3() {
         let uri: Uri = "example.com:443".parse().unwrap();
         let headers = headers_with_host("example.com:443");

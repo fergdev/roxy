@@ -370,10 +370,20 @@ async fn test_http_get_asset() {
             assert_eq!(intercept_request.version, s.server.http_version());
             assert!(intercept_request.body.is_empty());
 
-            if s.server.version() == Version::HTTP_3 {
+            if matches!(s.server.version(), Version::HTTP_3 | Version::HTTP_2) {
+                assert!(intercept_request.headers.is_empty());
                 assert_eq!(intercept_request.headers.len(), 0);
             } else {
                 assert_eq!(intercept_request.headers.len(), 1);
+                assert_eq!(
+                    intercept_request
+                        .headers
+                        .get(HOST)
+                        .unwrap()
+                        .to_str()
+                        .unwrap(),
+                    "127.0.0.1"
+                );
             }
             assert!(intercept_request.body.is_empty());
             assert!(intercept_request.trailers.is_none());

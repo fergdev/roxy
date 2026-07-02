@@ -265,7 +265,13 @@ where
     // Clean H2 request: remove host header and set version to HTTP/2
     let (mut parts, body) = request.into_parts();
     parts.version = http::Version::HTTP_2;
-    parts.headers.remove(http::header::HOST);
+
+    // We clone here because we want to remove the host header from the request, but we don't want
+    // to modify the original request. This is important because we want to show the user the
+    // original request
+    let mut headers = parts.headers.clone();
+    headers.remove(http::header::HOST);
+    parts.headers = headers;
 
     let request = Request::from_parts(parts, body);
 
