@@ -101,8 +101,16 @@ fn render_timing(timing: &Timing) -> Vec<(String, String)> {
 fn timing_line(key: &str, time: &Option<OffsetDateTime>) -> (String, String) {
     (
         key.to_owned(),
-        time.map(|t| t.to_string())
-            .unwrap_or_else(|| "N/A".to_string()),
+        time.map(|timing| {
+            format!(
+                "{}:{}:{}:{}",
+                timing.hour(),
+                timing.minute(),
+                timing.second(),
+                timing.millisecond()
+            )
+        })
+        .unwrap_or_else(|| "N/A".to_string()),
     )
 }
 
@@ -112,7 +120,7 @@ impl HasFocus for FlowTiming {
     }
 
     fn area(&self) -> Rect {
-        Rect::default()
+        self.area
     }
 
     fn focus(&self) -> FocusFlag {

@@ -39,8 +39,8 @@ impl HasFocus for Splash {
 
 impl Component for Splash {
     fn render(&mut self, frame: &mut Frame, area: Rect) {
-        let colors = with_theme(|t| t.colors.clone());
-        let bg = Block::default().style(Style::default().bg(colors.surface));
+        let bg =
+            with_theme(|theme| Block::default().style(Style::default().bg(theme.colors.surface)));
         frame.render_widget(bg, area);
 
         let chunks = Layout::default()
@@ -52,7 +52,7 @@ impl Component for Splash {
             ])
             .split(area);
 
-        let text_style = Style::new().fg(colors.primary);
+        let text_style = with_theme(|t| Style::new().fg(t.colors.primary));
 
         let name = BigText::builder()
             .pixel_size(PixelSize::Full)

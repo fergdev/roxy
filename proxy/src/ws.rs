@@ -31,6 +31,7 @@ where
         .proxy_cxt
         .flow_store
         .new_ws_flow(FlowConnection {
+            connection_id: flow_cxt.client_connection_id,
             addr: flow_cxt.client_addr,
         })
         .await;
@@ -60,6 +61,7 @@ where
         .proxy_cxt
         .flow_store
         .new_ws_flow(FlowConnection {
+            connection_id: flow_cxt.client_connection_id,
             addr: flow_cxt.client_addr,
         })
         .await;

@@ -133,6 +133,7 @@ pub async fn client_tls(
     client_config.alpn_protocols = alpn_protocols;
 
     let connector = tokio_rustls::TlsConnector::from(Arc::new(client_config));
+
     emitter.emit(HttpEvent::ClientTlsHandshake);
     let tls = connector
         .connect(server_name, stream)
@@ -173,7 +174,7 @@ pub async fn client_tls_native(
     let cert = native_tls::Certificate::from_der(&root_store.inner.ca_der)
         .map_err(std::io::Error::other)?;
 
-    emitter.emit(HttpEvent::ServerTlsConnInitiated);
+    emitter.emit(HttpEvent::ClientTlsHandshake);
     let native_conn = native_tls::TlsConnector::builder()
         .request_alpns(alpn_protocols)
         .min_protocol_version(None)
@@ -189,6 +190,8 @@ pub async fn client_tls_native(
         .await
         .map_err(|err| HttpError::TlsError(std::io::Error::other(format!("{err}"))))?;
 
+    // TODO: find out away to emit this
+    // emitter.emit(HttpEvent::ClientTlsConn(tls_conn_data, server_verification));
     let alpn = tls
         .get_ref()
         .negotiated_alpn()
@@ -198,7 +201,5 @@ pub async fn client_tls_native(
             AlpnProtocol::from_bytes(v.as_slice())
         });
 
-    trace!("TLS connected");
-    trace!("TLS end");
     Ok((Box::new(IOTypeNotSend::new_raw(tls)), alpn))
 }

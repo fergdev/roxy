@@ -14,7 +14,6 @@ use hyper_util::rt::TokioExecutor;
 use hyper_util::rt::tokio::WithHyperIo;
 use rustls::pki_types::InvalidDnsNameError;
 use std::error::Error;
-use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::error::Elapsed;
 use tokio::time::timeout;
@@ -52,14 +51,14 @@ pub async fn try_from(res: Response<hyper::body::Incoming>) -> Result<HttpRespon
 
 #[derive(Debug)]
 pub enum HttpEvent {
-    TcpConnect(SocketAddr),
-
+    // TcpConnect(SocketAddr),
     ClientHttpHandshakeStart,
     ClientHttpHandshakeComplete,
 
     ClientTlsHandshake,
     ClientTlsConn(ClientTlsConnectionData, ServerVerificationCapture),
 
+    ServerConnInitiated,
     ServerTlsConnInitiated,
     ServerTlsConn(ServerTlsConnectionData, ClientVerificationCapture),
     // pub server_conn_initiated: Option<DateTime<Utc>>,
@@ -180,9 +179,9 @@ pub async fn connect_proxy(
     if resp.status() != 200 {
         return Err(HttpError::ProxyConnect);
     }
-    let a = hyper::upgrade::on(resp).await?; // TODO: conversion error
+    let upgraded = hyper::upgrade::on(resp).await?; // TODO: conversion error
     let parts: hyper::upgrade::Parts<WithHyperIo<TcpStream>> =
-        a.downcast().map_err(|_| HttpError::HyperUpgrade)?; // TODO: destroy the stream
+        upgraded.downcast().map_err(|_| HttpError::HyperUpgrade)?; // TODO: destroy the stream
     Ok(parts.io)
 }
 

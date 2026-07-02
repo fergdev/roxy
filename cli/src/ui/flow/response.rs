@@ -2,22 +2,28 @@ use rat_focus::{FocusFlag, HasFocus};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
+    style::Style,
     text::Span,
     widgets::{Paragraph, Wrap},
 };
 use tokio::sync::watch::{self};
-use tracing::{debug, error};
 
 use crate::ui::{
     flow::{details::FlowWatch, line::LineComponent},
-    framework::{component::Component, theme::themed_block},
+    framework::{
+        component::Component,
+        theme::{themed_block, with_theme},
+    },
 };
 
 use super::{body::component::FlowDetailsBody, headers::FlowDetailsHeaders};
 
 #[derive(Default, Clone)]
-struct UiState {
-    data: String,
+enum UiState {
+    #[default]
+    None,
+    ResponseLine(String),
+    Error(String),
 }
 
 pub struct FlowDetailsResponse {
@@ -38,21 +44,22 @@ impl FlowDetailsResponse {
         let body = FlowDetailsBody::new(flow_watch.clone(), false);
 
         let state_handle = flow_watch.watch(move |flow| {
-            if let Some(flow) = flow
-                && let Some(resp) = flow.response.as_ref()
-            {
-                if let Err(error) = ui_tx.send(UiState {
-                    data: resp.request_line(),
-                }) {
-                    debug!("Failed to send UI state update: {}", error);
-                };
+            let flow = match flow {
+                Some(flow) => flow,
+                None => {
+                    let _ = ui_tx.send(UiState::Error("No flow data".to_string()));
+                    return;
+                }
+            };
+            if let Some(response) = flow.response.as_ref() {
+                let _ = ui_tx.send(UiState::ResponseLine(response.request_line()));
                 return;
             }
-            if let Err(err) = ui_tx.send(UiState {
-                data: "Nothing".to_string(),
-            }) {
-                error!("Failed to send UI state {err}");
+            if let Some(error) = flow.error.as_ref() {
+                let _ = ui_tx.send(UiState::Error(format!("Error: {}", error)));
+                return;
             }
+            let _ = ui_tx.send(UiState::Error("No response data".to_string()));
         });
 
         Self {
@@ -96,11 +103,22 @@ impl Component for FlowDetailsResponse {
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.area = area;
+
         let state = self.ui_state.borrow_and_update();
 
-        let paragraph = Paragraph::new(Span::from(state.data.clone()))
-            .block(themed_block(Some("Line"), self.line_component.focus.get()))
-            .wrap(Wrap { trim: true });
+        let paragraph = match *state {
+            UiState::ResponseLine(ref line) => Paragraph::new(Span::from(line))
+                .block(themed_block(Some("Line"), self.line_component.focus.get()))
+                .wrap(Wrap { trim: true }),
+            UiState::Error(ref err) => with_theme(|theme| {
+                Paragraph::new(Span::styled(err, Style::default().fg(theme.colors.error)))
+                    .block(themed_block(Some("Error"), self.line_component.focus.get()))
+                    .wrap(Wrap { trim: true })
+            }),
+            UiState::None => Paragraph::new(Span::from("No data"))
+                .block(themed_block(Some("Line"), self.line_component.focus.get()))
+                .wrap(Wrap { trim: true }),
+        };
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)

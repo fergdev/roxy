@@ -60,21 +60,23 @@ pub trait Component {
             child.dispatch_action(action)?;
         }
         if self.focus().get() {
-            // debug!(
-            //     "ActionHandle[117]: {}:{}: name={:#?}",
+            // tracing::debug!(
+            //     "ActionHandle[117]: {}:{}: name={:#?} action={:#?}",
             //     file!(),
             //     line!(),
-            //     self.focus().name()
+            //     self.focus().name(),
+            //     action
             // );
             self.handle_action(action)
         } else {
-            // debug!(
-            //     "ActionIgnored[117]: {}:{}: name={:#?}",
+            // tracing::debug!(
+            //     "ActionIgnored[117]: {}:{}: name={:#?}, action={:#?}",
             //     file!(),
             //     line!(),
-            //     self.focus().name()
+            //     self.focus().name(),
+            //     action
             // );
-
+            //
             Ok(())
         }
     }

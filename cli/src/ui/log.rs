@@ -131,19 +131,18 @@ impl Component for LogViewer {
 
         frame.render_widget(Clear, popup_area);
 
-        let colors = with_theme(|theme| theme.colors.clone());
         if let Ok(logs) = self.logs.lock() {
             let mut width = 0;
             let paragraph = Paragraph::new(Text::from(
                 logs.iter()
                     .map(|log_line| {
-                        let color = match log_line.level {
-                            Level::ERROR => colors.error,
-                            Level::WARN => colors.warn,
-                            Level::INFO => colors.info,
-                            Level::DEBUG => colors.debug,
-                            Level::TRACE => colors.trace,
-                        };
+                        let color = with_theme(|theme| match log_line.level {
+                            Level::ERROR => theme.colors.error,
+                            Level::WARN => theme.colors.warn,
+                            Level::INFO => theme.colors.info,
+                            Level::DEBUG => theme.colors.debug,
+                            Level::TRACE => theme.colors.trace,
+                        });
 
                         width = width
                             .max(log_line.message.as_ref().map(|m| m.len()).unwrap_or(0) as u16);

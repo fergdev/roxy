@@ -85,23 +85,32 @@ impl FlowStore {
         id
     }
 
+    #[allow(clippy::panic)]
     pub async fn new_flow_cxt(&self, cxt: &FlowContext, req: InterceptedRequest) -> i64 {
-        let id = next_id().await;
+        let flow_id = next_id().await;
+
+        let connection = self
+            .connections
+            .get(&cxt.client_connection_id)
+            .unwrap_or_else(|| panic!("Invalid connection id {}", cxt.client_connection_id));
+
         let mut flow = Flow::new(
-            id,
+            flow_id,
             FlowConnection {
+                connection_id: cxt.client_connection_id,
                 addr: cxt.client_addr,
             },
             Some(req),
         );
 
+        flow.timing.client_conn_established = Some(connection.read().await.time_stamp);
         flow.certs = cxt.certs.clone();
 
         let flow = Arc::new(RwLock::new(flow));
-        self.flows.insert(id, flow.clone());
-        self.ordered_ids.write().await.push(id);
+        self.flows.insert(flow_id, flow);
+        self.ordered_ids.write().await.push(flow_id);
         self.notify();
-        id
+        flow_id
     }
 
     pub async fn new_ws_flow(&self, client_connect: FlowConnection) -> i64 {
@@ -160,11 +169,6 @@ impl FlowStore {
                         let mut guard = flow.write().await;
                         match flow_event.kind {
                             FlowEventKind::HttpEvent(inner) => match inner {
-                                HttpEvent::TcpConnect(addr) => {
-                                    guard.server_connection = Some(FlowConnection { addr });
-                                    guard.timing.server_conn_tcp_handshake =
-                                        Some(OffsetDateTime::now_utc());
-                                }
                                 HttpEvent::ClientHttpHandshakeStart => {
                                     guard.timing.server_conn_http_handshake =
                                         Some(OffsetDateTime::now_utc());
@@ -192,12 +196,19 @@ impl FlowStore {
                                     guard.timing.client_conn_tls_handshake =
                                         Some(OffsetDateTime::now_utc());
                                 }
+                                HttpEvent::ServerConnInitiated => {
+                                    guard.timing.server_conn_initiated =
+                                        Some(OffsetDateTime::now_utc());
+                                }
                             },
                             FlowEventKind::Response(resp) => {
                                 guard.response = Some(resp);
                             }
                             FlowEventKind::WsMessage(wsm) => {
                                 guard.messages.push(wsm);
+                            }
+                            FlowEventKind::Error(error) => {
+                                guard.error.replace(error);
                             }
                         }
                     }
@@ -270,6 +281,7 @@ pub enum FlowEventKind {
     Response(InterceptedResponse),
     WsMessage(WsMessage),
     HttpEvent(HttpEvent),
+    Error(String),
 }
 
 #[derive(Debug)]

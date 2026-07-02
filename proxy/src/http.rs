@@ -16,6 +16,7 @@ use roxy_shared::alpn::AlpnProtocol;
 use roxy_shared::client::ClientContext;
 use roxy_shared::content::ContentType;
 use roxy_shared::http::HttpError;
+use roxy_shared::http::HttpEvent;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::debug;
 use tracing::trace;
@@ -125,12 +126,28 @@ async fn proxy(
         .with_emitter(Box::new(emitter))
         .build();
 
-    let res = match client.request(down_stream_req).await {
+    flow_cxt.proxy_cxt.flow_store.post_event(
+        flow_id,
+        FlowEventKind::HttpEvent(HttpEvent::ServerConnInitiated),
+    );
+
+    let server_response = match client.request(down_stream_req).await {
         Ok(res) => res,
-        Err(e) => return down_stream_error(e),
+        Err(e) => {
+            flow_cxt
+                .proxy_cxt
+                .flow_store
+                .post_event(flow_id, FlowEventKind::Error(format!("Error: {e}")));
+
+            return down_stream_error(e);
+        }
     };
 
-    let mut intercepted_resp = InterceptedResponse::from_http(res.parts, res.body, res.trailers);
+    let mut intercepted_resp = InterceptedResponse::from_http(
+        server_response.parts,
+        server_response.body,
+        server_response.trailers,
+    );
 
     if let Err(err) = flow_cxt
         .proxy_cxt

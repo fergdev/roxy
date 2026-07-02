@@ -15,7 +15,6 @@ use roxy_shared::uri::RUri;
 use rustls::sign::CertifiedKey;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
-use tracing::debug;
 use tracing::error;
 use tracing::trace;
 
@@ -146,6 +145,7 @@ impl Drop for ProxyManager {
 
 #[derive(Debug, Clone)]
 pub struct FlowContext {
+    pub client_connection_id: i64,
     pub proxy_cxt: ProxyContext,
     pub client_addr: SocketAddr,
     pub target_uri: RUri,
@@ -153,8 +153,14 @@ pub struct FlowContext {
 }
 
 impl FlowContext {
-    pub fn new(client_addr: SocketAddr, target_uri: RUri, proxy_cxt: ProxyContext) -> Self {
+    pub fn new(
+        client_connection_id: i64,
+        client_addr: SocketAddr,
+        target_uri: RUri,
+        proxy_cxt: ProxyContext,
+    ) -> Self {
         FlowContext {
+            client_connection_id,
             proxy_cxt,
             client_addr,
             target_uri,
@@ -172,11 +178,13 @@ pub struct ProxyContext {
 }
 
 impl ProxyContext {
-    pub fn new_flow(&self, client_addr: SocketAddr, target_uri: RUri) -> FlowContext {
-        FlowContext::new(client_addr, target_uri, self.clone())
-    }
-    pub fn new_flow_upgrade(&self, client_addr: SocketAddr, target_uri: RUri) -> FlowContext {
-        FlowContext::new(client_addr, target_uri, self.clone())
+    pub fn new_flow(
+        &self,
+        connection_id: i64,
+        client_addr: SocketAddr,
+        target_uri: RUri,
+    ) -> FlowContext {
+        FlowContext::new(connection_id, client_addr, target_uri, self.clone())
     }
 }
 
@@ -229,6 +237,7 @@ async fn proxy(
         }
 
         let flow_context = FlowContext::new(
+            connection_id,
             socket_addr,
             RUri::new(incoming_request.uri().clone()),
             proxy_context.clone(),
@@ -261,7 +270,12 @@ async fn proxy(
             .body(BoxBody::new(Empty::<Bytes>::new()))?)
     } else {
         handle_http(
-            FlowContext::new(socket_addr, incoming_request.uri().into(), proxy_context),
+            FlowContext::new(
+                connection_id,
+                socket_addr,
+                incoming_request.uri().into(),
+                proxy_context,
+            ),
             incoming_request,
         )
         .await
@@ -284,9 +298,10 @@ async fn tunnel(mut flow_cxt: FlowContext, upgraded: Upgraded) -> Result<(), Box
         .sign_leaf_uri(&flow_cxt.target_uri)
         .map_err(|e| io::Error::other(format!("Failed to sign leaf certificate: {e}")))?;
 
-    let pk_der = PrivateKeyDer::try_from(key_pair.serialize_der())?;
+    let private_key_der = PrivateKeyDer::try_from(key_pair.serialize_der())?;
     let provider = flow_cxt.proxy_cxt.tls_config.crypto_provider();
-    let certified_key = CertifiedKey::from_der(vec![leaf.der().clone()], pk_der, provider.deref())?;
+    let certified_key =
+        CertifiedKey::from_der(vec![leaf.der().clone()], private_key_der, provider.deref())?;
 
     let RustlsServerConfig {
         resolver,
@@ -298,6 +313,7 @@ async fn tunnel(mut flow_cxt: FlowContext, upgraded: Upgraded) -> Result<(), Box
 
     server_config.alpn_protocols = alp_h1_h2();
 
+    // TODO: client tls
     let client_tls = TlsAcceptor::from(Arc::new(server_config))
         .accept(client_stream)
         .await

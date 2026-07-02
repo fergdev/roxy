@@ -93,10 +93,14 @@ pub async fn start_h3(cxt: ProxyContext, udp_socket: UdpSocket) -> Result<JoinHa
     Ok(handle)
 }
 
-async fn do_conn(new_conn: quinn::Incoming, cxt: ProxyContext) -> Result<(), Box<dyn Error>> {
+async fn do_conn(
+    new_conn: quinn::Incoming,
+    proxy_context: ProxyContext,
+) -> Result<(), Box<dyn Error>> {
     match new_conn.await {
         Ok(conn) => {
             let addr = conn.remote_address();
+            let connection_id = proxy_context.flow_store.new_connection(addr).await;
             trace!("H3 conn {addr}");
             let mut h3_conn = h3::server::Connection::new(h3_quinn::Connection::new(conn)).await?;
 
@@ -106,7 +110,7 @@ async fn do_conn(new_conn: quinn::Incoming, cxt: ProxyContext) -> Result<(), Box
             };
 
             let target_uri = handle_connect(resolver).await?;
-            let flow_cxt = FlowContext::new(addr, target_uri, cxt);
+            let flow_cxt = FlowContext::new(connection_id, addr, target_uri, proxy_context);
 
             loop {
                 match h3_conn.accept().await {

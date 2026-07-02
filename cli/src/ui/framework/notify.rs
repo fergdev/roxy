@@ -41,17 +41,24 @@ impl Level {
         }
     }
     fn toast_style(&self) -> Style {
-        let colors = with_theme(|t| t.colors.clone());
-        match self {
-            Level::Trace => Style::default().fg(colors.trace).bg(colors.surface),
-            Level::Debug => Style::default().fg(colors.debug).bg(colors.surface),
-            Level::Info => Style::default().fg(colors.info).bg(colors.surface),
-            Level::Warning => Style::default().fg(colors.warn).bg(colors.surface),
+        with_theme(|theme| match self {
+            Level::Trace => Style::default()
+                .fg(theme.colors.trace)
+                .bg(theme.colors.surface),
+            Level::Debug => Style::default()
+                .fg(theme.colors.debug)
+                .bg(theme.colors.surface),
+            Level::Info => Style::default()
+                .fg(theme.colors.info)
+                .bg(theme.colors.surface),
+            Level::Warning => Style::default()
+                .fg(theme.colors.warn)
+                .bg(theme.colors.surface),
             Level::Error => Style::default()
-                .fg(colors.error)
-                .bg(colors.surface)
+                .fg(theme.colors.error)
+                .bg(theme.colors.surface)
                 .add_modifier(Modifier::BOLD),
-        }
+        })
     }
 }
 

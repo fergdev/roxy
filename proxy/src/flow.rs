@@ -57,6 +57,7 @@ pub struct FlowCerts {
 
 #[derive(Debug, Clone, Copy)]
 pub struct FlowConnection {
+    pub connection_id: i64,
     pub addr: SocketAddr,
 }
 

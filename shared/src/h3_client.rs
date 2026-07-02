@@ -36,7 +36,7 @@ async fn h3_with_proxy_inner(
     proxy_uri: Option<&RUri>,
     roots: Arc<RootCertStore>,
     request: Request<BytesBody>,
-    emitter: &dyn HttpEmitter,
+    _emitter: &dyn HttpEmitter,
 ) -> Result<HttpResponse, Box<dyn Error>> {
     debug!("Proxy_addr  {:?}", proxy_uri);
     debug!("Target_addr {}", request.uri());
@@ -63,7 +63,6 @@ async fn h3_with_proxy_inner(
 
     let mut connection = None;
     for addr in socket_addr {
-        emitter.emit(crate::http::HttpEvent::TcpConnect(addr));
         if let Ok(conn) = quinn_endpoint.connect(addr, host_name)?.await {
             connection = Some(conn);
             break;
