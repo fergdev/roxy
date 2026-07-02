@@ -19,6 +19,7 @@ use roxy_shared::http::HttpError;
 use roxy_shared::http::HttpEvent;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::debug;
+use tracing::info;
 use tracing::trace;
 
 type H1ServerBuilder = hyper::server::conn::http1::Builder;
@@ -34,7 +35,20 @@ pub(crate) async fn handle_http(
     flow_cxt: FlowContext,
     client_request: Request<Incoming>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, HttpError> {
-    proxy(flow_cxt, AlpnProtocol::None, Scheme::HTTP, client_request).await
+    let flow_id = flow_cxt.proxy_cxt.flow_store.new_flow_cxt(&flow_cxt).await;
+    let res = proxy(
+        flow_cxt.clone(),
+        flow_id,
+        AlpnProtocol::None,
+        Scheme::HTTP,
+        client_request,
+    )
+    .await;
+    flow_cxt.proxy_cxt.flow_store.post_event(
+        flow_id,
+        FlowEventKind::HttpEvent(HttpEvent::ServerConnClosed),
+    );
+    res
 }
 
 pub(crate) async fn handle_https<S>(
@@ -44,16 +58,30 @@ pub(crate) async fn handle_https<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    trace!("Spawning HS client connection handler");
-    H1ServerBuilder::new()
+    debug!("Spawning HS client connection handler");
+    let flow_id = flow_cxt.proxy_cxt.flow_store.new_flow_cxt(&flow_cxt).await;
+    let res = H1ServerBuilder::new()
         .title_case_headers(true)
         .keep_alive(true)
         .serve_connection(
             TokioIo::new(client_stream),
-            service_fn(|req| proxy(flow_cxt.clone(), AlpnProtocol::Http1, Scheme::HTTPS, req)),
+            service_fn(|req| {
+                proxy(
+                    flow_cxt.clone(),
+                    flow_id,
+                    AlpnProtocol::Http1,
+                    Scheme::HTTPS,
+                    req,
+                )
+            }),
         )
-        .await?;
-    Ok(())
+        .await;
+    debug!("HS connection closed");
+    flow_cxt.proxy_cxt.flow_store.post_event(
+        flow_id,
+        FlowEventKind::HttpEvent(HttpEvent::ServerConnClosed),
+    );
+    res.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 pub(crate) async fn handle_h2<S>(
@@ -63,18 +91,33 @@ pub(crate) async fn handle_h2<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    trace!("Spawning H2 client connection handler");
-    H2ServerBuilder::new(TokioExecutor::new())
+    let flow_id = flow_cxt.proxy_cxt.flow_store.new_flow_cxt(&flow_cxt).await;
+    info!("Spawning H2 client connection handler");
+    let res = H2ServerBuilder::new(TokioExecutor::new())
         .serve_connection(
             TokioIo::new(client_stream),
-            service_fn(|req| proxy(flow_cxt.clone(), AlpnProtocol::Http2, Scheme::HTTPS, req)),
+            service_fn(|req| {
+                proxy(
+                    flow_cxt.clone(),
+                    flow_id,
+                    AlpnProtocol::Http2,
+                    Scheme::HTTPS,
+                    req,
+                )
+            }),
         )
-        .await?;
-    Ok(())
+        .await;
+    info!("H2 connection closed");
+    flow_cxt.proxy_cxt.flow_store.post_event(
+        flow_id,
+        FlowEventKind::HttpEvent(HttpEvent::ServerConnClosed),
+    );
+    res.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 async fn proxy(
     flow_cxt: FlowContext,
+    flow_id: i64,
     alpn: AlpnProtocol,
     scheme: Scheme,
     req: Request<Incoming>,
@@ -101,13 +144,12 @@ async fn proxy(
         Ok(resp) => resp,
         Err(err) => return internal_error(format!("Intercept request error: {err}")),
     };
-
-    let down_stream_req = intercepted.request()?;
-    let flow_id = flow_cxt
+    flow_cxt
         .proxy_cxt
         .flow_store
-        .new_flow_cxt(&flow_cxt, intercepted.clone())
-        .await;
+        .post_event(flow_id, FlowEventKind::Request(intercepted.clone()));
+
+    let down_stream_req = intercepted.request()?;
 
     if let Some(response) = response {
         let resp = response.response()?;

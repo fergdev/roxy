@@ -35,7 +35,6 @@ impl ImageCache {
 
     pub(crate) fn render_image(&mut self, raw: &[u8]) -> Option<i64> {
         if let Ok(image) = image::load_from_memory(raw) {
-            debug!("Loaded image with size: ");
             // TODO: make this configurable
             let mut picker = Picker::halfblocks();
             picker.set_protocol_type(ratatui_image::picker::ProtocolType::Kitty);

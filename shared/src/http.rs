@@ -61,6 +61,8 @@ pub enum HttpEvent {
     ServerConnInitiated,
     ServerTlsConnInitiated,
     ServerTlsConn(ServerTlsConnectionData, ClientVerificationCapture),
+
+    ServerConnClosed,
     // pub server_conn_initiated: Option<DateTime<Utc>>,
     // pub server_conn_tcp_handshake: Option<DateTime<Utc>>,
     //

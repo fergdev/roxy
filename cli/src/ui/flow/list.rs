@@ -27,6 +27,7 @@ struct UiFlow {
     uri: String,
     response: UiResponse,
     size: String,
+    timing: String,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +104,15 @@ impl FlowList {
                             None => (Method::GET, "?????".to_string()),
                         };
 
+                        let start_time = flow.timing.client_conn_established;
+                        let end_time = flow.timing.server_conn_closed;
+                        let timing = if let (Some(start), Some(end)) = (start_time, end_time) {
+                            let diff = end - start;
+                            format_duration(diff)
+                        } else {
+                            "N/A".to_string()
+                        };
+
                         let size_request =
                             flow.request.as_ref().map(|r| r.body.len()).unwrap_or(0) as u64;
                         let size_response =
@@ -116,6 +126,7 @@ impl FlowList {
                             uri: line,
                             response,
                             size,
+                            timing,
                         });
                     }
                 }
@@ -219,6 +230,8 @@ impl Component for FlowList {
                 Span::styled(&flow.uri, Style::default().fg(Color::Cyan)),
                 Span::styled("   ", Style::default()),
                 Span::styled(&flow.size, Style::default().fg(Color::Cyan)),
+                Span::styled(" ", Style::default()),
+                Span::styled(&flow.timing, Style::default().fg(Color::Cyan)),
             ]);
             rows.push(Row::new(vec![Cell::new(line)]));
         }
@@ -253,6 +266,33 @@ fn format_bytes(bytes: u64) -> String {
         GB..TB => format!("{}gb", bytes / GB),
         _ => format!("{}tb", bytes / TB),
     }
+}
+
+pub fn format_duration(duration: time::Duration) -> String {
+    let nanos = duration.whole_nanoseconds();
+
+    if nanos < 1_000 {
+        return format!("{nanos}ns");
+    }
+
+    if nanos < 1_000_000 {
+        return format!("{}µs", nanos / 1_000);
+    }
+
+    if nanos < 1_000_000_000 {
+        return format!("{}ms", nanos / 1_000_000);
+    }
+
+    let secs = duration.as_seconds_f64();
+    if secs < 60.0 {
+        return format!("{secs:.2}s");
+    }
+
+    if secs < 3600.0 {
+        return format!("{}m {}s", secs / 60.0, secs % 60.0);
+    }
+
+    format!("{}h {}m", secs / 3600.0, (secs % 3600.0) / 60.0)
 }
 
 fn method_color(method: &Method) -> Color {

@@ -143,11 +143,12 @@ async fn do_conn(
                             .await?;
 
                         let req = intercepted_request.request()?;
-                        let flow_id = flow_cxt
-                            .proxy_cxt
-                            .flow_store
-                            .new_flow_cxt(&flow_cxt, intercepted_request.clone())
-                            .await;
+                        let flow_id = flow_cxt.proxy_cxt.flow_store.new_flow_cxt(&flow_cxt).await;
+
+                        flow_cxt.proxy_cxt.flow_store.post_event(
+                            flow_id,
+                            FlowEventKind::Request(intercepted_request.clone()),
+                        );
 
                         if let Some(response) = response {
                             flow_cxt

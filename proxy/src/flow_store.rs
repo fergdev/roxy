@@ -86,7 +86,7 @@ impl FlowStore {
     }
 
     #[allow(clippy::panic)]
-    pub async fn new_flow_cxt(&self, cxt: &FlowContext, req: InterceptedRequest) -> i64 {
+    pub async fn new_flow_cxt(&self, cxt: &FlowContext) -> i64 {
         let flow_id = next_id().await;
 
         let connection = self
@@ -100,7 +100,7 @@ impl FlowStore {
                 connection_id: cxt.client_connection_id,
                 addr: cxt.client_addr,
             },
-            Some(req),
+            None,
         );
 
         flow.timing.client_conn_established = Some(connection.read().await.time_stamp);
@@ -200,6 +200,10 @@ impl FlowStore {
                                     guard.timing.server_conn_initiated =
                                         Some(OffsetDateTime::now_utc());
                                 }
+                                HttpEvent::ServerConnClosed => {
+                                    guard.timing.server_conn_closed =
+                                        Some(OffsetDateTime::now_utc());
+                                }
                             },
                             FlowEventKind::Response(resp) => {
                                 guard.response = Some(resp);
@@ -209,6 +213,9 @@ impl FlowStore {
                             }
                             FlowEventKind::Error(error) => {
                                 guard.error.replace(error);
+                            }
+                            FlowEventKind::Request(intercepted_request) => {
+                                guard.request = Some(intercepted_request);
                             }
                         }
                     }
@@ -278,6 +285,7 @@ impl FlowEvent {
 
 #[derive(Debug)]
 pub enum FlowEventKind {
+    Request(InterceptedRequest),
     Response(InterceptedResponse),
     WsMessage(WsMessage),
     HttpEvent(HttpEvent),
