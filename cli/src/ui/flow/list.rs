@@ -26,6 +26,7 @@ struct UiFlow {
     method: Method,
     uri: String,
     response: UiResponse,
+    size: String,
 }
 
 #[derive(Debug, Clone)]
@@ -102,11 +103,19 @@ impl FlowList {
                             None => (Method::GET, "?????".to_string()),
                         };
 
+                        let size_request =
+                            flow.request.as_ref().map(|r| r.body.len()).unwrap_or(0) as u64;
+                        let size_response =
+                            flow.response.as_ref().map(|r| r.body.len()).unwrap_or(0) as u64;
+                        let total_size = size_request + size_response;
+                        let size = format_bytes(total_size);
+
                         flows.push(UiFlow {
                             id: *id,
                             method,
                             uri: line,
                             response,
+                            size,
                         });
                     }
                 }
@@ -208,6 +217,8 @@ impl Component for FlowList {
                 Span::styled("   ", Style::default()),
                 status,
                 Span::styled(&flow.uri, Style::default().fg(Color::Cyan)),
+                Span::styled("   ", Style::default()),
+                Span::styled(&flow.size, Style::default().fg(Color::Cyan)),
             ]);
             rows.push(Row::new(vec![Cell::new(line)]));
         }
@@ -228,6 +239,19 @@ impl Component for FlowList {
 
     fn focus(&mut self) -> &mut FocusFlag {
         &mut self.focus
+    }
+}
+const KB: u64 = 1024;
+const MB: u64 = KB * 1024;
+const GB: u64 = MB * 1024;
+const TB: u64 = GB * 1024;
+fn format_bytes(bytes: u64) -> String {
+    match bytes {
+        0..KB => format!("{bytes}b"),
+        KB..MB => format!("{}kb", bytes / KB),
+        MB..GB => format!("{}mb", bytes / MB),
+        GB..TB => format!("{}gb", bytes / GB),
+        _ => format!("{}tb", bytes / TB),
     }
 }
 
