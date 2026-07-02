@@ -14,8 +14,7 @@ use roxy_shared::cert::ClientTlsConnectionData;
 use roxy_shared::cert::ClientVerificationCapture;
 use roxy_shared::cert::ServerTlsConnectionData;
 use roxy_shared::cert::ServerVerificationCapture;
-use roxy_shared::content::get_content_encoding;
-use roxy_shared::content::{Encodings, decode_body};
+use roxy_shared::encodings::{Encodings, decode_body, get_content_encoding};
 use roxy_shared::uri::RUri;
 use roxy_shared::uri::Scheme;
 

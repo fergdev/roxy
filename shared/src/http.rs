@@ -17,7 +17,6 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::time::error::Elapsed;
 use tokio::time::timeout;
-use tracing::info;
 use tracing::warn;
 
 use tokio::net::TcpStream;

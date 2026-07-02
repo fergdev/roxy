@@ -14,7 +14,8 @@ use quinn::{
 use roxy_shared::{
     alpn::{AlpnProtocol, alp_h3},
     client::ClientContext,
-    content::{ContentType, encode_body_opt},
+    content::ContentType,
+    encodings::encode_body_opt,
     http::HttpError,
     uri::RUri,
 };

@@ -1,22 +1,5 @@
-use std::{
-    error::Error,
-    fmt::Display,
-    io::{Read, Write},
-    ops::Deref,
-};
-
-use brotli::enc::BrotliEncoderParams;
-use bytes::Bytes;
 use cow_utils::CowUtils;
-use flate2::{
-    Compression, GzBuilder,
-    bufread::{DeflateDecoder, DeflateEncoder},
-    read::GzDecoder,
-};
-use http::{
-    HeaderMap, HeaderName,
-    header::{ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_TYPE},
-};
+use http::{HeaderMap, header::CONTENT_TYPE};
 use strum::VariantArray;
 
 #[derive(Debug, Clone, PartialEq, Eq, VariantArray)]
@@ -176,166 +159,166 @@ pub fn parse_content_type(content_type: &str) -> Option<ContentType> {
 pub fn content_type(headers: &HeaderMap) -> Option<ContentType> {
     let content_type = headers
         .get(CONTENT_TYPE)
-        .map(|s| s.to_str().unwrap_or(""))
+        .map(|header_value| header_value.to_str().unwrap_or(""))
         .unwrap_or("");
     let mime_type = content_type
         .split(";")
-        .find(|s| !s.starts_with("boundary=") || s.starts_with("charset="))
+        .find(|content_type| {
+            !content_type.starts_with("boundary=") || content_type.starts_with("charset=")
+        })
         .unwrap_or("");
     parse_content_type(mime_type)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Encodings {
-    Gzip,
-    Deflate,
-    Brotli,
-    Zstd,
-}
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use http::{HeaderMap, HeaderValue};
 
-const GZIP: &str = "gzip";
-const DEFLATE: &str = "deflate";
-const BROTLI: &str = "br";
-const ZSTD: &str = "zstd";
+    fn headers(value: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_str(value).unwrap());
+        headers
+    }
 
-impl Encodings {
-    pub fn key(&self) -> &str {
-        match self {
-            Encodings::Gzip => GZIP,
-            Encodings::Deflate => DEFLATE,
-            Encodings::Brotli => BROTLI,
-            Encodings::Zstd => ZSTD,
+    #[test]
+    fn all_content_types_parse() {
+        let cases = [
+            ("application/csv", ContentType::Csv),
+            ("application/json", ContentType::Json),
+            ("application/octet-stream", ContentType::OctetStream),
+            ("application/toml", ContentType::Toml),
+            ("application/tsv", ContentType::Tsv),
+            ("application/xml", ContentType::Xml),
+            ("application/yaml", ContentType::Yaml),
+            ("image/bmp", ContentType::Bmp),
+            ("image/gif", ContentType::Gif),
+            ("image/jpeg", ContentType::Jpeg),
+            ("image/png", ContentType::Png),
+            ("image/svg+xml", ContentType::Svg),
+            ("image/webp", ContentType::Webp),
+            ("image/x-icon", ContentType::XIcon),
+            ("text/html", ContentType::Html),
+            ("text/markdown", ContentType::Md),
+            ("text/plain", ContentType::Text),
+        ];
+
+        for (mime, expected) in cases {
+            assert_eq!(parse_content_type(mime), Some(expected));
         }
     }
-}
 
-impl Display for Encodings {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{self:?}"))
-    }
-}
-pub fn get_content_encoding(headers: &HeaderMap) -> Option<Vec<Encodings>> {
-    get_enconding(CONTENT_ENCODING, headers)
-}
+    #[test]
+    fn all_extensions_parse() {
+        let cases = [
+            ("bmp", ContentType::Bmp),
+            ("csv", ContentType::Csv),
+            ("gif", ContentType::Gif),
+            ("html", ContentType::Html),
+            ("icns", ContentType::XIcon),
+            ("ico", ContentType::XIcon),
+            ("jpg", ContentType::Jpeg),
+            ("jpeg", ContentType::Jpeg),
+            ("json", ContentType::Json),
+            ("md", ContentType::Md),
+            ("oct", ContentType::OctetStream),
+            ("png", ContentType::Png),
+            ("svg", ContentType::Svg),
+            ("toml", ContentType::Toml),
+            ("tsv", ContentType::Tsv),
+            ("txt", ContentType::Text),
+            ("webp", ContentType::Webp),
+            ("xml", ContentType::Xml),
+            ("yaml", ContentType::Yaml),
+        ];
 
-pub fn get_accept_enconding(headers: &HeaderMap) -> Option<Vec<Encodings>> {
-    get_enconding(ACCEPT_ENCODING, headers)
-}
-
-pub fn get_enconding(header_name: HeaderName, headers: &HeaderMap) -> Option<Vec<Encodings>> {
-    headers
-        .get(header_name)
-        .map(|ce| ce.to_str().unwrap_or(""))
-        .map(|f| {
-            let v = f
-                .split(",")
-                .filter_map(|f| match f.trim() {
-                    GZIP => Some(Encodings::Gzip),
-                    DEFLATE => Some(Encodings::Deflate),
-                    BROTLI => Some(Encodings::Brotli),
-                    ZSTD => Some(Encodings::Zstd),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            if v.is_empty() { None } else { Some(v) }
-        })
-        .unwrap_or(None)
-}
-
-pub fn decode_body(body: &Bytes, encoding: &[Encodings]) -> Result<Bytes, Box<dyn Error>> {
-    if encoding.is_empty() {
-        return Err(Box::new(std::io::Error::other("Empty encoding")));
-    }
-
-    let mut body = body.clone();
-
-    for enc in encoding.iter().rev() {
-        match enc {
-            Encodings::Gzip => {
-                let mut result = Vec::new();
-                GzDecoder::new(&body[..]).read_to_end(&mut result)?;
-                body = Bytes::from(result);
-            }
-            Encodings::Deflate => {
-                let mut result = Vec::new();
-                DeflateDecoder::new(&body[..]).read_to_end(&mut result)?;
-                body = Bytes::from(result);
-            }
-            Encodings::Brotli => {
-                let mut result = Vec::new();
-                brotli::Decompressor::new(&body[..], 4096).read_to_end(&mut result)?;
-                body = Bytes::from(result);
-            }
-            Encodings::Zstd => {
-                let mut result = Vec::new();
-                zstd::Decoder::new(&body[..])?.read_to_end(&mut result)?;
-                body = Bytes::from(result);
-            }
+        for (ext, expected) in cases {
+            assert_eq!(ext_to_content_type(ext), Some(expected));
         }
     }
-    Ok(body)
-}
 
-pub fn decode_body_opt(
-    body: Bytes,
-    encoding: &Option<Vec<Encodings>>,
-) -> Result<Bytes, Box<dyn Error>> {
-    match encoding {
-        Some(enc) => decode_body(&body, enc),
-        None => Ok(body),
-    }
-}
+    #[test]
+    fn all_content_types_have_expected_default_mime_and_extension() {
+        let cases = [
+            (ContentType::Bmp, "image/bmp", "bmp"),
+            (ContentType::Csv, "application/csv", "csv"),
+            (ContentType::Gif, "image/gif", "gif"),
+            (ContentType::Html, "text/html", "html"),
+            (ContentType::Jpeg, "image/jpeg", "jpeg"),
+            (ContentType::Json, "application/json", "json"),
+            (ContentType::Md, "text/markdown", "md"),
+            (ContentType::Png, "image/png", "png"),
+            (ContentType::Svg, "image/svg+xml", "svg"),
+            (ContentType::Text, "text/plain", "txt"),
+            (ContentType::Toml, "application/toml", "toml"),
+            (ContentType::Tsv, "application/tsv", "tsv"),
+            (ContentType::Webp, "image/webp", "webp"),
+            (ContentType::XIcon, "image/x-icon", "ico"),
+            (ContentType::Xml, "application/xml", "xml"),
+            (ContentType::Yaml, "application/yaml", "yaml"),
+            (ContentType::OctetStream, "application/octet-stream", "oct"),
+        ];
 
-pub fn encode_body(body: &Bytes, encoding: &[Encodings]) -> Result<Bytes, Box<dyn Error>> {
-    if encoding.is_empty() {
-        return Err(Box::new(std::io::Error::other("Empty encoding")));
-    }
-
-    let mut body = body.clone();
-
-    for enc in encoding {
-        match enc {
-            Encodings::Gzip => {
-                let mut result = Vec::new();
-                let mut gz = GzBuilder::new()
-                    .operating_system(3)
-                    .read(&body[..], Compression::default());
-
-                gz.read_to_end(&mut result)?;
-                body = Bytes::from(result);
-            }
-            Encodings::Deflate => {
-                let mut result = Vec::new();
-                DeflateEncoder::new(&body[..], Compression::default()).read_to_end(&mut result)?;
-                body = Bytes::from(result);
-            }
-            Encodings::Brotli => {
-                let mut result = Vec::new();
-                brotli::BrotliCompress(
-                    &mut body.deref(),
-                    &mut result,
-                    &BrotliEncoderParams::default(),
-                )?;
-                body = Bytes::from(result);
-            }
-            Encodings::Zstd => {
-                let result = Vec::new();
-                let mut enc = zstd::Encoder::new(result, 0)?;
-                enc.write_all(&body[..])?;
-                let result = enc.finish()?;
-                body = Bytes::from(result);
-            }
+        for (content_type, expected_mime, expected_ext) in cases {
+            assert_eq!(content_type.to_default_str(), expected_mime);
+            assert_eq!(content_type_ext(&content_type), expected_ext);
         }
     }
-    Ok(body)
-}
 
-pub fn encode_body_opt(
-    body: Bytes,
-    encoding: &Option<Vec<Encodings>>,
-) -> Result<Bytes, Box<dyn Error>> {
-    match encoding {
-        Some(enc) => encode_body(&body, enc),
-        None => Ok(body),
+    #[test]
+    fn content_type_header_parsing_handles_all_supported_types() {
+        let cases = [
+            ("application/csv; charset=utf-8", Some(ContentType::Csv)),
+            ("application/json; charset=utf-8", Some(ContentType::Json)),
+            ("application/octet-stream", Some(ContentType::OctetStream)),
+            ("application/toml", Some(ContentType::Toml)),
+            ("application/tsv", Some(ContentType::Tsv)),
+            ("application/xml", Some(ContentType::Xml)),
+            ("application/yaml", Some(ContentType::Yaml)),
+            ("image/bmp", Some(ContentType::Bmp)),
+            ("image/gif", Some(ContentType::Gif)),
+            ("image/jpeg", Some(ContentType::Jpeg)),
+            ("image/png", Some(ContentType::Png)),
+            ("image/svg+xml", Some(ContentType::Svg)),
+            ("image/webp", Some(ContentType::Webp)),
+            ("image/x-icon", Some(ContentType::XIcon)),
+            ("text/html; charset=utf-8", Some(ContentType::Html)),
+            ("text/markdown", Some(ContentType::Md)),
+            ("text/plain; charset=utf-8", Some(ContentType::Text)),
+            ("application/pdf", None),
+            ("", None),
+        ];
+
+        for (header_value, expected) in cases {
+            assert_eq!(content_type(&headers(header_value)), expected);
+        }
+
+        assert_eq!(content_type(&HeaderMap::new()), None);
+    }
+
+    #[test]
+    fn parse_content_type_is_case_insensitive() {
+        let cases = [
+            ("APPLICATION/JSON", Some(ContentType::Json)),
+            ("Text/Html", Some(ContentType::Html)),
+            ("IMAGE/PNG", Some(ContentType::Png)),
+            ("Image/Svg+Xml", Some(ContentType::Svg)),
+        ];
+
+        for (mime, expected) in cases {
+            assert_eq!(parse_content_type(mime), expected);
+        }
+    }
+
+    #[test]
+    fn unsupported_values_return_none() {
+        assert_eq!(parse_content_type("application/pdf"), None);
+        assert_eq!(parse_content_type("multipart/form-data"), None);
+        assert_eq!(parse_content_type(""), None);
+
+        assert_eq!(ext_to_content_type("pdf"), None);
+        assert_eq!(ext_to_content_type("exe"), None);
+        assert_eq!(ext_to_content_type(""), None);
     }
 }

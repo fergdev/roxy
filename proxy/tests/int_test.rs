@@ -17,9 +17,8 @@ use roxy_servers::ws::{start_ws_server, start_wss_server};
 use roxy_servers::{HttpServers, load_asset};
 use roxy_shared::cert::LoggingServerVerifier;
 use roxy_shared::client::ClientContext;
-use roxy_shared::content::{
-    ContentType, Encodings, content_type_ext, decode_body, encode_body, ext_to_content_type,
-};
+use roxy_shared::content::{ContentType, content_type_ext, ext_to_content_type};
+use roxy_shared::encodings::{Encodings, decode_body, encode_body};
 use roxy_shared::h3_client::client_h3_wt;
 use roxy_shared::http::HttpResponse;
 use roxy_shared::io::local_tcp_listener;

@@ -6,6 +6,7 @@ pub mod cert;
 pub mod client;
 pub mod content;
 pub mod crypto;
+pub mod encodings;
 pub mod h3_client;
 pub mod http;
 pub mod io;

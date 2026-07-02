@@ -11,7 +11,7 @@ use tracing::error;
 
 use pin_project_lite::pin_project;
 
-use crate::content::{Encodings, encode_body};
+use crate::encodings::{Encodings, encode_body};
 
 pub type BytesBody = BoxBody<Bytes, Infallible>;
 

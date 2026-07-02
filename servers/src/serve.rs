@@ -10,9 +10,8 @@ use http_body_util::{BodyExt, Empty, Full, combinators::BoxBody};
 use itertools::Itertools;
 use roxy_shared::{
     body::BufferedBody,
-    content::{
-        decode_body, encode_body, ext_to_content_type, get_accept_enconding, get_content_encoding,
-    },
+    content::ext_to_content_type,
+    encodings::{decode_body, encode_body, get_accept_enconding, get_content_encoding},
 };
 use tracing::{debug, info};
 use url::Url;
