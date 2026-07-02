@@ -32,7 +32,6 @@ const MIME_APPLICATION_XML: &str = "application/xml";
 const MIME_APPLICATION_YAML: &str = "application/yaml";
 const MIME_IMAGE_BMP: &str = "image/bmp";
 const MIME_IMAGE_GIF: &str = "image/gif";
-const MIME_IMAGE_IICON: &str = "image/i-icon";
 const MIME_IMAGE_XICON: &str = "image/x-icon";
 const MIME_IMAGE_JPEG: &str = "image/jpeg";
 const MIME_IMAGE_PNG: &str = "image/png";
